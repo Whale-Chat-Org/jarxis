@@ -1,0 +1,34 @@
+# Deny by default: no checkout metadata, local tooling, logs, caches or test output.
+**
+!Dockerfile
+!.dockerignore
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!prisma.config.ts
+!next.config.ts
+!next-env.d.ts
+!tsconfig.json
+!postcss.config.mjs
+!src/
+!src/**
+!prisma/schema.prisma
+!prisma/migrations/
+!prisma/migrations/**
+!scripts/migrate.ts
+!scripts/seed.ts
+!scripts/owner.ts
+# Defence in depth inside allowed source directories. No example env files either.
+**/.env*
+**/.npmrc
+**/.pnpmfile.cjs
+**/.git/**
+**/node_modules/**
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.log
+**/*.pid
+**/*.tsbuildinfo
+**/.DS_Store

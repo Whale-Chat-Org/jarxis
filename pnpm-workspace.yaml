@@ -1,0 +1,14 @@
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+  sharp: true
+  '@prisma/engines': true
+  prisma: true
+# Better Auth bundles unused adapters; this application uses Prisma only.
+overrides:
+  'better-auth>@better-auth/drizzle-adapter': '-'
+  'better-auth>drizzle-orm': '-'
+  'better-auth>drizzle-kit': '-'
+ignoredOptionalDependencies:
+  - drizzle-orm
+  - drizzle-kit

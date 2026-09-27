@@ -1,0 +1,18 @@
+# Local-only services and host-bound ports. Use with -f compose.yaml -f compose.dev.yaml.
+services:
+  postgres:
+    ports: ['127.0.0.1:${POSTGRES_PORT:-55432}:5432']
+  redis:
+    ports: ['127.0.0.1:${REDIS_PORT:-56379}:6379']
+  mailpit:
+    image: axllent/mailpit:v1.29.2@sha256:030f06031ce5c60913ac9363da1ab0d4be6fd2a78147dd0e1ca0fcac665d6b34
+    ports: ['127.0.0.1:1025:1025', '127.0.0.1:8025:8025']
+  app:
+    build: { target: tools }
+    command: pnpm dev --hostname 0.0.0.0
+    environment:
+      NODE_ENV: development
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+    depends_on:
+      mailpit: { condition: service_started }

@@ -1,0 +1,20 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Same services as the README's local development setup. `--wait` blocks
+      // until postgres/redis are healthy (mailpit: running) before the app starts.
+      "label": "compose: up dev services",
+      "type": "shell",
+      "command": "docker compose -f compose.yaml -f compose.dev.yaml up -d --wait postgres redis mailpit",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    }
+  ]
+}

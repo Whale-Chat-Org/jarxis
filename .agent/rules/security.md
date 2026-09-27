@@ -1,0 +1,18 @@
+# Security invariants
+
+- Authorization belongs on the server, never solely in UI visibility. Recheck live database session/user state and grants; banned/unverified users, expired/deleted sessions and revoked/expired token families must be rejected.
+- Email verification and minimum password length remain enforced. Password resets and account bans revoke sessions and token families.
+- JWT_SECRET and BETTER_AUTH_SECRET must be independent, different secrets of at least 32 characters. Keep secrets server-side and retain server-only boundaries.
+- Persist refresh tokens as hashes only; rotate on use. Replay revokes the entire family and underlying session. Commit revocation before throwing outside the transaction; preserve lock order user → family → token.
+- **Privileged administrative mutations are enforced by `src/lib/auth/admin-guards.ts`**, not by `adminWrite` (removed). The Better Auth admin plugin owns `/api/auth/admin/*`, so the rules run as:
+  - `hooks.before` — resolves the _authoritative_ session (a database read, never a cookie cache), reads the target from the request body, and `throw`s to abort. This is where owner protection, the last-owner rule and the "an owner must be active and verified" rule live.
+  - `databaseHooks.user.delete.before` — a defence-in-depth repeat of the owner checks for any delete that reaches the adapter by another route.
+  - `databaseHooks.user.update.after` — revokes every live token family when an account is banned, closing the refresh path the plugin's own session deletion leaves open.
+  - `hooks.after` — writes the `audit_logs` row once the mutation has committed.
+- **Accepted trade-offs of that design** (approved with the migration): the checks run before the mutation without holding a lock, so a narrow window exists between check and commit; the audit row is written after commit rather than atomically and is logged-and-swallowed on failure; and because the plugin's endpoints require a session, administrative mutations are browser-session only — a bearer token cannot reach them.
+- Never remove or ban the last active, verified owner. Only owners may modify owners. `roles:update` and `roles:assign` require owner membership as well as the permission grant.
+- Roles are declared in `src/lib/permissions.ts` and shipped with the application, so protected system roles cannot be edited or deleted at runtime. An unrecognised name in `user.role` grants nothing (fail closed) — do not map unknown roles to a permissive default.
+- Keep origin/CSRF checks for mutations, including required Origin for cookie-bearing requests. Preserve JSON validation, 16 KiB body limits and no-store responses.
+- Redis rate limiting stays atomic and fails closed on unavailability. Trust X-Real-IP only behind an explicitly trusted proxy that overwrites it.
+- Production docs/OpenAPI remain owner-only; do not expose alternate unguarded auth documentation routes.
+- Sanitize errors and logs; never expose request secrets, SQL parameters or raw provider errors. The admin audit hook whitelists the fields it records and must never log passwords or tokens.

@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String        @id
+  name          String
+  email         String        @unique
+  emailVerified Boolean       @default(false) @map("email_verified")
+  image         String?
+  // Better Auth admin plugin fields. `role` holds one or more code-declared role names,
+  // comma-separated; an unrecognised name grants nothing (fail closed).
+  role          String?
+  banned        Boolean       @default(false)
+  banReason     String?       @map("ban_reason")
+  banExpires    DateTime?     @map("ban_expires") @db.Timestamptz(6)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  sessions      Session[]
+  accounts      Account[]
+  tokenFamilies TokenFamily[]
+
+  @@index([createdAt], map: "user_created_idx")
+  @@index([name], map: "user_name_idx")
+  @@map("app_user")
+}
+
+model Session {
+  id             String   @id
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz(6)
+  token          String   @unique
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  ipAddress      String?  @map("ip_address")
+  userAgent      String?  @map("user_agent")
+  userId         String   @map("user_id")
+  impersonatedBy String?  @map("impersonated_by")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId], map: "session_user_idx")
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(6)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(6)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId], map: "account_user_idx")
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([identifier], map: "verification_identifier_idx")
+  @@map("verification")
+}
+
+// Families intentionally outlive deleted sessions to preserve replay evidence.
+model TokenFamily {
+  id            String         @id
+  userId        String         @map("user_id")
+  sessionId     String         @map("session_id")
+  expiresAt     DateTime       @map("expires_at") @db.Timestamptz(6)
+  revokedAt     DateTime?      @map("revoked_at") @db.Timestamptz(6)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  refreshTokens RefreshToken[]
+
+  @@index([userId], map: "family_user_idx")
+  @@index([sessionId], map: "family_session_idx")
+  @@map("token_families")
+}
+
+model RefreshToken {
+  hash       String      @id
+  familyId   String      @map("family_id")
+  consumedAt DateTime?   @map("consumed_at") @db.Timestamptz(6)
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  family     TokenFamily @relation(fields: [familyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([familyId], map: "refresh_family_idx")
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id        String   @id
+  actorId   String   @map("actor_id")
+  action    String
+  targetId  String   @map("target_id")
+  changes   Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt], map: "audit_created_idx")
+  @@index([targetId], map: "audit_target_idx")
+  @@map("audit_logs")
+}
