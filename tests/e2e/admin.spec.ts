@@ -2,6 +2,11 @@ import { test } from './fixtures';
 import { expect } from '@playwright/test';
 import { login, makeOwner, register, setRole, verify } from './helpers';
 
+test('signed-out administration redirects to sign-in', async ({ page }) => {
+  await page.goto('/admin');
+  await expect(page).toHaveURL(/\/auth\/sign-in(?:\?|$)/);
+});
+
 /**
  * Acceptance coverage for the administration area after the Better Auth admin plugin migration:
  * the shadcn `Sidebar` shell, the registry `AdminUsers` table, and the read-only roles page.
@@ -22,8 +27,13 @@ test('owner browses the admin shell, user management and the role catalog', asyn
   await login(request, email, baseURL!);
   await context.addCookies((await request.storageState()).cookies);
 
+  await page.goto('/');
+  await page.getByRole('button', { name: /Acceptance User/ }).click();
+  await expect(page.getByRole('menuitem', { name: 'Administration' })).toBeVisible();
+
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/admin');
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 
   // The shadcn Sidebar shell: the rail, the inset header trigger and the footer account menu.
   const sidebar = page.locator('[data-slot="sidebar"]');
@@ -33,23 +43,13 @@ test('owner browses the admin shell, user management and the role catalog', asyn
   // same accessible name, and the rail is also visible at this desktop viewport width.
   const sidebarTrigger = page.getByRole('main').getByRole('button', { name: 'Toggle Sidebar' });
   await expect(sidebarTrigger).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 
   // Collapsing to the icon rail is a property of the primitive, not of local markup.
-  await expect(page.locator('[data-slot="sidebar-wrapper"]')).toHaveAttribute(
-    'data-state',
-    'expanded',
-  );
+  await expect(sidebar).toHaveAttribute('data-state', 'expanded');
   await sidebarTrigger.click();
-  await expect(page.locator('[data-slot="sidebar-wrapper"]')).toHaveAttribute(
-    'data-state',
-    'collapsed',
-  );
+  await expect(sidebar).toHaveAttribute('data-state', 'collapsed');
   await sidebarTrigger.click();
-  await expect(page.locator('[data-slot="sidebar-wrapper"]')).toHaveAttribute(
-    'data-state',
-    'expanded',
-  );
+  await expect(sidebar).toHaveAttribute('data-state', 'expanded');
 
   // The registry table renders through the admin plugin's own endpoints.
   await sidebar.getByRole('link', { name: 'Users' }).click();
@@ -69,7 +69,7 @@ test('owner browses the admin shell, user management and the role catalog', asyn
   await sidebar.getByRole('link', { name: 'Roles' }).click();
   await expect(page).toHaveURL(/\/admin\/roles(?:\?|$)/);
   for (const role of ['Owner', 'Administrator', 'Viewer', 'User']) {
-    await expect(page.getByText(role, { exact: true })).toBeVisible();
+    await expect(page.getByRole('main')).toContainText(role);
   }
   await expect(page.getByRole('button', { name: /create role/i })).toHaveCount(0);
 
@@ -93,6 +93,9 @@ test('a viewer gets a read-only user table', async ({ page, context, request, ba
   await context.addCookies((await request.storageState()).cookies);
 
   await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Acceptance User/ }).click();
+  await expect(page.getByRole('menuitem', { name: 'Administration' })).toBeVisible();
   await page.goto('/admin/users');
 
   await expect(page.getByRole('table')).toBeVisible();
@@ -123,7 +126,7 @@ test('the sidebar collapses into a sheet on a narrow viewport', async ({
   await expect(sheet).toBeVisible();
   await sheet.getByRole('link', { name: 'Users' }).click();
   await expect(page).toHaveURL(/\/admin\/users(?:\?|$)/);
-  // The primitive does not auto-close the mobile sheet on navigation; only its own trigger does.
-  await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
+  // Navigation keeps the mobile sheet open; Escape closes the modal through its keyboard API.
+  await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
 });

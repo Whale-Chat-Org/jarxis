@@ -31,3 +31,17 @@ export function env() {
   }
   return cached;
 }
+
+const avatarSchema = z.object({
+  AZURE_STORAGE_CONNECTION_STRING: z.string().min(1),
+  AZURE_STORAGE_CONTAINER: z
+    .string()
+    .regex(/^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/)
+    .default('profile-photos'),
+});
+let avatarCached: z.infer<typeof avatarSchema> | undefined;
+
+/** Parse blob credentials only when avatar storage is used, keeping unrelated auth routes usable. */
+export function avatarEnv() {
+  return (avatarCached ??= avatarSchema.parse(process.env));
+}

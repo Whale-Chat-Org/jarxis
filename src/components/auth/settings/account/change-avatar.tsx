@@ -26,7 +26,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
   const { authClient, localization, avatar } = useAuth();
   const { data: session } = useSession(authClient);
 
-  const { mutate: updateUser, isPending: updatePending } = useUpdateUser(authClient);
+  const { mutateAsync: updateUser, isPending: updatePending } = useUpdateUser(authClient);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -47,12 +47,23 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
 
       const image = (await avatar.upload?.(resized)) || (await fileToAvatarDataUrl(resized));
 
-      updateUser(
-        { image },
-        {
-          onSuccess: () => toast.success(localization.settings.avatarChangedSuccess),
-        },
-      );
+      const previousImage = session?.user.image;
+      try {
+        await updateUser({ image });
+      } catch (error) {
+        await avatar.delete?.(image).catch(() => undefined);
+        throw error;
+      }
+
+      if (previousImage && previousImage !== image) {
+        try {
+          await avatar.delete?.(previousImage);
+        } catch {
+          console.error('[Better Auth UI] Previous avatar cleanup failed');
+        }
+      }
+
+      toast.success(localization.settings.avatarChangedSuccess);
     } catch (error) {
       console.error('[Better Auth UI] Image operation failed', error);
       toast.error(localization.errors.imageUploadFailed);
@@ -63,24 +74,14 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
 
   async function handleDelete() {
     const currentImage = session?.user.image;
-
-    updateUser(
-      { image: null },
-      {
-        onSuccess: async () => {
-          if (currentImage) {
-            setIsDeleting(true);
-            try {
-              await avatar.delete?.(currentImage);
-            } finally {
-              setIsDeleting(false);
-            }
-          }
-
-          toast.success(localization.settings.avatarDeletedSuccess);
-        },
-      },
-    );
+    setIsDeleting(true);
+    try {
+      await updateUser({ image: null });
+      if (currentImage) await avatar.delete?.(currentImage);
+      toast.success(localization.settings.avatarDeletedSuccess);
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   return (

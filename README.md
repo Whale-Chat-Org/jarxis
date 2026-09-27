@@ -13,7 +13,7 @@ cp .env.example .env
 # Set BETTER_AUTH_SECRET and JWT_SECRET to those values.
 pnpm install --frozen-lockfile
 pnpm db:generate
-docker compose -f compose.yaml -f compose.dev.yaml up -d postgres redis mailpit
+docker compose -f compose.yaml -f compose.dev.yaml up -d postgres redis mailpit azurite
 pnpm db:migrate
 pnpm db:seed
 pnpm dev
@@ -21,6 +21,7 @@ pnpm dev
 
 - Application: http://localhost:3000
 - Mailpit inbox: http://localhost:8025 (development only)
+- Azurite blob endpoint: http://localhost:10000 (development only)
 - API docs: http://localhost:3000/api/docs
 - Database/Redis development ports: **55432 / 56379**, bound to loopback to avoid existing local services. Override `POSTGRES_PORT` / `REDIS_PORT` and update host connection URLs together.
 
@@ -42,7 +43,7 @@ docker compose run --rm migrate pnpm owner you@example.com
 
 This command refuses when an active owner exists. Thereafter, owners assign roles in Admin → Users.
 
-For local testing only, `pnpm db:seed:users` creates verified fixture accounts sharing `SEED_USER_PASSWORD` from `.env`: `owner@`, `admin@`, `viewer@`, `member@` (no role), `disabled@` (disabled viewer) and `unverified@` (all `@jarxis.test`). It refuses production and non-local database hosts, requires `pnpm db:seed` first, and resets those accounts' roles, passwords and sessions on each run.
+For local testing only, `pnpm db:seed:users` creates fixture accounts using the development-only password declared in `scripts/seed-users.ts`: `owner@`, `admin@`, `viewer@`, `member@`, `banned@` and `unverified@` (all `@jarxis.test`). It refuses production and non-local database hosts and resets those accounts' roles, passwords and sessions on each run.
 
 ## Authentication and API
 
@@ -98,7 +99,9 @@ project needs are hooks. See [TECH.md](docs/TECH.md#authorization-and-rbac) for 
 docker compose up --build -d
 ```
 
-Use the base Compose file for production with real SMTP settings and an **HTTPS** `BETTER_AUTH_URL`. Place an HTTPS reverse proxy in front of the loopback app port. The production image runs as a non-root user. The migration/seed job must complete successfully before the app starts. Database/Redis ports are not published by the base file; never use the development override on an untrusted host. Mailpit is development-only.
+Use the base Compose file for production with real SMTP settings, a private Azure Blob Storage connection string, and an **HTTPS** `BETTER_AUTH_URL`. Place an HTTPS reverse proxy in front of the loopback app port. The production image runs as a non-root user. The migration/seed job must complete successfully before the app starts. Database/Redis ports are not published by the base file; never use the development override on an untrusted host. Mailpit and Azurite are development-only.
+
+Profile photos are stored in the private container named by `AZURE_STORAGE_CONTAINER` and are served only through authenticated application routes. Keep `AZURE_STORAGE_CONNECTION_STRING` secret in production; the `UseDevelopmentStorage=true` value in `.env.example` is only for the loopback Azurite emulator.
 
 Set `TRUST_PROXY=true` **only** when a trusted proxy overwrites `X-Real-IP` and clients cannot reach the app directly. Without it, limits intentionally use a shared bucket rather than trust spoofable forwarded headers. Redis rate limits use atomic Lua increments; unavailable Redis fails authentication closed. PostgreSQL is the source of truth and failures fail authorization closed. Cookie-authenticated mutations require the configured Origin, and foreign Origins are rejected. Native Better Auth adds its own origin/CSRF checks.
 

@@ -43,7 +43,10 @@ services:
       postgres: { condition: service_healthy }
   app:
     build: { context: ., target: runner }
-    environment: *app-env
+    environment:
+      <<: *app-env
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:?Set AZURE_STORAGE_CONNECTION_STRING in .env}
+      AZURE_STORAGE_CONTAINER: ${AZURE_STORAGE_CONTAINER:-profile-photos}
     ports: ['127.0.0.1:3000:3000']
     depends_on:
       migrate: { condition: service_completed_successfully }

@@ -195,8 +195,9 @@ Required runtime values are validated by `src/lib/env.ts`:
 - `SMTP_HOST`
 
 Optional SMTP credentials, port/security settings, sender identity, and `TRUST_PROXY` have validated
-defaults. `SEED_USER_PASSWORD` is read only by the local fixture seeder and is not an application
-runtime setting.
+defaults. Avatar storage separately validates `AZURE_STORAGE_CONNECTION_STRING` and
+`AZURE_STORAGE_CONTAINER` when used. The local fixture seeder's fixed development password lives
+in `scripts/seed-users.ts`; it is not an application runtime setting.
 
 Never commit a populated `.env` file. Use `.env.example` only to document names and safe placeholders.
 

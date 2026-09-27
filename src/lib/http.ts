@@ -43,11 +43,13 @@ export async function body<T>(req: Request, schema: z.ZodType<T>): Promise<T> {
 export function json(value: unknown, status = 200) {
   return Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
 }
-export function handler(fn: (req: Request) => Promise<Response>) {
-  return async (req: Request) => {
+export function handler<TContext = unknown>(
+  fn: (req: Request, context: TContext) => Promise<Response>,
+) {
+  return async (req: Request, context?: TContext) => {
     try {
       assertOrigin(req);
-      return await fn(req);
+      return await fn(req, context as TContext);
     } catch (e) {
       if (e instanceof HttpError)
         return json({ error: { code: e.code, message: e.message } }, e.status);

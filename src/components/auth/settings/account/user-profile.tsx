@@ -8,7 +8,7 @@ import {
 } from '@better-auth-ui/core';
 import type { UsernameAuthClient } from '@better-auth-ui/core/plugins/username';
 import { useAuth, useSession, useUpdateUser } from '@better-auth-ui/react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -37,6 +37,7 @@ export function UserProfile({ className }: UserProfileProps) {
   const { additionalFields, authClient, avatar, localization, profile } =
     useAuth<UsernameAuthClient>();
   const { data: session } = useSession(authClient);
+  const initializedUserId = useRef<string | null>(null);
 
   const { mutateAsync: updateUser, isPending } = useUpdateUser(authClient, {
     onSuccess: () => toast.success(localization.settings.profileUpdatedSuccess),
@@ -62,7 +63,8 @@ export function UserProfile({ className }: UserProfileProps) {
   });
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || initializedUserId.current === session.user.id) return;
+    initializedUserId.current = session.user.id;
     form.reset({
       additionalFields: getAdditionalFieldDefaultValues(
         fieldsWithModelValues(profileFields, session.user as Record<string, unknown>),

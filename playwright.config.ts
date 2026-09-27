@@ -11,6 +11,7 @@ if (
   );
 }
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
+const webServerCommand = process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ?? 'pnpm dev';
 export default defineConfig({
   testDir: './tests/e2e',
   reporter: [['list'], ['html', { open: 'never' }]],
@@ -29,10 +30,18 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'pnpm dev',
+    command: webServerCommand,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    env: { DATABASE_URL: databaseURL, BETTER_AUTH_URL: baseURL, TRUST_PROXY: 'true' },
+    env: {
+      DATABASE_URL: databaseURL,
+      BETTER_AUTH_URL: baseURL,
+      TRUST_PROXY: 'true',
+      AZURE_STORAGE_CONNECTION_STRING:
+        process.env.AZURE_STORAGE_CONNECTION_STRING ?? 'UseDevelopmentStorage=true',
+      AZURE_STORAGE_CONTAINER: process.env.AZURE_STORAGE_CONTAINER ?? 'profile-photos-e2e',
+      PORT: new URL(baseURL).port || '3000',
+    },
   },
 });

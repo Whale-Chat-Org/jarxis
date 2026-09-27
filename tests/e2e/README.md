@@ -7,10 +7,14 @@ DATABASE_URL='postgresql://USER:PASSWORD@localhost:55432/jarxis_test' \
 BETTER_AUTH_URL='http://localhost:3000' \
 TRUST_PROXY=true REDIS_URL='redis://localhost:56379/1' \
 MAILPIT_URL='http://localhost:8025' \
+AZURE_STORAGE_CONNECTION_STRING='UseDevelopmentStorage=true' \
+AZURE_STORAGE_CONTAINER='profile-photos-e2e' \
 pnpm exec playwright test
 ```
 
-Also provide the application's normal environment: `REDIS_URL`, distinct 32+ character `BETTER_AUTH_SECRET` and `JWT_SECRET`, `SMTP_HOST=localhost`, `SMTP_PORT=1025`, `SMTP_SECURE=false`, and `MAIL_FROM`. Mailpit must accept application SMTP and expose its API at localhost:8025. `PLAYWRIGHT_BASE_URL` overrides the default application origin; ensure the server binds there. `MAILPIT_URL` overrides the inbox API origin.
+Also provide the application's normal environment: `REDIS_URL`, distinct 32+ character `BETTER_AUTH_SECRET` and `JWT_SECRET`, `SMTP_HOST=localhost`, `SMTP_PORT=1025`, `SMTP_SECURE=false`, and `MAIL_FROM`. Mailpit must accept application SMTP and expose its API at localhost:8025. Azurite must expose its blob service at localhost:10000. `PLAYWRIGHT_BASE_URL` overrides the default application origin; ensure the server binds there. `MAILPIT_URL` overrides the inbox API origin.
+
+Set `PLAYWRIGHT_WEB_SERVER_COMMAND='pnpm build && pnpm start'` to test an optimized build instead of the default development server.
 
 **Database isolation:** both runner and app server must use the same dedicated `jarxis_test` database (safe suffixed names such as `jarxis_test_prisma` are also accepted). A non-CI existing server is reused: stop/restart any normal development server against the test database BEFORE running. The runner cannot determine a reused server's database before registration; immediately after registration it asserts that the generated user exists in the runner's test database. Never point these tests at a production/development-data server. Config and every pg connection enforce the database name. The only direct database mutation assigns the existing seeded `owner` role to a newly registered, email-verified test user; it does not rewrite seed roles or permissions.
 

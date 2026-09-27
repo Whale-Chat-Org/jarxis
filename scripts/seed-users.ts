@@ -10,9 +10,8 @@ const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL is required');
 const host = new URL(url).hostname;
 if (!localHosts.has(host)) throw new Error('Refusing to seed users into a non-local database');
-const password = process.env.SEED_USER_PASSWORD;
-if (!password || password.length < 12)
-  throw new Error('Set SEED_USER_PASSWORD (at least 12 characters) in .env');
+// Deliberately fixed and development-only. The host/production guards above prevent remote use.
+const password = 'Jarxis-Local!58392';
 const fixtures = [
   { email: 'owner@jarxis.test', name: 'Olivia Owner', role: 'owner' },
   { email: 'admin@jarxis.test', name: 'Adam Administrator', role: 'administrator' },
@@ -81,7 +80,7 @@ try {
   });
   for (const f of fixtures)
     console.log(`${f.email.padEnd(24)} ${f.role}${'banned' in f && f.banned ? ' (banned)' : ''}`);
-  console.log('Development users seeded with SEED_USER_PASSWORD');
+  console.log('Development users seeded with the password declared in scripts/seed-users.ts');
 } finally {
   await db.$disconnect();
 }
