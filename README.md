@@ -119,6 +119,24 @@ docker compose exec -T postgres pg_dump -U jarxis -d jarxis -Fc > jarxis.dump
 
 Monitor `/api/health` (database + Redis), container health, authentication failures, rate-limit spikes, and audit events. App errors omit request bodies and raw SQL parameters. Configure email delivery monitoring in Brevo (transactional logs and bounce/block events). Schedule retention/cleanup of expired token families and consumed tokens **only after family expiry**, preserving replay evidence while a family remains valid. No recurring cleanup job is installed automatically.
 
+## CI/CD
+
+`.github/workflows/ci-cd.yml` runs on pull requests to `main` and on pushes to `main`:
+
+1. **test**: `format:check`, `lint`, `typecheck`, unit tests with coverage, then migrations, seed and integration tests against throwaway Postgres and Redis service containers (`jarxis_test`).
+2. **build**: builds the `runner` and `tools` images for `linux/amd64`. They are kept as workflow artifacts, not pushed.
+3. **security** (in parallel): SonarQube Cloud with the quality gate, Semgrep (fails on `ERROR` findings) and Trivy (repository and app image, fails on fixable `HIGH`/`CRITICAL`). SARIF reports are saved as artifacts. Secret-scan exceptions live in `trivy-secret.yaml`.
+4. **deploy** (pushes to `main` only): signs in to Azure with OIDC, pushes both images to ACR tagged with the commit SHA, runs migrations and seed through a temporary Postgres firewall rule, deploys to the `staging` slot, waits for `/api/health`, then swaps staging into production. If production is unhealthy after the swap, it swaps back.
+
+Migrations run **before** the swap, so the release still in production briefly runs against the new schema. Keep migrations backward-compatible (expand first, remove old columns in a later release).
+
+The Azure environment and the pipeline's identity come from [jarxis-IaC](https://github.com/Whale-Chat-Org/jarxis-IaC): `scripts/setup-cicd.sh` there sets these with `az` and `gh`:
+
+| Kind      | Names                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Secrets   | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `SONAR_TOKEN`                                                                                              |
+| Variables | `AZURE_RESOURCE_GROUP`, `ACR_NAME`, `ACR_LOGIN_SERVER`, `WEBAPP_NAME`, `WEBAPP_SLOT`, `KEY_VAULT_NAME`, `POSTGRES_SERVER_NAME`, `SONAR_ORGANIZATION`, `SONAR_PROJECT_KEY` |
+
 ## Verification
 
 ```sh
