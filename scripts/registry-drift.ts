@@ -379,7 +379,9 @@ const REVIEWED: Record<string, string> = {
   'src/components/auth/auth-result.tsx':
     'amber palette replaced by the semantic text-warning token, plus size-qr',
   'src/components/auth/settings/account/change-avatar.tsx':
-    'raw <input type="file"> replaced by the Input primitive (raw inputs are lint-banned in src/components/auth)',
+    'raw <input type="file"> replaced by the Input primitive, plus managed-blob cleanup after avatar replacement and failed profile updates',
+  'src/components/auth/settings/account/user-profile.tsx':
+    'profile form initialization is guarded by user id so controlled-field changes are not reset during rerenders',
   'src/lib/auth/two-factor-methods.ts':
     'upstream doc comment dropped when the file was first token-converted',
   'src/components/auth/admin/admin-users.tsx':

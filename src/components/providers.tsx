@@ -13,6 +13,29 @@ import { adminPlugin } from '@/lib/auth/admin-plugin';
 import { themePlugin } from '@/lib/auth/theme-plugin';
 import { adminRoles, defaultRole, roleNames } from '@/lib/permissions';
 
+async function uploadAvatar(file: File) {
+  const response = await fetch('/api/profile/avatar', {
+    method: 'POST',
+    headers: { 'Content-Type': file.type },
+    body: file,
+  });
+  if (!response.ok) throw new Error('Avatar upload failed');
+  const result = (await response.json()) as { url?: unknown };
+  if (typeof result.url !== 'string') throw new Error('Avatar upload returned an invalid URL');
+  return result.url;
+}
+
+async function deleteAvatar(url: string) {
+  const target = new URL(url, window.location.origin);
+  if (
+    target.origin !== window.location.origin ||
+    !/^\/api\/profile\/avatar\/[^/]+\/[0-9a-f-]{36}$/.test(target.pathname)
+  )
+    return;
+  const response = await fetch(target.pathname, { method: 'DELETE' });
+  if (!response.ok) throw new Error('Avatar deletion failed');
+}
+
 /**
  * Auth providers that need `next-themes` context.
  *
@@ -47,6 +70,13 @@ function AuthProviders({ queryClient, children }: PropsWithChildren<{ queryClien
         emailAndPassword={{
           requireEmailVerification: true,
           minPasswordLength: 12,
+        }}
+        avatar={{
+          enabled: true,
+          size: 256,
+          extension: 'png',
+          upload: uploadAvatar,
+          delete: deleteAvatar,
         }}
       >
         {children}
