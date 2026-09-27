@@ -1,0 +1,286 @@
+name: ci-cd
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  # Superseded PR runs are cancelled; runs on main always finish so no deploy is cut short.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        env:
+          POSTGRES_USER: jarxis
+          POSTGRES_DB: jarxis_test
+          # Throwaway container reachable only from this job, so no password is needed.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U jarxis -d jarxis_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://jarxis@localhost:5432/jarxis_test
+      REDIS_URL: redis://localhost:6379/1
+      BETTER_AUTH_URL: http://localhost:3000
+      SMTP_HOST: localhost
+      AZURE_STORAGE_CONNECTION_STRING: UseDevelopmentStorage=true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Generate per-run auth secrets
+        run: |
+          echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "JWT_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test --coverage
+      - name: Migrate and seed the jarxis_test database
+        run: pnpm db:migrate && pnpm db:seed
+      - run: pnpm test:integration
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage/lcov.info
+          retention-days: 7
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Images are saved as artifacts, not pushed: nothing reaches the registry before the scans pass.
+      - name: Build jarxis-app
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runner
+          platforms: linux/amd64
+          tags: jarxis-app:${{ github.sha }}
+          outputs: type=docker,dest=${{ runner.temp }}/jarxis-app.tar
+          cache-from: type=gha,scope=jarxis
+          cache-to: type=gha,scope=jarxis,mode=max
+      - name: Build jarxis-tools
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: tools
+          platforms: linux/amd64
+          tags: jarxis-tools:${{ github.sha }}
+          outputs: type=docker,dest=${{ runner.temp }}/jarxis-tools.tar
+          cache-from: type=gha,scope=jarxis
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: images
+          path: ${{ runner.temp }}/jarxis-*.tar
+          retention-days: 1
+
+  sonarqube:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # full history for blame and new-code detection
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coverage
+          path: coverage
+      - uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          # A failing quality gate fails this job.
+          args: >
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+            -Dsonar.qualitygate.wait=true
+
+  semgrep:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep:1.178.0@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Semgrep (fails on ERROR findings)
+        run: >
+          semgrep scan --metrics=off
+          --config p/default --config p/typescript --config p/react --config p/nodejs
+          --severity ERROR --error --sarif-output semgrep.sarif
+      # Code scanning upload needs GitHub Advanced Security, so reports are kept as artifacts.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          if-no-files-found: ignore
+
+  trivy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TRIVY_SEVERITY: HIGH,CRITICAL
+      # Narrow, documented exceptions (the public Azurite dev key).
+      TRIVY_SECRET_CONFIG: trivy-secret.yaml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: images
+          path: ${{ runner.temp }}/images
+      - name: Scan repository (dependencies, secrets, Dockerfile)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: true
+          exit-code: 1
+      - name: Scan jarxis-app image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          input: ${{ runner.temp }}/images/jarxis-app.tar
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: true
+          exit-code: 1
+      - name: SARIF reports
+        if: always()
+        run: |
+          trivy fs --scanners vuln,secret,misconfig --severity "$TRIVY_SEVERITY" --ignore-unfixed \
+            --format sarif --output trivy-fs.sarif .
+          trivy image --input "$RUNNER_TEMP/images/jarxis-app.tar" --severity "$TRIVY_SEVERITY" \
+            --ignore-unfixed --format sarif --output trivy-image.sarif
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: trivy-sarif
+          path: trivy-*.sarif
+          if-no-files-found: ignore
+
+  deploy:
+    needs: [sonarqube, semgrep, trivy]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # OIDC sign-in to Azure; the federated credential only trusts main
+    env:
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      WEBAPP: ${{ vars.WEBAPP_NAME }}
+      SLOT: ${{ vars.WEBAPP_SLOT }}
+      APP_IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/jarxis-app:${{ github.sha }}
+      TOOLS_IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/jarxis-tools:${{ github.sha }}
+      FIREWALL_RULE: gh-${{ github.run_id }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: images
+          path: ${{ runner.temp }}/images
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Push images to ACR
+        run: |
+          docker load --input "$RUNNER_TEMP/images/jarxis-app.tar"
+          docker load --input "$RUNNER_TEMP/images/jarxis-tools.tar"
+          docker tag "jarxis-app:$GITHUB_SHA" "$APP_IMAGE"
+          docker tag "jarxis-tools:$GITHUB_SHA" "$TOOLS_IMAGE"
+          az acr login --name "${{ vars.ACR_NAME }}"
+          docker push "$APP_IMAGE"
+          docker push "$TOOLS_IMAGE"
+
+      # Postgres only accepts known IPs, so this runner gets a rule for the length of the migration.
+      - name: Open Postgres firewall for this runner
+        id: firewall
+        run: |
+          ip="$(curl -fsS --max-time 10 https://api.ipify.org)"
+          az postgres flexible-server firewall-rule create -g "$RG" -n "${{ vars.POSTGRES_SERVER_NAME }}" \
+            -r "$FIREWALL_RULE" --start-ip-address "$ip" --end-ip-address "$ip" --output none
+      # Runs before the swap, so migrations must stay compatible with the release still in production.
+      - name: Migrate and seed
+        run: |
+          # The connection string never reaches a log: it goes to a private env file read by docker.
+          env_file="$RUNNER_TEMP/migrate.env"
+          trap 'rm -f "$env_file"' EXIT
+          url="$(az keyvault secret show --vault-name "${{ vars.KEY_VAULT_NAME }}" -n database-url --query value -o tsv)"
+          (umask 077 && printf 'DATABASE_URL=%s\n' "$url" > "$env_file")
+          unset url
+          docker run --rm --env-file "$env_file" "$TOOLS_IMAGE"
+      - name: Close Postgres firewall
+        if: always() && steps.firewall.outcome != 'skipped'
+        run: |
+          az postgres flexible-server firewall-rule delete -g "$RG" -n "${{ vars.POSTGRES_SERVER_NAME }}" \
+            -r "$FIREWALL_RULE" --yes --output none
+
+      - name: Deploy to the staging slot
+        run: |
+          az webapp config set -g "$RG" -n "$WEBAPP" --slot "$SLOT" \
+            --linux-fx-version "DOCKER|$APP_IMAGE" --output none
+          az webapp restart -g "$RG" -n "$WEBAPP" --slot "$SLOT"
+      - name: Wait for staging to be healthy
+        run: |
+          url="https://$WEBAPP-$SLOT.azurewebsites.net/api/health"
+          # Give the old container time to stop, then require three healthy answers in a row.
+          sleep 60
+          ok=0
+          for _ in $(seq 1 60); do
+            if curl -fsS --max-time 15 "$url"; then ok=$((ok + 1)); else ok=0; fi
+            echo
+            [ "$ok" -ge 3 ] && exit 0
+            sleep 10
+          done
+          echo "::error::Staging never became healthy; production was not touched."
+          exit 1
+      - name: Swap staging into production
+        id: swap
+        run: az webapp deployment slot swap -g "$RG" -n "$WEBAPP" --slot "$SLOT" --target-slot production
+      - name: Check production health
+        run: |
+          url="https://$WEBAPP.azurewebsites.net/api/health"
+          for _ in $(seq 1 30); do
+            curl -fsS --max-time 15 "$url" && exit 0
+            sleep 10
+          done
+          echo "::error::Production is unhealthy after the swap."
+          exit 1
+      - name: Roll back by swapping again
+        if: failure() && steps.swap.outcome == 'success'
+        run: az webapp deployment slot swap -g "$RG" -n "$WEBAPP" --slot "$SLOT" --target-slot production

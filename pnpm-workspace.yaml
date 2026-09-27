@@ -9,6 +9,9 @@ overrides:
   'better-auth>@better-auth/drizzle-adapter': '-'
   'better-auth>drizzle-orm': '-'
   'better-auth>drizzle-kit': '-'
+  # Security fixes for transitive dependencies flagged by Trivy (HIGH, fix available).
+  'mysql2': '^3.22.0'
+  '@prisma/config>deepmerge-ts': '^8.0.2'
 ignoredOptionalDependencies:
   - drizzle-orm
   - drizzle-kit

@@ -7,5 +7,9 @@ export default defineConfig({
       'server-only': fileURLToPath(new URL('./tests/server-only.ts', import.meta.url)),
     },
   },
-  test: { include: ['tests/unit/**/*.test.ts'] },
+  test: {
+    include: ['tests/unit/**/*.test.ts'],
+    // Enabled with --coverage in CI; lcov.info feeds SonarQube.
+    coverage: { provider: 'v8', include: ['src/**'], reporter: ['text-summary', 'lcov'] },
+  },
 });
