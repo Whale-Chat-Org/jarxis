@@ -46,46 +46,35 @@ export async function register(request: APIRequestContext, baseURL: string) {
   return { email, id: data.user.id as string };
 }
 
-type Mail = { ID: string; Subject: string; To: { Address: string }[] };
-/** Search only this unique recipient; never empty the shared Mailpit inbox. */
+type Mail = { id: string; to: string[]; subject: string; text: string; html: string };
+/** Read mail captured by the local Brevo stub for this unique recipient only. */
 export async function mailLink(
   request: APIRequestContext,
   email: string,
   subject: string,
   baseURL: string,
 ) {
-  const mailpit = process.env.MAILPIT_URL ?? 'http://localhost:8025';
+  const stub = process.env.BREVO_STUB_URL ?? 'http://127.0.0.1:4010';
   let message: Mail | undefined;
   await expect
     .poll(
       async () => {
-        const result = await request.get(`${mailpit}/api/v1/search`, {
-          params: { query: `to:${email}`, limit: 50 },
+        const result = await request.get(`${stub}/messages`, {
+          params: { to: email },
           timeout: 5_000,
-          headers: { Origin: new URL(mailpit).origin },
         });
-        expect(result.ok(), 'Mailpit search failed').toBeTruthy();
+        expect(result.ok(), 'Brevo stub lookup failed').toBeTruthy();
         const body = await result.json();
-        message = (body.messages as Mail[]).find(
-          (m) =>
-            m.Subject === subject &&
-            m.To.some((to) => to.Address.toLowerCase() === email.toLowerCase()),
+        message = (body.messages as Mail[]).findLast(
+          (m) => m.subject === subject && m.to.includes(email.toLowerCase()),
         );
         return Boolean(message);
       },
       { timeout: 20_000, intervals: [250, 500, 1_000], message: `Mail for ${email}: ${subject}` },
     )
     .toBe(true);
-  const response = await request.get(`${mailpit}/api/v1/message/${message!.ID}`, {
-    timeout: 5_000,
-    headers: { Origin: new URL(mailpit).origin },
-  });
-  expect(response.ok()).toBeTruthy();
-  const body = await response.json();
   const links =
-    String(body.Text || body.HTML)
-      .replaceAll('&amp;', '&')
-      .match(/https?:\/\/[^\s<>"']+/g) ?? [];
+    (message!.text || message!.html).replaceAll('&amp;', '&').match(/https?:\/\/[^\s<>"']+/g) ?? [];
   const link = links.find((value) => {
     const url = new URL(value);
     return (

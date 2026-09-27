@@ -28,7 +28,7 @@ clear extension points.
   and audit events.
 - Protect privileged operations with server-side, database-backed authorization on every request.
 - Support non-browser clients with short-lived access tokens and rotating refresh tokens.
-- Provide a local development and container deployment path backed by PostgreSQL, Redis, and SMTP.
+- Provide a local development and container deployment path backed by PostgreSQL, Redis, and Brevo transactional email.
 - Remain a focused starter that can be extended with product-specific features.
 
 ## 4. Users and roles
@@ -58,7 +58,7 @@ unknown stored role names grant no permissions.
 - A person can sign up with name, email, and password.
 - The account must verify its email before normal authenticated use.
 - A person can sign in and sign out with an HttpOnly cookie session.
-- Forgot-password and reset-password flows deliver links through configured SMTP.
+- Forgot-password and reset-password flows deliver links through the configured Brevo account.
 - Authentication failures use safe messages and do not expose internal errors or credentials.
 - Rate limiting protects authentication and token issuance paths.
 

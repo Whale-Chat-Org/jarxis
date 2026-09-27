@@ -4,7 +4,7 @@
 
 Jarxis is a single Next.js application that serves React pages, Better Auth endpoints, a small
 versioned HTTP API, health checks, and API documentation. PostgreSQL is the durable source of truth,
-Redis supplies rate limiting, and SMTP supplies verification and password-reset email.
+Redis supplies rate limiting, and the Brevo transactional email API supplies verification and password-reset email.
 
 | Layer               | Technology                                         | Responsibility                                                           |
 | ------------------- | -------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -15,7 +15,7 @@ Redis supplies rate limiting, and SMTP supplies verification and password-reset 
 | Persistence         | PostgreSQL 18, Prisma 7                            | Accounts, sessions, tokens, and audit data                               |
 | Rate limiting       | Redis, ioredis                                     | Atomic request counters and authentication protection                    |
 | Validation and docs | Zod, OpenAPI 3.1, Scalar                           | Runtime inputs, API schema, interactive reference                        |
-| Email               | Nodemailer and SMTP                                | Verification and password-reset delivery                                 |
+| Email               | Brevo transactional API (`@getbrevo/brevo`)        | Verification and password-reset delivery                                 |
 
 The detailed product behavior is defined in [PRD.md](PRD.md).
 
@@ -180,7 +180,7 @@ until expiry so replay evidence remains available.
 - Admin audit payloads use allowlists and never contain passwords, cookies, or tokens.
 - API documentation is owner-only outside development.
 - The base Compose file does not expose PostgreSQL or Redis ports. The development override binds
-  them to loopback and adds Mailpit.
+  them to loopback and adds Azurite.
 - Production containers run as a non-root user and use pinned base image digests.
 
 ## 9. Configuration
@@ -192,10 +192,11 @@ Required runtime values are validated by `src/lib/env.ts`:
 - `BETTER_AUTH_URL`
 - `BETTER_AUTH_SECRET`
 - `JWT_SECRET`
-- `SMTP_HOST`
+- `BREVO_API_KEY`
+- `MAIL_FROM` (a sender or domain verified in Brevo)
 
-Optional SMTP credentials, port/security settings, sender identity, and `TRUST_PROXY` have validated
-defaults. Avatar storage separately validates `AZURE_STORAGE_CONNECTION_STRING` and
+`TRUST_PROXY` has a validated default. `BREVO_API_URL` is a test-only override that points the SDK at
+the acceptance suite's local Brevo stub. Avatar storage separately validates `AZURE_STORAGE_CONNECTION_STRING` and
 `AZURE_STORAGE_CONTAINER` when used. The local fixture seeder's fixed development password lives
 in `scripts/seed-users.ts`; it is not an application runtime setting.
 
@@ -209,10 +210,10 @@ The multi-stage Dockerfile provides:
 - `runner`: minimal production Next.js runtime running as `node`.
 
 The base Compose topology starts PostgreSQL and Redis, runs the migration/seed job to completion,
-then starts the application. Production must provide real SMTP, HTTPS `BETTER_AUTH_URL`, durable
+then starts the application. Production must provide a Brevo API key with a verified sender, HTTPS `BETTER_AUTH_URL`, durable
 volumes, backup procedures, and external monitoring.
 
-Monitor `/api/health`, authentication failures, rate-limit spikes, container health, SMTP delivery,
+Monitor `/api/health`, authentication failures, rate-limit spikes, container health, email delivery,
 and audit events. Backups contain account data and must be encrypted and access-controlled. Database
 major upgrades require a supported PostgreSQL upgrade path and a tested restore/rollback plan.
 

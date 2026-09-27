@@ -2,7 +2,7 @@
 
 ## Stack and architecture
 
-- Next.js 16 App Router, React 19, strict TypeScript, pnpm (version in package.json), PostgreSQL, Redis/ioredis, Better Auth, jose JWTs, Zod and Nodemailer/SMTP.
+- Next.js 16 App Router, React 19, strict TypeScript, pnpm (version in package.json), PostgreSQL, Redis/ioredis, Better Auth, jose JWTs, Zod and email via the Brevo transactional API (`@getbrevo/brevo`).
 - **Prisma is the required ORM.** Schema and versioned SQL migrations live in prisma/; src/db/index.ts provides the lazy Prisma client with the PostgreSQL adapter. Do not introduce a second ORM.
 - **Roles are code-declared.** `app_user.role` holds one or more role names (comma-separated) and is authoritative; there are no `roles`/`permissions`/`user_roles`/`role_permissions` tables. Account status is the admin plugin's ban fields (`banned`/`banReason`/`banExpires`) — there is no separate `disabled` flag.
 - Tailwind CSS v4 and shadcn-style UI components in src/components/ui; semantic tokens in src/styles/tokens.css. Follow [design-system.md](design-system.md); preserve accessibility and keyboard behavior.
@@ -11,7 +11,7 @@
 - src/lib/auth.ts configures authentication, including the Better Auth `admin` plugin; tokens.ts manages JWTs and refresh families; rbac.ts resolves identity and checks database-backed permissions; permissions.ts declares the single source of truth for roles, permissions and the access-control statements.
 - src/lib/auth/admin-guards.ts enforces the extra administration rules (owner protection, last owner, ban side effects, audit) as Better Auth hooks. src/lib/user-status.ts owns the ban/active predicates used by rbac, tokens and the auth hooks.
 - src/lib/admin-service.ts is now read-only: it exposes the audit query (`listAudit`) that the plugin has no equivalent for. User, role and permission writes belong to the admin plugin; do not reintroduce a second write path.
-- src/lib/http.ts handles origin checks, validation and sanitized error responses; redis.ts provides rate limiting; docs-access.ts protects production API documentation; env.ts validates shared environment configuration.
+- src/lib/http.ts handles origin checks, validation and sanitized error responses; redis.ts provides rate limiting; docs-access.ts protects production API documentation; env.ts validates shared environment configuration; mailer.ts sends email through the Brevo API.
 
 ## Commands and verification
 

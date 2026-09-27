@@ -40,7 +40,9 @@ jobs:
       DATABASE_URL: postgresql://jarxis@localhost:5432/jarxis_test
       REDIS_URL: redis://localhost:6379/1
       BETTER_AUTH_URL: http://localhost:3000
-      SMTP_HOST: localhost
+      # Tests never call Brevo; the schema only needs a value.
+      BREVO_API_KEY: ci-not-a-real-key
+      MAIL_FROM: Jarxis <noreply@example.com>
       AZURE_STORAGE_CONNECTION_STRING: UseDevelopmentStorage=true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

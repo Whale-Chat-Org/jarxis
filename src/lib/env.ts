@@ -6,15 +6,12 @@ const schema = z.object({
   BETTER_AUTH_URL: z.url(),
   BETTER_AUTH_SECRET: z.string().min(32),
   JWT_SECRET: z.string().min(32),
-  SMTP_HOST: z.string().min(1),
-  SMTP_PORT: z.coerce.number().int().positive().default(1025),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASSWORD: z.string().optional(),
-  SMTP_SECURE: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((v) => v === 'true'),
-  MAIL_FROM: z.string().min(1).default('Jarxis <noreply@localhost>'),
+  // Brevo REST API key (xkeysib-...), not the SMTP key.
+  BREVO_API_KEY: z.string().min(1),
+  // Test-only override so acceptance tests can capture mail with a local Brevo stand-in.
+  BREVO_API_URL: z.url().optional(),
+  // Must be a sender or domain verified in Brevo, e.g. `Jarxis <noreply@example.com>`.
+  MAIL_FROM: z.string().min(1),
   // Only enable behind a trusted reverse proxy that overwrites X-Real-IP.
   TRUST_PROXY: z
     .enum(['true', 'false'])
