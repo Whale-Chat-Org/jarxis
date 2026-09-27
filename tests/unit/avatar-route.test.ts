@@ -62,7 +62,8 @@ beforeAll(() => {
     BETTER_AUTH_URL: 'http://localhost:3000',
     BETTER_AUTH_SECRET: 'a'.repeat(64),
     JWT_SECRET: 'b'.repeat(64),
-    SMTP_HOST: 'localhost',
+    BREVO_API_KEY: 'xkeysib-test',
+    MAIL_FROM: 'Jarxis <noreply@example.com>',
   });
 });
 
