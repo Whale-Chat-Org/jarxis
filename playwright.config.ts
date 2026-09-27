@@ -12,6 +12,9 @@ if (
 }
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
 const webServerCommand = process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ?? 'pnpm dev';
+// The app sends mail to a local Brevo stub so acceptance runs never deliver real email.
+const brevoStubURL = process.env.BREVO_STUB_URL ?? 'http://127.0.0.1:4010';
+process.env.BREVO_STUB_URL = brevoStubURL;
 export default defineConfig({
   testDir: './tests/e2e',
   reporter: [['list'], ['html', { open: 'never' }]],
@@ -29,19 +32,30 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
-    command: webServerCommand,
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    env: {
-      DATABASE_URL: databaseURL,
-      BETTER_AUTH_URL: baseURL,
-      TRUST_PROXY: 'true',
-      AZURE_STORAGE_CONNECTION_STRING:
-        process.env.AZURE_STORAGE_CONNECTION_STRING ?? 'UseDevelopmentStorage=true',
-      AZURE_STORAGE_CONTAINER: process.env.AZURE_STORAGE_CONTAINER ?? 'profile-photos-e2e',
-      PORT: new URL(baseURL).port || '3000',
+  webServer: [
+    {
+      command: 'pnpm exec tsx tests/e2e/brevo-stub.ts',
+      url: brevoStubURL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
     },
-  },
+    {
+      command: webServerCommand,
+      url: baseURL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: {
+        DATABASE_URL: databaseURL,
+        BETTER_AUTH_URL: baseURL,
+        TRUST_PROXY: 'true',
+        BREVO_API_KEY: 'e2e-stub-key',
+        BREVO_API_URL: brevoStubURL,
+        MAIL_FROM: 'Jarxis <noreply@example.test>',
+        AZURE_STORAGE_CONNECTION_STRING:
+          process.env.AZURE_STORAGE_CONNECTION_STRING ?? 'UseDevelopmentStorage=true',
+        AZURE_STORAGE_CONTAINER: process.env.AZURE_STORAGE_CONTAINER ?? 'profile-photos-e2e',
+        PORT: new URL(baseURL).port || '3000',
+      },
+    },
+  ],
 });

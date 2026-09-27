@@ -2,29 +2,21 @@ import { betterAuth, APIError } from 'better-auth';
 import { prismaAdapter } from '@better-auth/prisma-adapter';
 import { admin } from 'better-auth/plugins/admin';
 import { openAPI } from 'better-auth/plugins';
-import nodemailer from 'nodemailer';
 import { db } from '@/db';
 import { env } from './env';
+import { sendMail } from './mailer';
 import { ac, adminRoles, defaultRole, roles } from './permissions';
 import { isActiveUser } from './user-status';
 import { adminAuditHook, adminMutationGuard, userStatusHooks } from './auth/admin-guards';
 let instance: ReturnType<typeof makeAuth> | undefined;
 function makeAuth() {
   const e = env();
-  const transport = nodemailer.createTransport({
-    host: e.SMTP_HOST,
-    port: e.SMTP_PORT,
-    secure: e.SMTP_SECURE,
-    ...(e.SMTP_USER ? { auth: { user: e.SMTP_USER, pass: e.SMTP_PASSWORD } } : {}),
-  });
-  const send = async (to: string, subject: string, url: string) => {
-    await transport.sendMail({
-      from: e.MAIL_FROM,
+  const send = (to: string, subject: string, url: string) =>
+    sendMail({
       to,
       subject,
       text: `${subject}\n\n${url}\n\nIf you did not request this, you can ignore this message.`,
     });
-  };
   return betterAuth({
     appName: 'Jarxis',
     baseURL: e.BETTER_AUTH_URL,

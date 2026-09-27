@@ -11,16 +11,16 @@ cp .env.example .env
 # Edit .env: set a URL-safe POSTGRES_PASSWORD and the same password in DATABASE_URL.
 # Generate two DIFFERENT secrets with `openssl rand -hex 32`.
 # Set BETTER_AUTH_SECRET and JWT_SECRET to those values.
+# Set BREVO_API_KEY (Brevo API key) and MAIL_FROM (a Brevo-verified sender).
 pnpm install --frozen-lockfile
 pnpm db:generate
-docker compose -f compose.yaml -f compose.dev.yaml up -d postgres redis mailpit azurite
+docker compose -f compose.yaml -f compose.dev.yaml up -d postgres redis azurite
 pnpm db:migrate
 pnpm db:seed
 pnpm dev
 ```
 
 - Application: http://localhost:3000
-- Mailpit inbox: http://localhost:8025 (development only)
 - Azurite blob endpoint: http://localhost:10000 (development only)
 - API docs: http://localhost:3000/api/docs
 - Database/Redis development ports: **55432 / 56379**, bound to loopback to avoid existing local services. Override `POSTGRES_PORT` / `REDIS_PORT` and update host connection URLs together.
@@ -33,7 +33,7 @@ docker compose -f compose.yaml -f compose.dev.yaml up --build -d
 
 The development override uses the tools image and Next dev server. Rebuild after source changes; use host `pnpm dev` for immediate hot reload. Do not run both on port 3000.
 
-Register at `/auth/sign-up`, open the verification email in Mailpit, verify, then sign in. New accounts have **no admin permissions**. Bootstrap the first verified, active owner:
+Register at `/auth/sign-up` with a real inbox, open the verification email (sent through Brevo; check spam and Brevo → Transactional → Logs), verify, then sign in. Every environment, including development, sends real email. New accounts have **no admin permissions**. Bootstrap the first verified, active owner:
 
 ```sh
 pnpm owner you@example.com
@@ -99,7 +99,7 @@ project needs are hooks. See [TECH.md](docs/TECH.md#authorization-and-rbac) for 
 docker compose up --build -d
 ```
 
-Use the base Compose file for production with real SMTP settings, a private Azure Blob Storage connection string, and an **HTTPS** `BETTER_AUTH_URL`. Place an HTTPS reverse proxy in front of the loopback app port. The production image runs as a non-root user. The migration/seed job must complete successfully before the app starts. Database/Redis ports are not published by the base file; never use the development override on an untrusted host. Mailpit and Azurite are development-only.
+Use the base Compose file for production with a `BREVO_API_KEY` and a `MAIL_FROM` on a Brevo-verified domain, a private Azure Blob Storage connection string, and an **HTTPS** `BETTER_AUTH_URL`. Place an HTTPS reverse proxy in front of the loopback app port. The production image runs as a non-root user. The migration/seed job must complete successfully before the app starts. Database/Redis ports are not published by the base file; never use the development override on an untrusted host. Azurite is development-only.
 
 Profile photos are stored in the private container named by `AZURE_STORAGE_CONTAINER` and are served only through authenticated application routes. Keep `AZURE_STORAGE_CONNECTION_STRING` secret in production; the `UseDevelopmentStorage=true` value in `.env.example` is only for the loopback Azurite emulator.
 
@@ -107,7 +107,7 @@ Set `TRUST_PROXY=true` **only** when a trusted proxy overwrites `X-Real-IP` and 
 
 Use distinct cryptographically random auth/JWT secrets. Changing JWT_SECRET invalidates all API access JWTs; changing auth secrets invalidates cookie sessions. Coordinate secret rotation and client reauthentication. The starter uses a shared symmetric signing key; introducing independently trusted resource servers should replace this with managed asymmetric signing/JWKS.
 
-Images are pinned to verified registry digests for PostgreSQL 18.6, Redis 8.10.2, Node 24 and Mailpit. Refresh digests deliberately after release/security review; never silently deploy `latest`. Before a database major upgrade, take and test a backup, follow PostgreSQL's supported upgrade procedure, migrate on staging, and test rollback. Do not point a new major at an old data volume without a supported upgrade.
+Images are pinned to verified registry digests for PostgreSQL 18.6, Redis 8.10.2, Node 24 and Azurite. Refresh digests deliberately after release/security review; never silently deploy `latest`. Before a database major upgrade, take and test a backup, follow PostgreSQL's supported upgrade procedure, migrate on staging, and test rollback. Do not point a new major at an old data volume without a supported upgrade.
 
 Backup/restore examples (protect backups: they contain account data):
 
@@ -117,7 +117,7 @@ docker compose exec -T postgres pg_dump -U jarxis -d jarxis -Fc > jarxis.dump
 # pg_restore --no-owner --dbname="$RESTORE_DATABASE_URL" jarxis.dump
 ```
 
-Monitor `/api/health` (database + Redis), container health, authentication failures, rate-limit spikes, and audit events. App errors omit request bodies and raw SQL parameters. Configure SMTP delivery monitoring. Schedule retention/cleanup of expired token families and consumed tokens **only after family expiry**, preserving replay evidence while a family remains valid. No recurring cleanup job is installed automatically.
+Monitor `/api/health` (database + Redis), container health, authentication failures, rate-limit spikes, and audit events. App errors omit request bodies and raw SQL parameters. Configure email delivery monitoring in Brevo (transactional logs and bounce/block events). Schedule retention/cleanup of expired token families and consumed tokens **only after family expiry**, preserving replay evidence while a family remains valid. No recurring cleanup job is installed automatically.
 
 ## Verification
 
