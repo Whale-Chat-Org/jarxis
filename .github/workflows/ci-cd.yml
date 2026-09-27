@@ -57,6 +57,8 @@ jobs:
           echo "JWT_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
+      # Route types (RouteContext) live in .next/types, which a fresh checkout does not have.
+      - run: pnpm exec next typegen
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
