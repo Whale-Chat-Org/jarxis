@@ -43,6 +43,12 @@ export async function body<T>(req: Request, schema: z.ZodType<T>): Promise<T> {
 export function json(value: unknown, status = 200) {
   return Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
 }
+export function handler(
+  fn: (req: Request, context: unknown) => Promise<Response>,
+): (req: Request, context?: unknown) => Promise<Response>;
+export function handler<TContext>(
+  fn: (req: Request, context: TContext) => Promise<Response>,
+): (req: Request, context: TContext) => Promise<Response>;
 export function handler<TContext = unknown>(
   fn: (req: Request, context: TContext) => Promise<Response>,
 ) {

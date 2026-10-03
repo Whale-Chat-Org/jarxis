@@ -1,5 +1,6 @@
 import {
   KeyRoundIcon,
+  BotIcon,
   LayoutDashboardIcon,
   ScrollTextIcon,
   ShieldCheckIcon,
@@ -40,7 +41,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Access control',
     items: [
       {
-        title: 'Users',
+        title: 'Users & access',
         href: '/admin/users',
         permission: 'users:read',
         icon: UsersIcon,
@@ -56,6 +57,18 @@ export const NAV_GROUPS: NavGroup[] = [
         href: '/admin/permissions',
         permission: 'permissions:read',
         icon: KeyRoundIcon,
+      },
+    ],
+  },
+  {
+    id: 'ml',
+    label: 'Machine learning',
+    items: [
+      {
+        title: 'ML providers',
+        href: '/admin/ml-providers',
+        permission: 'providers:read',
+        icon: BotIcon,
       },
     ],
   },

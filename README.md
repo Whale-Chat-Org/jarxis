@@ -95,6 +95,17 @@ JWT signature/algorithm/issuer/audience/expiry **and** PostgreSQL session/family
 
 The API supports users, user-role assignments, custom roles, permission catalog, and audit logs under `/api/v1`. Scalar at `/api/docs` and `/api/openapi` includes generated Better Auth documentation and Zod-derived input schemas. Both are owner-only outside development; the original auth plugin schema/reference endpoints are blocked. Error envelopes use `{ error: { code, message } }` (validation adds issue paths/messages), with 401 for absent/invalid authentication and 403 for insufficient permissions.
 
+## ML provider pool
+
+Owners manage connections and application keys at `/admin/ml-providers`. API-key providers and
+isolated ChatGPT/Codex or Claude subscription login jobs share a priority-ordered model pool.
+The persistent worker discovers model catalogs on connection and hourly thereafter.
+
+Applications use an owner-issued gateway key with the base URL `/api/llm/v1` for model listing,
+Chat Completions, and stateless Responses, including streaming and tool calls. Upstream credentials
+remain encrypted on the server. See [ML provider deployment and API usage](docs/ml-providers.md)
+for worker setup, subscription prerequisites, supported features, and validation limits.
+
 ## RBAC architecture
 
 User, role and permission management is the Better Auth `admin` plugin; the extra rules this

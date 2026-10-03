@@ -39,6 +39,18 @@ RUN chown node:node /app
 USER node
 CMD ["sh","-c","pnpm db:migrate && pnpm db:seed"]
 
+FROM tools AS worker
+USER root
+ARG CODEX_CLI_VERSION=0.160.0
+ARG CLAUDE_CLI_VERSION=2.1.288
+RUN test -n "$CODEX_CLI_VERSION" && test -n "$CLAUDE_CLI_VERSION" \
+  && npm install -g "@openai/codex@$CODEX_CLI_VERSION" "@anthropic-ai/claude-code@$CLAUDE_CLI_VERSION" \
+  && mkdir -p /var/lib/jarxis-ml && chmod 700 /var/lib/jarxis-ml && chown node:node /var/lib/jarxis-ml
+ENV NODE_OPTIONS=--conditions=react-server ML_WORKER_STATE_DIR=/var/lib/jarxis-ml \
+  ML_CODEX_CLI_PATH=/usr/local/bin/codex ML_CLAUDE_CLI_PATH=/usr/local/bin/claude
+USER node
+CMD ["pnpm","ml:worker"]
+
 FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runner
 # The server only needs node; drop the bundled package managers and their dependency CVEs.
 RUN rm -rf /usr/local/lib/node_modules /opt/yarn-* \
