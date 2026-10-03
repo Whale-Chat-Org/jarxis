@@ -23,6 +23,7 @@ model User {
   sessions      Session[]
   accounts      Account[]
   tokenFamilies TokenFamily[]
+  ownerSetup    OwnerSetupRequest?
 
   @@index([createdAt], map: "user_created_idx")
   @@index([name], map: "user_name_idx")
@@ -115,4 +116,50 @@ model AuditLog {
   @@index([createdAt], map: "audit_created_idx")
   @@index([targetId], map: "audit_target_idx")
   @@map("audit_logs")
+}
+
+/**
+ * Permanent, single-row record that first-owner setup has completed.
+ *
+ * The row is never deleted: it is the evidence that closes the unauthenticated web setup flow
+ * for good. The primary key is pinned to `singleton` by a CHECK constraint in the migration, so
+ * a second completion row cannot exist. CLI recovery (`pnpm owner`) is deliberately still
+ * allowed once this row exists.
+ */
+model InstallationSetup {
+  id          String   @id
+  completedAt DateTime @default(now()) @map("completed_at") @db.Timestamptz(6)
+  /** User the setup created or detected, when known. */
+  completedBy String?  @map("completed_by")
+  /** How setup closed: `web`, `cli`, `existing-owner` or `migration-backfill`. */
+  method      String
+
+  @@map("installation_setup")
+}
+
+/**
+ * Pending email verification for the first-owner setup flow.
+ *
+ * `POST /api/setup` creates an unverified candidate user plus one of these rows; the emailed
+ * six-digit code is only ever stored as an HMAC-SHA256 digest keyed by `BETTER_AUTH_SECRET`, so
+ * a database read cannot reveal a usable code. The row is consumed (`consumedAt`) when the code
+ * verifies, which is also when the owner role and the permanent setup marker are written.
+ */
+model OwnerSetupRequest {
+  /** Opaque UUID handed to the client; the only handle the browser keeps. */
+  id         String    @id
+  userId     String    @unique @map("user_id")
+  /** HMAC-SHA256 of the code; the raw code is never stored. */
+  codeHash   String    @map("code_hash")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  /** Wrong-code attempts; committed even when the request itself is rejected. */
+  attempts   Int       @default(0)
+  lastSentAt DateTime? @map("last_sent_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([expiresAt], map: "owner_setup_expires_idx")
+  @@map("owner_setup_requests")
 }

@@ -42,7 +42,8 @@ export default defineConfig({
     {
       command: webServerCommand,
       url: baseURL,
-      reuseExistingServer: !process.env.CI,
+      // Never send setup/account mutations to a reused development server with another database.
+      reuseExistingServer: false,
       timeout: 120_000,
       env: {
         DATABASE_URL: databaseURL,
