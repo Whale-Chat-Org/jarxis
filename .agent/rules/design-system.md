@@ -1,6 +1,6 @@
 # Design system rules
 
-Mandatory for every UI change. `pnpm lint` enforces the token rules; the component rules are enforced by review.
+Mandatory for every UI change. All design implementations must be responsive on mobile, tablet and desktop (see §9). `pnpm lint` enforces the token rules; the component and responsive rules are enforced by review and viewport validation.
 
 ## 1. Component rules
 
@@ -227,3 +227,30 @@ Discover what exists in this order:
 - Destructive red is an action fill, not a guaranteed accessible small-text colour. For validation messages, pair foreground text with an error icon or border and explicit wording.
 - Decorative separators are intentionally lower contrast. Never rely only on red, violet or chart colours to convey state.
 - Run `pnpm lint` (token rules) and `pnpm exec vitest run tests/unit/theme.test.ts tests/unit/design-system.test.ts`.
+
+## 9. Responsive design (every UI implementation)
+
+All pages, layouts, feature components and UI states must work on mobile, tablet and desktop, including auth, settings, administration, RBAC and ML provider screens. Implement mobile-first layouts using the existing design tokens and responsive breakpoint variants (§2); desktop-only implementations are incomplete.
+
+### Required viewport coverage
+
+Viewport dimensions below are width × height in CSS pixels.
+
+| Device  | Required coverage                     | Minimum validation viewports |
+| ------- | ------------------------------------- | ---------------------------- |
+| Mobile  | 375 × 667 through 440 × 956           | 375 × 667 and 440 × 956      |
+| Tablet  | 768 × 1024 through 960 × 1440         | 768 × 1024 and 960 × 1440    |
+| Desktop | Fluid layouts from 1024px wide upward | 1280 × 800 and 1440 × 900    |
+
+- Support intermediate widths and heights, including the gaps between these device ranges; these examples are validation targets, not fixed canvas sizes or new breakpoint definitions. Also check just below and above any breakpoint changed by the implementation.
+- Let grids, columns, navigation and action groups reflow with available space. Use token-based container widths and responsive variants; do not introduce arbitrary dimensions or inline layout styles to match a viewport.
+- Prevent page-level horizontal overflow, clipped text and overlapping controls. Long names, emails, model identifiers and validation messages must wrap or truncate accessibly without hiding essential information or actions.
+- Adapt dense tables and comparison views with stacked rows/cards, responsive columns or a clearly bounded horizontal scroll region when necessary. Preserve access to essential data and row actions at every size.
+- Keep menus, popovers, dialogs and sheets within the viewport. Long content must scroll, and primary actions must remain reachable on the shortest supported mobile height, including when the on-screen keyboard is open.
+- Keep navigation, forms and actions usable by touch and keyboard. Preserve labels, focus visibility, focus management and the accessibility behaviour of the existing primitives.
+- Apply the same responsive behaviour to loading, empty, error, success and populated states, including light and dark themes. Skeletons must follow the responsive layout they replace.
+
+### Validation and handoff
+
+- For every UI change, inspect the affected screens and interactions in a real browser at all six minimum validation viewports above. Check content reflow, navigation, forms, overlays, scrolling and action reachability; resizing a screenshot alone is insufficient.
+- Record the viewports checked, results and any unresolved issues in the PR or handoff. If browser validation is unavailable, state which checks remain unverified; lint and unit tests do not establish responsive correctness.
