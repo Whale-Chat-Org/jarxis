@@ -2,12 +2,12 @@
   "version": "0.2.0",
   "configurations": [
     {
-      // Starts postgres/redis/mailpit via docker compose, then runs `npm run dev`
+      // Starts postgres/redis/azurite via docker compose, then runs `pnpm dev`
       // with the Node debugger auto-attached and opens a debug-attached browser.
       "name": "Dev",
       "type": "node-terminal",
       "request": "launch",
-      "command": "npm run dev",
+      "command": "pnpm dev",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "compose: up dev services",
       "skipFiles": ["<node_internals>/**"],

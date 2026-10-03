@@ -4,7 +4,9 @@ A Next.js App Router admin starter with Better Auth, the official Better Auth UI
 
 ## Local development
 
-Requirements: Node 24+, pnpm 11.19.0, Docker Compose v2. No default user or password is seeded.
+Requirements: Node 24+, pnpm 12.8.1, Docker Compose v2. No default user or password is seeded.
+
+`pnpm typecheck` uses TypeScript 7 through the `@typescript/native` npm alias. The `typescript` alias provides the TypeScript 6 API for ESLint tooling until `typescript-eslint` supports TypeScript 7.
 
 ```sh
 cp .env.example .env
@@ -107,7 +109,7 @@ Set `TRUST_PROXY=true` **only** when a trusted proxy overwrites `X-Real-IP` and 
 
 Use distinct cryptographically random auth/JWT secrets. Changing JWT_SECRET invalidates all API access JWTs; changing auth secrets invalidates cookie sessions. Coordinate secret rotation and client reauthentication. The starter uses a shared symmetric signing key; introducing independently trusted resource servers should replace this with managed asymmetric signing/JWKS.
 
-Images are pinned to verified registry digests for PostgreSQL 18.6, Redis 8.10.2, Node 24 and Azurite. Refresh digests deliberately after release/security review; never silently deploy `latest`. Before a database major upgrade, take and test a backup, follow PostgreSQL's supported upgrade procedure, migrate on staging, and test rollback. Do not point a new major at an old data volume without a supported upgrade.
+Compose uses the `latest` tags for PostgreSQL, Redis and Azurite. The Dockerfile and CI service images remain pinned to verified registry digests. Review image releases before pulling updates. Before a database major upgrade, take and test a backup, follow PostgreSQL's supported upgrade procedure, migrate on staging, and test rollback. Do not point a new major at an old data volume without a supported upgrade.
 
 Backup/restore examples (protect backups: they contain account data):
 

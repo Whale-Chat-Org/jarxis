@@ -3,7 +3,7 @@ WORKDIR /app
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 ENV HUSKY=0 NEXT_TELEMETRY_DISABLED=1
-RUN npm install -g pnpm@11.19.0
+RUN npm install -g pnpm@12.8.1
 # pnpm >=10's runtime dependency-sync check tries to purge and reinstall node_modules on any
 # `pnpm` invocation it thinks is stale (it always does, inside a container) - as the non-root
 # `node` user that can never succeed against the root-owned node_modules from `deps`, and even
