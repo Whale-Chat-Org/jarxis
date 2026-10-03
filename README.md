@@ -35,7 +35,9 @@ docker compose -f compose.yaml -f compose.dev.yaml up --build -d
 
 The development override uses the tools image and Next dev server. Rebuild after source changes; use host `pnpm dev` for immediate hot reload. Do not run both on port 3000.
 
-Register at `/auth/sign-up` with a real inbox, open the verification email (sent through Brevo; check spam and Brevo → Transactional → Logs), verify, then sign in. Every environment, including development, sends real email. New accounts have **no admin permissions**. Bootstrap the first verified, active owner:
+For a fresh installation, the homepage and `/auth/sign-in` automatically open `/setup` while no owner exists, so just visit the application and follow the emailed-code flow below (`/setup` is also reachable directly). Ordinary registration at `/auth/sign-up` also requires email verification through Brevo (check spam and Brevo → Transactional → Logs). Every environment, including development, sends real email outside the isolated test suite. New accounts have **no admin permissions**.
+
+CLI recovery remains available for an active, email-verified account:
 
 ```sh
 pnpm owner you@example.com
@@ -44,6 +46,28 @@ docker compose run --rm migrate pnpm owner you@example.com
 ```
 
 This command refuses when an active owner exists. Thereafter, owners assign roles in Admin → Users.
+
+### First-run owner setup (`/setup`)
+
+`/setup` is a public first-run page: anyone can open it while the installation has no owner, and it
+needs no environment variable and no CLI access. It asks for name, email and password, emails a
+six-digit code to that address, and creates the owner only after the code is verified.
+
+- Any email address is accepted; control of that inbox is the gate. Starting setup creates an
+  unverified account with no admin privileges. Verifying the emailed code enables Owner access.
+- Codes are 6 digits, expire after 10 minutes, allow 5 attempts, and can be resent after a
+  60-second cooldown. A resend invalidates the previous code and replaces the expiry. Codes are
+  stored hashed, never in plaintext.
+- The first successful verification wins atomically: concurrent attempts leave exactly one owner,
+  and `/setup` then reports "Setup already completed" and links to sign-in, permanently. From then
+  on the homepage and `/auth/sign-in` render normally again, including when the owner is later
+  deactivated.
+- If email delivery fails the page says so and offers a resend, while still accepting a code that
+  did arrive.
+- Every ordinary sign-up at `/auth/sign-up` keeps its usual email verification. The CLI
+  (`pnpm owner <verified-email>`) is retained as a recovery path but is not required to bootstrap.
+- Verify after first run: `/setup` reports "Setup already completed", the new account signs in at
+  `/auth/sign-in`, and Admin → Users shows it with the `owner` role.
 
 For local testing only, `pnpm db:seed:users` creates fixture accounts using the development-only password declared in `scripts/seed-users.ts`: `owner@`, `admin@`, `viewer@`, `member@`, `banned@` and `unverified@` (all `@jarxis.test`). It refuses production and non-local database hosts and resets those accounts' roles, passwords and sessions on each run.
 

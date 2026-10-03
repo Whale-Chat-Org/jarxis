@@ -21,24 +21,25 @@ The detailed product behavior is defined in [PRD.md](PRD.md).
 
 ## 2. Source layout and ownership
 
-| Path                           | Purpose                                                                  |
-| ------------------------------ | ------------------------------------------------------------------------ |
-| `src/app/`                     | App Router pages, layouts, loading/error states, and HTTP route handlers |
-| `src/components/ui/`           | Token-converted shadcn primitives                                        |
-| `src/components/auth/`         | Better Auth UI registry components and local integration helpers         |
-| `src/components/admin/`        | Administration shell, sidebar, header, and navigation metadata           |
-| `src/components/landing/`      | Public landing page                                                      |
-| `src/lib/auth.ts`              | Better Auth server configuration and plugins                             |
-| `src/lib/auth/admin-guards.ts` | Owner protection, ban side effects, and admin audit hooks                |
-| `src/lib/permissions.ts`       | Role, permission, and Better Auth access-control declarations            |
-| `src/lib/rbac.ts`              | Identity resolution and database-backed authorization                    |
-| `src/lib/tokens.ts`            | JWT issuance and refresh-token family rotation/revocation                |
-| `src/lib/http.ts`              | Origin checks, request validation, and sanitized error envelopes         |
-| `src/lib/redis.ts`             | Redis client, atomic rate limits, and trusted-client IP behavior         |
-| `src/lib/openapi.ts`           | Combined Better Auth and application OpenAPI document                    |
-| `src/db/index.ts`              | Lazy Prisma client using the PostgreSQL adapter                          |
-| `prisma/`                      | Schema and versioned SQL migrations                                      |
-| `scripts/`                     | Migration, seed, owner bootstrap, fixtures, and registry checks          |
+| Path                             | Purpose                                                                      |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| `src/app/`                       | App Router pages, layouts, loading/error states, and HTTP route handlers     |
+| `src/components/ui/`             | Token-converted shadcn primitives                                            |
+| `src/components/auth/`           | Better Auth UI registry components and local integration helpers             |
+| `src/components/admin/`          | Administration shell, sidebar, header, and navigation metadata               |
+| `src/components/landing/`        | Public landing page                                                          |
+| `src/lib/auth.ts`                | Better Auth server configuration and plugins                                 |
+| `src/lib/auth/admin-guards.ts`   | Owner protection, ban side effects, and admin audit hooks                    |
+| `src/lib/initial-owner-setup.ts` | First-run setup status (`available` or `completed`) and email-code bootstrap |
+| `src/lib/permissions.ts`         | Role, permission, and Better Auth access-control declarations                |
+| `src/lib/rbac.ts`                | Identity resolution and database-backed authorization                        |
+| `src/lib/tokens.ts`              | JWT issuance and refresh-token family rotation/revocation                    |
+| `src/lib/http.ts`                | Origin checks, request validation, and sanitized error envelopes             |
+| `src/lib/redis.ts`               | Redis client, atomic rate limits, and trusted-client IP behavior             |
+| `src/lib/openapi.ts`             | Combined Better Auth and application OpenAPI document                        |
+| `src/db/index.ts`                | Lazy Prisma client using the PostgreSQL adapter                              |
+| `prisma/`                        | Schema and versioned SQL migrations                                          |
+| `scripts/`                       | Migration, seed, owner bootstrap, fixtures, and registry checks              |
 
 Registry components are copied source, not package-private implementation details. Update them by
 reinstalling the relevant registry item, applying the documented token conversion, and running
@@ -56,7 +57,9 @@ reinstalling the relevant registry item, applying the documented token conversio
 | `/admin/roles`       | Read-only code-declared role catalogue                             |
 | `/admin/permissions` | Application and Better Auth permission catalogues                  |
 | `/admin/audit`       | Administrative audit history                                       |
+| `/setup`             | Public first-owner bootstrap; request-time availability check      |
 | `/access-denied`     | Authorization failure page                                         |
+| `/api/setup`         | `GET` status, `POST` request owner code; `/verify` and `/resend`   |
 | `/api/auth/[...all]` | Better Auth endpoints, including cookie-only admin mutations       |
 | `/api/v1/[...path]`  | Application token endpoints and identity endpoint                  |
 | `/api/health`        | PostgreSQL and Redis readiness                                     |
@@ -155,15 +158,16 @@ returned to clients.
 
 ## 7. Data model
 
-| Model          | Purpose                                                        |
-| -------------- | -------------------------------------------------------------- |
-| `User`         | Profile, verification, code-declared roles, and ban state      |
-| `Session`      | Better Auth browser/backing sessions and impersonation actor   |
-| `Account`      | Credential or external-provider account data                   |
-| `Verification` | Time-limited verification/reset values                         |
-| `TokenFamily`  | API refresh family, session link, expiry, and revocation state |
-| `RefreshToken` | Hashed, single-use refresh tokens with consumption evidence    |
-| `AuditLog`     | Actor, action, target, sanitized changes, and timestamp        |
+| Model               | Purpose                                                           |
+| ------------------- | ----------------------------------------------------------------- |
+| `User`              | Profile, verification, code-declared roles, and ban state         |
+| `Session`           | Better Auth browser/backing sessions and impersonation actor      |
+| `Account`           | Credential or external-provider account data                      |
+| `Verification`      | Time-limited verification/reset values                            |
+| `TokenFamily`       | API refresh family, session link, expiry, and revocation state    |
+| `RefreshToken`      | Hashed, single-use refresh tokens with consumption evidence       |
+| `AuditLog`          | Actor, action, target, sanitized changes, and timestamp           |
+| `InstallationSetup` | Permanent singleton marker closing the web first-owner setup flow |
 
 Prisma is the only ORM. Schema changes require a reviewed, versioned SQL migration. Do not use
 schema push against persistent environments. Token families intentionally outlive deleted sessions
@@ -179,6 +183,14 @@ until expiry so replay evidence remains available.
 - PostgreSQL is authoritative; database failure rejects identity and permission resolution.
 - Admin audit payloads use allowlists and never contain passwords, cookies, or tokens.
 - API documentation is owner-only outside development.
+- `/setup` and `POST /api/setup` are public while no owner exists and close permanently once one
+  does. No environment variable or shell access gates them: control of the submitted inbox does.
+  `POST /api/setup` only records a request and emails a six-digit code; the owner is created by
+  `POST /api/setup/verify`, so there is no auto-verified account creation. Codes are 6 digits, live
+  10 minutes, allow 5 attempts, are stored hashed, and a resend (60-second cooldown) invalidates
+  the previous code. The first successful verification wins atomically, so concurrent attempts
+  yield exactly one owner. Ordinary sign-up keeps its normal email verification, and `pnpm owner`
+  remains available as recovery without being required for bootstrap.
 - The base Compose file does not expose PostgreSQL or Redis ports. The development override binds
   them to loopback and adds Azurite.
 - Production containers run as a non-root user and use pinned base image digests.
@@ -196,8 +208,10 @@ Required runtime values are validated by `src/lib/env.ts`:
 - `MAIL_FROM` (a sender or domain verified in Brevo)
 
 `TRUST_PROXY` has a validated default. `BREVO_API_URL` is a test-only override that points the SDK at
-the acceptance suite's local Brevo stub. Avatar storage separately validates `AZURE_STORAGE_CONNECTION_STRING` and
-`AZURE_STORAGE_CONTAINER` when used. The local fixture seeder's fixed development password lives
+the acceptance suite's local Brevo stub. First-owner setup has no configuration of its own: `/setup`
+reports `available` until an owner exists and `completed` afterwards, and the emailed owner code uses
+the same Brevo sender as every other message. Avatar storage separately validates `AZURE_STORAGE_CONNECTION_STRING` and `AZURE_STORAGE_CONTAINER`
+when used. The local fixture seeder's fixed development password lives
 in `scripts/seed-users.ts`; it is not an application runtime setting.
 
 Never commit a populated `.env` file. Use `.env.example` only to document names and safe placeholders.
@@ -229,8 +243,7 @@ pnpm test
 pnpm build
 ```
 
-Run `pnpm db:generate` after dependency installation or Prisma schema changes. Integration and E2E
-tests require an isolated database whose URL contains `jarxis_test`; follow `.agent/rules/testing.md`
+Run `pnpm db:generate` after dependency installation or Prisma schema changes. Integration and E2E tests require an isolated database whose URL contains `jarxis_test`; follow `.agent/rules/testing.md`
 before running migrations, seeds, integration tests, or browser tests. Never point destructive test
 commands at development or production data.
 

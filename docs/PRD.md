@@ -61,6 +61,18 @@ unknown stored role names grant no permissions.
 - Forgot-password and reset-password flows deliver links through the configured Brevo account.
 - Authentication failures use safe messages and do not expose internal errors or credentials.
 - Rate limiting protects authentication and token issuance paths.
+- A fresh deployment can create its first owner from the public `/setup` page, with no setup secret
+  and no shell access. Anyone may open the page while no owner exists; it asks for name, email and
+  password, accepts any address, and emails a six-digit owner code to it. The candidate account
+  remains unverified with no administrative privileges until the code is verified.
+- The owner code is 6 digits, expires after 10 minutes, allows 5 attempts, and can be resent after
+  a 60-second cooldown; a resend replaces the expiry and invalidates the previous code. Codes are
+  stored hashed. Expired, invalid and exhausted codes get clear messages, and a failed email
+  delivery is stated plainly with a resend option.
+- The first successful verification wins atomically, so concurrent attempts leave exactly one
+  owner; `/setup` then reports completion and links to sign-in permanently. Every ordinary sign-up
+  still verifies by email, and the `pnpm owner` command is retained as CLI recovery without being
+  required for bootstrap.
 
 ### 5.3 Account settings
 
@@ -159,13 +171,16 @@ Jarxis is ready for use as a starter when:
 1. A new person can register, verify through email, sign in, recover a password, and manage account
    settings.
 2. A fresh account cannot access administration routes or operations.
-3. Viewer, administrator, and owner behavior matches the authorization matrix.
-4. Owner safety rules prevent removal of the final active, verified owner.
-5. Browser sessions and rotating API tokens can be issued and revoked, and refresh-token replay
+3. First-run setup emails a six-digit code to an unverified candidate account, grants Owner only
+   after verification, and closes permanently after exactly one winner. Invalid, expired and reused
+   codes cannot grant access; CLI recovery remains available.
+4. Viewer, administrator, and owner behavior matches the authorization matrix.
+5. Owner safety rules prevent removal of the final active, verified owner.
+6. Browser sessions and rotating API tokens can be issued and revoked, and refresh-token replay
    revokes the affected family.
-6. Administrative mutations generate sanitized audit records.
-7. Health, OpenAPI, and API reference endpoints enforce their documented access behavior.
-8. Lint, formatting, type checks, unit tests, relevant database integration tests, production build,
+7. Administrative mutations generate sanitized audit records.
+8. Health, OpenAPI, and API reference endpoints enforce their documented access behavior.
+9. Lint, formatting, type checks, unit tests, relevant database integration tests, production build,
    and browser acceptance tests pass in an isolated test environment.
 
 ## 10. Success indicators
