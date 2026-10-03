@@ -12,6 +12,8 @@ import { matchMutation, matchQuery, useQueryClient } from '@tanstack/react-query
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 
+import { markActionErrorHandled, safeActionErrorMessage } from '@/lib/action-errors';
+
 export function ErrorToaster() {
   const { localization } = useAuth();
   const queryClient = useQueryClient();
@@ -29,8 +31,9 @@ export function ErrorToaster() {
       if (getAuthErrorCode(error) === 'EMAIL_NOT_VERIFIED') return;
       const message = getAuthErrorMessage(error, localization);
       if (message) {
-        console.error('[Better Auth UI]', error);
-        toast.error(message);
+        toast.error(safeActionErrorMessage(error, message));
+        // Record that this failure was surfaced so inline catch sites don't duplicate the toast.
+        markActionErrorHandled(error);
       }
     };
 
@@ -56,8 +59,8 @@ export function ErrorToaster() {
       }
       const message = getAuthErrorMessage(error, localization, mutation.options.mutationKey);
       if (message) {
-        console.error('[Better Auth UI]', error);
-        toast.error(message);
+        toast.error(safeActionErrorMessage(error, message));
+        markActionErrorHandled(error);
       }
     };
 

@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FieldDescription, FieldGroup } from '@/components/ui/field';
+import { safeActionErrorMessage } from '@/lib/action-errors';
 import { setAuthFormServerError, useAuthForm } from './auth-form';
 import { useIsHydrated } from './use-is-hydrated';
 
@@ -296,13 +297,9 @@ export function OwnerSetup() {
           setIsClosed(true);
           return;
         }
-        const message =
-          error &&
-          typeof error === 'object' &&
-          typeof (error as { message?: unknown }).message === 'string'
-            ? (error as { message: string }).message
-            : 'The code could not be resent. Try again shortly.';
-        setResendError(message);
+        setResendError(
+          safeActionErrorMessage(error, 'The code could not be resent. Try again shortly.'),
+        );
         return;
       }
 

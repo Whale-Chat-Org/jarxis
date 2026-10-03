@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { getAuth } from './auth';
 import { loginInput, refreshInput } from './validation';
+import { discoveryPreviewSchema } from './ml/validation';
 import { env } from './env';
 const schema = (v: z.ZodType) => z.toJSONSchema(v, { io: 'input' });
 export async function openapi() {
@@ -51,6 +52,109 @@ export async function openapi() {
       security: [{ bearerAuth: [] }],
     },
   };
+  const gatewayOperation = (summary: string, input?: z.ZodType) => ({
+    ...op(summary, input),
+    tags: ['Model gateway'],
+    security: [{ gatewayKey: [] }],
+    description:
+      'Use an owner-issued application key, not a Jarxis session or JWT. Model IDs are provider-qualified. Stateless requests only; unsupported features return 400. Inference bodies are limited to 1 MiB and requests to 120 seconds. Streaming uses server-sent events.',
+    responses: {
+      ...op(summary).responses,
+      200: { description: 'OpenAI-compatible JSON or text/event-stream when stream is true' },
+      413: { description: 'Inference body exceeds 1 MiB' },
+      502: { description: 'Upstream model unavailable' },
+      504: { description: 'Inference deadline exceeded' },
+    },
+  });
+  paths['/api/llm/v1/models'] = {
+    get: gatewayOperation('List enabled models available in the provider pool'),
+  };
+  paths['/api/llm/v1/chat/completions'] = {
+    post: gatewayOperation(
+      'Create a chat completion with priority routing and pre-output failover',
+      z
+        .object({
+          model: z.string(),
+          messages: z.array(z.record(z.string(), z.unknown())),
+          stream: z.boolean().optional(),
+        })
+        .passthrough(),
+    ),
+  };
+  paths['/api/llm/v1/responses'] = {
+    post: gatewayOperation(
+      'Create a stateless model response',
+      z
+        .object({
+          model: z.string(),
+          input: z.union([z.string(), z.array(z.record(z.string(), z.unknown()))]),
+          stream: z.boolean().optional(),
+          store: z.literal(false).optional(),
+        })
+        .passthrough(),
+    ),
+  };
+  const providerOperation = (summary: string) => ({
+    ...op(summary),
+    tags: ['ML providers'],
+    security: [{ cookieAuth: [] }],
+    description:
+      'Active, verified owner session required. Bearer and impersonated sessions are rejected. Mutations require same-origin protection and are limited to 16 KiB. Responses contain redacted connection metadata only.',
+  });
+  paths['/api/admin/ml-providers'] = {
+    get: providerOperation('List provider connections and application key metadata'),
+    post: {
+      ...providerOperation('Add a provider connection'),
+      responses: {
+        ...providerOperation('Add a provider connection').responses,
+        201: {
+          description:
+            'Connection saved. API-key connections include the result of a bounded first discovery; an upstream discovery failure is reported in discoveryStatus, not as an error. Subscription connections discover after sign in.',
+        },
+      },
+    },
+  };
+  paths['/api/admin/ml-providers/discover'] = {
+    post: {
+      ...providerOperation('Preview an API-key provider model catalog without saving it'),
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: schema(discoveryPreviewSchema) } },
+      },
+      description:
+        'Requires providers:manage. Accepts openai, anthropic, openrouter or custom with an API key; custom requires an HTTPS baseUrl. The key is used for one bounded catalog request (15 seconds total, 2 MiB per page, 20 pages, 5000 models) to a public HTTPS destination without redirects, and is never stored or logged. Returns { discovery: { status: ok | unsupported | failed, models: [{ id, name }], error } }. Saving a connection discovers again server-side; preview results are not accepted as input.',
+    },
+  };
+  paths['/api/admin/ml-providers/{id}'] = {
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+    patch: providerOperation('Update a connection, credentials, or priority'),
+    delete: providerOperation('Delete a provider connection'),
+  };
+  for (const action of ['refresh', 'models', 'login']) {
+    paths[`/api/admin/ml-providers/{id}/${action}`] = {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      post: providerOperation(
+        action === 'refresh'
+          ? 'Schedule model discovery'
+          : action === 'models'
+            ? 'Add an explicit model ID'
+            : 'Start an isolated subscription login',
+      ),
+    };
+  }
+  paths['/api/admin/ml-providers/login/{jobId}'] = {
+    parameters: [{ name: 'jobId', in: 'path', required: true, schema: { type: 'string' } }],
+    get: providerOperation('Inspect a login initiated by the current owner'),
+    post: providerOperation('Submit a login code or callback through a protected body'),
+    delete: providerOperation('Cancel a login initiated by the current owner'),
+  };
+  paths['/api/admin/ml-providers/keys'] = {
+    post: providerOperation('Issue an application key; reveal its value once'),
+  };
+  paths['/api/admin/ml-providers/keys/{keyId}'] = {
+    parameters: [{ name: 'keyId', in: 'path', required: true, schema: { type: 'string' } }],
+    delete: providerOperation('Revoke an application key'),
+  };
   return {
     ...native,
     openapi: '3.1.1',
@@ -67,6 +171,7 @@ export async function openapi() {
       securitySchemes: {
         ...native.components?.securitySchemes,
         bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        gatewayKey: { type: 'http', scheme: 'bearer', bearerFormat: 'Jarxis application key' },
         cookieAuth: {
           type: 'apiKey',
           in: 'cookie',

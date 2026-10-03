@@ -64,7 +64,6 @@ export function LinkedAccount({ account, canUnlink = true, provider }: LinkedAcc
       if (!isReauthenticationRequiredError(error)) {
         const message = getAuthErrorMessage(error, localization);
         if (message) {
-          console.error('[Better Auth UI]', error);
           toast.error(message);
         }
       }

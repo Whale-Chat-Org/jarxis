@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { CircleAlertIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { Label } from '@/components/ui/label';
@@ -212,10 +213,11 @@ function FieldError({
     <div
       role="alert"
       data-slot="field-error"
-      className={cn('text-body-sm font-normal text-destructive', className)}
+      className={cn('flex items-start gap-sm text-body-sm font-normal text-foreground', className)}
       {...props}
     >
-      {content}
+      <CircleAlertIcon className="mt-3xs size-icon shrink-0" aria-hidden="true" />
+      <div className="min-w-none">{content}</div>
     </div>
   );
 }

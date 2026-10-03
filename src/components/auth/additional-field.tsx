@@ -92,8 +92,7 @@ function CopyButton({
 }) {
   const { localization } = useAuth();
   const { copied, copy } = useCopyToClipboard({
-    onError: (error) => {
-      console.error('[Better Auth UI] Copy failed', error);
+    onError: () => {
       toast.error(localization.errors.copyFailed);
     },
   });

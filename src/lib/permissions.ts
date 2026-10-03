@@ -13,14 +13,21 @@ export const permissionCatalog = {
   'users:read': 'List user profiles and assigned roles',
   'users:update': 'Change user names and account status',
   'roles:read': 'View roles and their permissions',
-  'roles:update': 'Manage roles (owner only)',
+  'roles:update': 'Reserved role-management access (owner only; role definitions are fixed)',
   'roles:assign': 'Assign and remove user roles (owner only)',
   'permissions:read': 'View the permission catalog',
   'audit:read': 'View security and administrative audit events',
+  'providers:read': 'View ML providers (owner only)',
+  'providers:manage': 'Manage ML providers (owner only)',
 } as const;
 export type Permission = keyof typeof permissionCatalog;
 export const permissionKeys = Object.keys(permissionCatalog) as Permission[];
-export const ownerOnly = new Set<Permission>(['roles:update', 'roles:assign']);
+export const ownerOnly = new Set<Permission>([
+  'roles:update',
+  'roles:assign',
+  'providers:read',
+  'providers:manage',
+]);
 
 /**
  * The `user:*` / `session:*` actions the Better Auth admin plugin checks. The registry admin UI
@@ -57,6 +64,7 @@ export const statement = {
   roles: ['read', 'update', 'assign'],
   permissions: ['read'],
   audit: ['read'],
+  providers: ['read', 'manage'],
 } as const;
 
 export const ac = createAccessControl(statement);
@@ -91,6 +99,7 @@ export const roleStatements = {
     audit: ['read'],
   },
   owner: {
+    providers: ['read', 'manage'],
     user: [...defaultStatements.user],
     session: [...defaultStatements.session],
     dashboard: ['read'],
@@ -115,7 +124,8 @@ export const roleCatalog: Record<RoleName, { name: string; description: string }
   viewer: { name: 'Viewer', description: 'Read-only access to administration screens.' },
   administrator: {
     name: 'Administrator',
-    description: 'Manage users and view operational information. Cannot change roles.',
+    description:
+      'Manage accounts and sessions. Cannot assign roles, delete users, or impersonate anyone.',
   },
   owner: {
     name: 'Owner',

@@ -1,14 +1,18 @@
-import { AdminUsers } from '@/components/auth/admin/admin-users';
+import { UsersWorkspace } from '@/components/admin/users-workspace';
+import { isAllowed } from '@/lib/permissions';
 import { requirePage } from '@/lib/rbac';
 
 /**
- * User administration is the Better Auth UI `AdminUsers` component.
+ * Users & access.
  *
- * The page guard checks the application permission; the component additionally gates every control
- * on the signed-in role's `user:*` permissions, so a viewer sees a read-only table.
+ * The page guard checks `users:read`; the "Accounts" tab is the Better Auth UI `AdminUsers`, which
+ * additionally gates every control on the signed-in role's `user:*` permissions. `canManageAccess`
+ * reflects the owner + `roles:assign` rule the admin plugin enforces on the server, so the Access
+ * tab offers "Change role" only when the change can succeed.
  */
 export default async function UsersPage() {
-  await requirePage('users:read');
+  const grants = await requirePage('users:read');
+  const canManageAccess = isAllowed(grants.permissions, grants.roles, 'roles:assign');
 
-  return <AdminUsers />;
+  return <UsersWorkspace currentUserId={grants.userId} canManageAccess={canManageAccess} />;
 }

@@ -51,9 +51,10 @@ test('owner browses the admin shell, user management and the role catalog', asyn
   await sidebarTrigger.click();
   await expect(sidebar).toHaveAttribute('data-state', 'expanded');
 
-  // The registry table renders through the admin plugin's own endpoints.
-  await sidebar.getByRole('link', { name: 'Users' }).click();
+  // The registry table now lives behind the "Accounts" tab of Users & access.
+  await sidebar.getByRole('link', { name: 'Users & access' }).click();
   await expect(page).toHaveURL(/\/admin\/users(?:\?|$)/);
+  await page.getByRole('tab', { name: 'Accounts' }).click();
   await expect(page.getByRole('table')).toBeVisible();
   for (const column of ['Name', 'Role', 'Status', 'Created']) {
     await expect(page.getByRole('columnheader', { name: column })).toBeVisible();
@@ -97,6 +98,7 @@ test('a viewer gets a read-only user table', async ({ page, context, request, ba
   await page.getByRole('button', { name: /Acceptance User/ }).click();
   await expect(page.getByRole('menuitem', { name: 'Administration' })).toBeVisible();
   await page.goto('/admin/users');
+  await page.getByRole('tab', { name: 'Accounts' }).click();
 
   await expect(page.getByRole('table')).toBeVisible();
   await expect(page.getByRole('table').getByRole('row').filter({ hasText: email })).toHaveCount(1);
@@ -124,7 +126,7 @@ test('the sidebar collapses into a sheet on a narrow viewport', async ({
   await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
   const sheet = page.getByRole('dialog');
   await expect(sheet).toBeVisible();
-  await sheet.getByRole('link', { name: 'Users' }).click();
+  await sheet.getByRole('link', { name: 'Users & access' }).click();
   await expect(page).toHaveURL(/\/admin\/users(?:\?|$)/);
   // Navigation keeps the mobile sheet open; Escape closes the modal through its keyboard API.
   await page.keyboard.press('Escape');

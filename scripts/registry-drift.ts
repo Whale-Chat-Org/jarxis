@@ -374,18 +374,28 @@ const OMITTED: Record<string, string> = {
 };
 
 const REVIEWED: Record<string, string> = {
+  'src/components/auth/sign-out.tsx':
+    'a failed sign-out keeps the user on the current view and offers a retry; only a successful sign-out redirects, while Sonner owns failure feedback',
   'src/components/auth/additional-field.tsx':
-    'raw <input> replaced by the Input primitive (raw inputs are lint-banned in src/components/auth), plus token spacing',
+    'raw <input> replaced by the Input primitive (raw inputs are lint-banned in src/components/auth), plus token spacing, and the copy-failure handler no longer logs the raw clipboard error',
   'src/components/auth/auth-result.tsx':
     'amber palette replaced by the semantic text-warning token, plus size-qr',
+  'src/components/auth/auth-form.tsx':
+    'server errors are surfaced through the safe allowlist in src/lib/action-errors (never the raw server message or field errors), and inline errors are suppressed when already handled by the toaster, compromised, or email-not-verified',
+  'src/components/auth/error-toaster.tsx':
+    'raw console logging of auth errors removed, and surfaced errors are marked handled via src/lib/action-errors so inline catch sites do not duplicate the toast',
   'src/components/auth/settings/account/change-avatar.tsx':
-    'raw <input type="file"> replaced by the Input primitive, plus managed-blob cleanup after avatar replacement and failed profile updates',
+    'raw <input type="file"> replaced by the Input primitive, plus managed-blob cleanup after avatar replacement and failed profile updates; cleanup failures warn instead of logging, and update failures use the safe error helper and skip errors already handled by the toaster',
+  'src/components/auth/settings/security/active-sessions.tsx':
+    'the session list error renders safe localized copy with role="alert" and a retry button that refetches, instead of the raw error.message',
+  'src/components/auth/settings/security/linked-account.tsx':
+    'the unlink error handler no longer logs the raw error before toasting the localized message',
   'src/components/auth/settings/account/user-profile.tsx':
     'profile form initialization is guarded by user id so controlled-field changes are not reset during rerenders',
   'src/lib/auth/two-factor-methods.ts':
     'upstream doc comment dropped when the file was first token-converted',
   'src/components/auth/admin/admin-users.tsx':
-    'token conversion of the registry user-management table (spacing, type and control sizes, and Button instead of a raw sort button)',
+    'token conversion of the registry user-management table (spacing, type and control sizes, and Button instead of a raw sort button), plus safe allowlisted mutation error copy, inline error presentation on inline-displaying mutations, a copy-user-id clipboard failure toast, and a viewport-bounded scrolling create-user dialog',
   'src/components/ui/sidebar.tsx':
     'widths read design tokens instead of raw lengths, and the skeleton width is fixed so server and client markup match',
   'src/components/ui/skeleton.tsx':
@@ -397,7 +407,7 @@ const REVIEWED: Record<string, string> = {
     'CSS-variable shorthand for the trigger size (enforce-consistent-variable-syntax)',
   'src/components/ui/dropdown-menu.tsx': 'min-w-menu-min instead of an arbitrary 8rem',
   'src/components/ui/field.tsx':
-    'container query renamed @md/field-group to the project @form/field-group, plus token spacing',
+    'container query renamed @md/field-group to the project @form/field-group, plus token spacing; validation uses foreground text and an error icon so meaning and contrast do not depend on destructive red',
   'src/components/ui/combobox.tsx': 'token spacing in the popup and list',
   'src/components/ui/alert-dialog.tsx': 'centred with top-1/2 left-1/2 and token max widths',
   'src/components/ui/dialog.tsx': 'centred with top-1/2 left-1/2 and token max widths',
