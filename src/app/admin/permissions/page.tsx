@@ -18,23 +18,30 @@ import { requirePage } from '@/lib/rbac';
 
 type Entry = { key: string; description: string; scope: string };
 
+/**
+ * The permission key is shown as supporting mono text under its description, in the same cell, so
+ * there is no separate key column to widen the table on narrow screens.
+ */
 function table(entries: Entry[]) {
   return (
-    <div className="rounded-md border">
+    <div className="overflow-hidden rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Key</TableHead>
-            <TableHead>Description</TableHead>
+            <TableHead>Permission</TableHead>
             <TableHead className="w-col-scope">Scope</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {entries.map((entry) => (
             <TableRow key={entry.key}>
-              <TableCell className="font-mono text-caption font-medium">{entry.key}</TableCell>
-              <TableCell className="text-muted-foreground">{entry.description}</TableCell>
-              <TableCell>
+              <TableCell className="align-top whitespace-normal">
+                <div className="text-foreground">{entry.description}</div>
+                <code className="font-mono text-caption break-all text-muted-foreground">
+                  {entry.key}
+                </code>
+              </TableCell>
+              <TableCell className="align-top whitespace-normal">
                 {entry.scope === 'owner' ? (
                   <Badge variant="outline">Owner only</Badge>
                 ) : (
@@ -71,18 +78,23 @@ export default async function PermissionsPage() {
 
   return (
     <div className="flex flex-col gap-stack">
-      <div>
+      <div className="flex flex-col gap-2xs">
         <h2 className="text-heading font-semibold tracking-tight">Permissions</h2>
         <p className="text-body-sm text-muted-foreground">
-          {total} permission{total === 1 ? '' : 's'} across {roleNames.length} code-declared roles.
-          Roles grant a subset of these.
+          {total} permission{total === 1 ? '' : 's'} across {roleNames.length} fixed roles. Each
+          role grants a subset of these; see the roles screen for which role grants what.
+        </p>
+        <p className="text-body-sm text-muted-foreground">
+          <span className="font-medium">Standard</span> marks the scope of a permission, not who
+          holds it — it only means the permission is not restricted to owners. A role still grants
+          it only if it is listed in that role.
         </p>
       </div>
 
       <section className="flex flex-col gap-sm">
         <h3 className="text-title font-medium">Administration</h3>
         <p className="text-body-sm text-muted-foreground">
-          Checked by the Better Auth admin plugin on every user-management request.
+          Actions available when managing user accounts and sessions.
         </p>
         {table(administration)}
       </section>
@@ -90,7 +102,7 @@ export default async function PermissionsPage() {
       <section className="flex flex-col gap-sm">
         <h3 className="text-title font-medium">Application</h3>
         <p className="text-body-sm text-muted-foreground">
-          Checked by this application&apos;s pages and routes.
+          Access to administration screens and their actions.
         </p>
         {table(application)}
       </section>

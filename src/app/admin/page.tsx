@@ -26,7 +26,7 @@ export default async function AdminDashboardPage() {
           key: 'users',
           href: '/admin/users',
           icon: UsersIcon,
-          title: 'Users',
+          title: 'Users & access',
           value: usersTotal,
           description: `${usersTotal - bannedTotal} active, ${bannedTotal} banned`,
         }
@@ -38,7 +38,7 @@ export default async function AdminDashboardPage() {
           icon: ShieldCheckIcon,
           title: 'Roles',
           value: roleNames.length,
-          description: 'Code-declared roles',
+          description: 'Compare available access levels',
         }
       : null,
     can('permissions:read')
