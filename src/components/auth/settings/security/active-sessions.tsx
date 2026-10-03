@@ -1,8 +1,9 @@
 'use client';
 
-import { isReauthenticationRequiredError } from '@better-auth-ui/core';
+import { getAuthErrorMessage, isReauthenticationRequiredError } from '@better-auth-ui/core';
 import { useAuth, useListSessions, useSession } from '@better-auth-ui/react';
 import { Fragment } from 'react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Item, ItemContent, ItemGroup, ItemMedia, ItemSeparator } from '@/components/ui/item';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,7 +46,14 @@ export function ActiveSessions({ className }: ActiveSessionsProps) {
           {isReauthenticationRequiredError(error) ? (
             <ReauthenticationAction />
           ) : error ? (
-            <div className="p-lg text-body-sm text-destructive">{error.message}</div>
+            <div className="flex flex-col items-start gap-sm p-lg text-body-sm" role="alert">
+              <span className="text-foreground">
+                {getAuthErrorMessage(error, localization) ?? localization.errors.generic}
+              </span>
+              <Button onClick={() => sessionsQuery.refetch()} size="sm" variant="outline">
+                Try again
+              </Button>
+            </div>
           ) : isPending ? (
             <SessionRowSkeleton />
           ) : (

@@ -5,7 +5,8 @@ import {
   type AdditionalFieldFormValue,
   DEFAULT_ADDITIONAL_FIELD_VALIDATION_DEBOUNCE_MS,
   getFormFieldErrors,
-  normalizeAuthFormServerError,
+  getAuthErrorCode,
+  isPasswordCompromisedError,
   validateAdditionalFieldRequired,
   validateAdditionalFieldValue,
 } from '@better-auth-ui/core';
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
+import { isActionErrorHandled, safeActionErrorMessage } from '@/lib/action-errors';
 import { AdditionalField, type AdditionalFieldProps } from './additional-field';
 
 const { fieldContext, formContext, useFieldContext, useFormContext } = createFormHookContexts();
@@ -57,13 +59,28 @@ function AuthFormServerError() {
 }
 
 export function setAuthFormServerError(form: AnyFormApi, error: unknown, fallbackMessage: string) {
-  const normalized = normalizeAuthFormServerError(error, fallbackMessage);
+  // Only surface allowlisted, safe copy at the form level. The server message and any
+  // server-provided field errors are never reflected back into the UI; per-field validation stays
+  // the responsibility of the form's own client-side validators.
   form.setErrorMap({
     onServer: {
-      fields: normalized.fields ?? {},
-      form: normalized.form,
+      fields: {},
+      form: safeActionErrorMessage(error, fallbackMessage),
     },
   });
+}
+
+/**
+ * Errors that another surface already owns, so adding an inline form error would duplicate them:
+ * failures the global toaster has flagged as handled, compromised-password errors (rendered against
+ * the password field), and unverified-email errors (handled by the verification flow).
+ */
+function shouldSuppressInlineAuthError(error: unknown) {
+  return (
+    isActionErrorHandled(error) ||
+    isPasswordCompromisedError(error) ||
+    getAuthErrorCode(error) === 'EMAIL_NOT_VERIFIED'
+  );
 }
 
 export function clearAuthFormServerError(form: AnyFormApi) {
@@ -94,7 +111,7 @@ export async function runAuthFormAction(
     await action();
     return true;
   } catch (error) {
-    if (!form.state.errorMap.onServer) {
+    if (!form.state.errorMap.onServer && !shouldSuppressInlineAuthError(error)) {
       setAuthFormServerError(form, error, serverErrorMessage);
     }
     return false;
@@ -110,7 +127,7 @@ export async function submitAuthForm(
     await form.handleSubmit();
     return form.state.isValid;
   } catch (error) {
-    if (!form.state.errorMap.onServer) {
+    if (!form.state.errorMap.onServer && !shouldSuppressInlineAuthError(error)) {
       setAuthFormServerError(form, error, serverErrorMessage);
     }
     return false;

@@ -80,7 +80,16 @@ function AuthProviders({ queryClient, children }: PropsWithChildren<{ queryClien
         }}
       >
         {children}
-        <Toaster />
+        <Toaster
+          closeButton
+          duration={7000}
+          toastOptions={{
+            classNames: {
+              title: 'break-words text-foreground',
+              description: 'break-words text-muted-foreground',
+            },
+          }}
+        />
       </AuthProvider>
     </QueryClientProvider>
   );

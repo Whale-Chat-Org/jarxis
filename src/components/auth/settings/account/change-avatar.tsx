@@ -16,6 +16,7 @@ import {
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
+import { isActionErrorHandled, safeActionErrorMessage } from '@/lib/action-errors';
 import { cn } from '@/lib/utils';
 
 export type ChangeAvatarProps = {
@@ -55,21 +56,26 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
         throw error;
       }
 
+      // The profile now points at the new avatar. A failure cleaning up the old blob is a
+      // non-fatal warning, not the "couldn't change your avatar" error below.
       if (previousImage && previousImage !== image) {
         try {
           await avatar.delete?.(previousImage);
         } catch {
-          console.error('[Better Auth UI] Previous avatar cleanup failed');
+          toast.warning('Your new avatar was saved, but we couldn’t delete the previous image.');
+          return;
         }
       }
 
       toast.success(localization.settings.avatarChangedSuccess);
     } catch (error) {
-      console.error('[Better Auth UI] Image operation failed', error);
-      toast.error(localization.errors.imageUploadFailed);
+      // The profile update failure may already have been surfaced by the global toaster.
+      if (!isActionErrorHandled(error)) {
+        toast.error(safeActionErrorMessage(error, localization.errors.imageUploadFailed));
+      }
+    } finally {
+      setIsUploading(false);
     }
-
-    setIsUploading(false);
   }
 
   async function handleDelete() {
@@ -77,8 +83,23 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     setIsDeleting(true);
     try {
       await updateUser({ image: null });
-      if (currentImage) await avatar.delete?.(currentImage);
+      // Profile cleared. A failure removing the stored blob is a non-fatal warning.
+      if (currentImage) {
+        try {
+          await avatar.delete?.(currentImage);
+        } catch {
+          toast.warning(
+            'Your avatar was removed from your profile, but we couldn’t delete the stored image.',
+          );
+          return;
+        }
+      }
       toast.success(localization.settings.avatarDeletedSuccess);
+    } catch (error) {
+      // The profile update itself failed; the avatar was not changed.
+      if (!isActionErrorHandled(error)) {
+        toast.error(safeActionErrorMessage(error, localization.errors.imageDeleteFailed));
+      }
     } finally {
       setIsDeleting(false);
     }

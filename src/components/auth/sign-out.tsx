@@ -2,6 +2,7 @@
 
 import { useAuth, useSignOut } from '@better-auth-ui/react';
 import { useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
@@ -18,13 +19,11 @@ export type SignOutProps = {
 export function SignOut({ className }: SignOutProps) {
   const { authClient, basePaths, navigate, viewPaths } = useAuth();
 
-  const { mutate: signOut } = useSignOut(authClient, {
-    onError: () => {
-      navigate({
-        to: `${basePaths.auth}/${viewPaths.auth.signIn}`,
-        replace: true,
-      });
-    },
+  const {
+    mutate: signOut,
+    isError,
+    isPending,
+  } = useSignOut(authClient, {
     onSuccess: () =>
       navigate({
         to: `${basePaths.auth}/${viewPaths.auth.signIn}`,
@@ -40,6 +39,14 @@ export function SignOut({ className }: SignOutProps) {
 
     signOut();
   }, [signOut]);
+
+  if (isError) {
+    return (
+      <Button className={className} disabled={isPending} onClick={() => signOut()}>
+        Try signing out again
+      </Button>
+    );
+  }
 
   return <Spinner className={cn('mx-auto my-auto', className)} />;
 }

@@ -33,7 +33,6 @@ import {
 import { useDebouncedValue } from '@tanstack/react-pacer';
 import { keepPreviousData, useMutation } from '@tanstack/react-query';
 import type { SortingState } from '@tanstack/react-table';
-import type { BetterFetchError } from 'better-auth/react';
 import {
   BanIcon,
   CheckIcon,
@@ -51,6 +50,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { UserAvatar } from '@/components/auth/user/user-avatar';
 import {
   AlertDialog,
@@ -111,6 +111,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { adminPlugin } from '@/lib/auth/admin-plugin';
+import { safeActionErrorMessage } from '@/lib/action-errors';
 import { getAuthAdditionalFieldValidators, useAuthForm } from '../auth-form';
 import { useServerTableState } from '../server-table-state';
 
@@ -153,10 +154,20 @@ const getBanDurationSeconds = (value: string) => {
   return Number.isSafeInteger(seconds) ? seconds : null;
 };
 
-const getAdminErrorMessage = (error: Error | null) => {
-  const authError = error as BetterFetchError | null;
-  return authError?.error?.message ?? authError?.message;
-};
+const DEFAULT_ADMIN_ERROR_MESSAGE = 'That action could not be completed. Try again.';
+
+// Admin mutations can echo attacker-influenced input or raw provider text, so only ever render
+// allowlisted, safe copy next to the form — never the server's message.
+const getAdminErrorMessage = (error: Error | null) =>
+  error ? safeActionErrorMessage(error, DEFAULT_ADMIN_ERROR_MESSAGE) : undefined;
+
+// Mutations that render their failure inline (next to the form) opt out of the global error toast
+// so the same failure is not reported twice. Any existing `meta` (e.g. the registry's `awaits`) is
+// preserved.
+function withInlineErrors<T extends object>(options: T): T {
+  const existingMeta = (options as { meta?: Record<string, unknown> }).meta;
+  return { ...options, meta: { ...existingMeta, errorPresentation: 'inline' } };
+}
 
 const adminColumnHelper = createAdminColumnHelper<AdminUser>();
 const adminColumns = adminColumnHelper.columns([
@@ -604,7 +615,9 @@ function CreateUserDialog({
   const auth = useAuth<AdminAuthClient>();
   const config = useAuthPlugin(adminPlugin);
   const { data: session } = useSession(auth.authClient);
-  const createUser = useMutation(createAdminUserOptions(auth.authClient, session?.user.id));
+  const createUser = useMutation(
+    withInlineErrors(createAdminUserOptions(auth.authClient, session?.user.id)),
+  );
   const canSetRole = useAdminPermission(auth.authClient, {
     user: ['set-role'],
   });
@@ -651,7 +664,7 @@ function CreateUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={(value) => (value ? onOpenChange(true) : close())}>
-      <DialogContent>
+      <DialogContent className="max-h-svh overflow-y-auto">
         <form.AppForm>
           <form.AuthFormRoot className="flex flex-col gap-lg">
             <DialogHeader>
@@ -895,7 +908,13 @@ function UserInspector({
     },
     { enabled: Boolean(userId) },
   );
-  const { copied: userIdCopied, copy: copyUserId, reset: resetUserIdCopy } = useCopyToClipboard();
+  const {
+    copied: userIdCopied,
+    copy: copyUserId,
+    reset: resetUserIdCopy,
+  } = useCopyToClipboard({
+    onError: () => toast.error(auth.localization.errors.copyFailed),
+  });
 
   useEffect(() => {
     if (open && userId) resetUserIdCopy();
@@ -908,7 +927,9 @@ function UserInspector({
   const [dangerousAction, setDangerousAction] = useState<DangerousAction>();
   const isSelf = user?.id === actor?.user.id;
 
-  const updateUser = useMutation(updateAdminUserOptions(auth.authClient, actor?.user.id));
+  const updateUser = useMutation(
+    withInlineErrors(updateAdminUserOptions(auth.authClient, actor?.user.id)),
+  );
 
   useEffect(() => {
     if (user?.id) updateUser.reset();
@@ -918,16 +939,25 @@ function UserInspector({
     if (!open) updateUser.reset();
   }, [open, updateUser.reset]);
 
-  const setRoleMutation = useMutation(setAdminUserRoleOptions(auth.authClient, actor?.user.id));
-  const ban = useMutation(banAdminUserOptions(auth.authClient, actor?.user.id));
-  const unban = useMutation(unbanAdminUserOptions(auth.authClient, actor?.user.id));
-  const remove = useMutation(removeAdminUserOptions(auth.authClient, actor?.user.id));
-  const impersonate = useMutation(impersonateAdminUserOptions(auth.authClient, actor?.user.id));
+  const setRoleMutation = useMutation(
+    withInlineErrors(setAdminUserRoleOptions(auth.authClient, actor?.user.id)),
+  );
+  const ban = useMutation(withInlineErrors(banAdminUserOptions(auth.authClient, actor?.user.id)));
+  const unban = useMutation(
+    withInlineErrors(unbanAdminUserOptions(auth.authClient, actor?.user.id)),
+  );
+  const remove = useMutation(
+    withInlineErrors(removeAdminUserOptions(auth.authClient, actor?.user.id)),
+  );
+  const impersonate = useMutation(
+    withInlineErrors(impersonateAdminUserOptions(auth.authClient, actor?.user.id)),
+  );
+  // The per-session revoke control shows no inline error, so it keeps the default toast behaviour.
   const revokeSession = useMutation(
     revokeAdminUserSessionOptions(auth.authClient, actor?.user.id, userId),
   );
   const revokeSessions = useMutation(
-    revokeAdminUserSessionsOptions(auth.authClient, actor?.user.id, userId),
+    withInlineErrors(revokeAdminUserSessionsOptions(auth.authClient, actor?.user.id, userId)),
   );
   const configuredUserFields = useMemo(
     () =>
@@ -1591,9 +1621,11 @@ function PasswordDialog({
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string>();
   const mutation = useMutation(
-    setAdminUserPasswordOptions(auth.authClient, () => {
-      setTimeout(() => mutation.reset(), 0);
-    }),
+    withInlineErrors(
+      setAdminUserPasswordOptions(auth.authClient, () => {
+        setTimeout(() => mutation.reset(), 0);
+      }),
+    ),
   );
   const close = () => {
     setPassword('');
