@@ -26,7 +26,7 @@ COPY --from=source /app/ ./
 RUN pnpm build
 
 # Serves both the production db:migrate/db:seed CLI (compose.yaml `migrate`) and the
-# compose.dev.yaml dev-server override (`pnpm dev`), which needs the full app source.
+# compose.dev.yaml dev-server override (`pnpm dev:next`), which needs the full app source.
 # Deliberately does not re-copy package.json/pnpm-lock.yaml/pnpm-workspace.yaml/prisma: those
 # are already present from `deps`, and re-copying them would bump their mtimes past what
 # `pnpm install` recorded, tripping pnpm's dependency-sync check on every `pnpm` invocation.

@@ -11,7 +11,7 @@ Read the rules that apply to your task before starting. `CLAUDE.md` delegates he
 | [architecture.md](.agent/rules/architecture.md)   | Any code change. Stack, where things live (auth, RBAC, admin service, HTTP), pnpm scripts and which checks to run.                                                                                                    |
 | [design-system.md](.agent/rules/design-system.md) | Any UI change. Check the shadcn registry before creating components, use design tokens only (no ad-hoc Tailwind), colours, loading states, shadcn MCP setup, and the Better Auth UI discovery order for auth changes. |
 | [security.md](.agent/rules/security.md)           | Auth, sessions, tokens, RBAC, admin mutations, rate limiting, HTTP handling, API docs or error/log output.                                                                                                            |
-| [testing.md](.agent/rules/testing.md)             | Before running integration tests, migrations, seeds or owner bootstrap against any database.                                                                                                                          |
+| [testing.md](.agent/rules/testing.md)             | Before running integration tests, migrations, seeds or owner bootstrap against any database, and before signing in or creating users during development.                                                              |
 
 ## Next.js docs
 

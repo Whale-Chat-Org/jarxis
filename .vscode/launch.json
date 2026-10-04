@@ -2,14 +2,30 @@
   "version": "0.2.0",
   "configurations": [
     {
-      // Starts postgres/redis/azurite via docker compose, then runs `pnpm dev`
-      // with the Node debugger auto-attached and opens a debug-attached browser.
+      // Full flow, same as `pnpm dev`: creates .env if missing, installs dependencies, starts
+      // postgres/redis/azurite, migrates and seeds, then starts Next with the debugger attached
+      // and opens a debug-attached browser. Safe to use every time; every step is idempotent.
       "name": "Dev",
       "type": "node-terminal",
       "request": "launch",
       "command": "pnpm dev",
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "compose: up dev services",
+      "skipFiles": ["<node_internals>/**"],
+      "serverReadyAction": {
+        "action": "debugWithChrome",
+        "killOnServerStop": true,
+        "pattern": "- Local:.+(https?://\\S+)",
+        "uriFormat": "%s",
+        "webRoot": "${workspaceFolder}"
+      }
+    },
+    {
+      // Faster restart when services are already running: starts only the Next dev server.
+      "name": "Dev (server only)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm dev:next",
+      "cwd": "${workspaceFolder}",
       "skipFiles": ["<node_internals>/**"],
       "serverReadyAction": {
         "action": "debugWithChrome",

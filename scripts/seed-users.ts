@@ -4,6 +4,9 @@ import { hashPassword } from 'better-auth/crypto';
 import { db } from '../src/db';
 import type { RoleName } from '../src/lib/permissions';
 // Development-only fixtures. Refuses production and non-local databases.
+// Idempotent by default: only missing fixtures are created, so re-running never duplicates rows or
+// signs anyone out. Pass `--reset` to restore existing fixtures' roles, passwords and sessions.
+const reset = process.argv.includes('--reset');
 const localHosts = new Set(['localhost', '127.0.0.1', '[::1]', '::1', 'postgres']);
 if (process.env.NODE_ENV === 'production') throw new Error('Refusing to seed users in production');
 const url = process.env.DATABASE_URL;
@@ -29,9 +32,15 @@ const fixtures = [
 }[];
 try {
   const hash = await hashPassword(password);
-  await db.$transaction(async (tx) => {
+  const results = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(72419831)::text`;
+    const outcome: Record<string, 'created' | 'reset' | 'exists'> = {};
     for (const f of fixtures) {
+      const existing = await tx.user.findUnique({ where: { email: f.email } });
+      if (existing && !reset) {
+        outcome[f.email] = 'exists';
+        continue;
+      }
       const state = {
         name: f.name,
         emailVerified: 'emailVerified' in f ? f.emailVerified : true,
@@ -76,11 +85,19 @@ try {
           changes: { role: f.role, banned: state.banned },
         },
       });
+      outcome[f.email] = existing ? 'reset' : 'created';
     }
+    return outcome;
   });
   for (const f of fixtures)
-    console.log(`${f.email.padEnd(24)} ${f.role}${'banned' in f && f.banned ? ' (banned)' : ''}`);
-  console.log('Development users seeded with the password declared in scripts/seed-users.ts');
+    console.log(
+      `${f.email.padEnd(24)} ${f.role.padEnd(14)} ${results[f.email]}${'banned' in f && f.banned ? ' (banned)' : ''}`,
+    );
+  console.log('Development users use the password declared in scripts/seed-users.ts');
+  if (!reset && Object.values(results).includes('exists'))
+    console.log(
+      'Existing users were left unchanged; run `pnpm db:seed:users --reset` to reset them.',
+    );
 } finally {
   await db.$disconnect();
 }

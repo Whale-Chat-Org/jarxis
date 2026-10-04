@@ -2,6 +2,9 @@
   "recommendations": [
     "esbenp.prettier-vscode",
     "dbaeumer.vscode-eslint",
-    "bradlc.vscode-tailwindcss"
+    "bradlc.vscode-tailwindcss",
+    "Prisma.prisma",
+    "vitest.explorer",
+    "ms-playwright.playwright"
   ]
 }

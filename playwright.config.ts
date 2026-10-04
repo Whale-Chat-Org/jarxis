@@ -11,7 +11,7 @@ if (
   );
 }
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
-const webServerCommand = process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ?? 'pnpm dev';
+const webServerCommand = process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ?? 'pnpm dev:next';
 // The app sends mail to a local Brevo stub so acceptance runs never deliver real email.
 const brevoStubURL = process.env.BREVO_STUB_URL ?? 'http://127.0.0.1:4010';
 process.env.BREVO_STUB_URL = brevoStubURL;

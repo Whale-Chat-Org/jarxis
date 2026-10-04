@@ -2,19 +2,31 @@
   "version": "2.0.0",
   "tasks": [
     {
-      // Same services as the README's local development setup. `--wait` blocks
-      // until postgres/redis/azurite are healthy before the app starts.
-      "label": "compose: up dev services",
+      "label": "check: typecheck",
       "type": "shell",
-      "command": "docker compose -f compose.yaml -f compose.dev.yaml up -d --wait postgres redis azurite",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
+      "command": "pnpm typecheck",
+      "problemMatcher": "$tsc",
+      "group": "build"
+    },
+    {
+      "label": "check: lint",
+      "type": "shell",
+      "command": "pnpm lint",
+      "problemMatcher": "$eslint-stylish",
+      "group": "build"
+    },
+    {
+      "label": "check: unit tests",
+      "type": "shell",
+      "command": "pnpm test",
       "problemMatcher": [],
-      "presentation": {
-        "reveal": "silent",
-        "panel": "shared"
-      }
+      "group": "test"
+    },
+    {
+      "label": "db: reset seeded users",
+      "type": "shell",
+      "command": "pnpm db:seed:users --reset",
+      "problemMatcher": []
     }
   ]
 }
