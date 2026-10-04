@@ -3,6 +3,7 @@ import dns from 'node:dns';
 import https from 'node:https';
 import type { ClientRequest, IncomingMessage, OutgoingHttpHeaders } from 'node:http';
 import type { RequestOptions } from 'node:https';
+import { version } from '../../../package.json';
 
 /**
  * Outbound HTTP for the model gateway.
@@ -75,6 +76,8 @@ export type SafeFetchInit = RequestInit & {
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
 const MAX_HEADER_VALUE_LENGTH = 8 * 1024;
+/** Some gateways (GovTech's among them) answer 403 to requests without a User-Agent. */
+const DEFAULT_USER_AGENT = `jarxis/${version}`;
 
 /** Headers a caller may never set: they are owned by the socket or leak browser state. */
 const FORBIDDEN_REQUEST_HEADERS = new Set([
@@ -306,6 +309,8 @@ function outgoingHeaders(init: SafeFetchInit): OutgoingHttpHeaders {
   });
   // Node does not decode content encodings for us, so ask for none.
   out['accept-encoding'] = 'identity';
+  // `https.request` sends no User-Agent of its own; a caller's value still wins.
+  out['user-agent'] ??= DEFAULT_USER_AGENT;
   return out;
 }
 

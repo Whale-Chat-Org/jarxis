@@ -201,6 +201,7 @@ describe('safeFetch', () => {
     expect(state.options!.headers).toMatchObject({
       authorization: 'Bearer k',
       'accept-encoding': 'identity',
+      'user-agent': expect.stringMatching(/^jarxis\//),
     });
     expect(state.options!.headers).not.toHaveProperty('cookie');
     expect(state.options!.headers).not.toHaveProperty('host');
@@ -213,6 +214,19 @@ describe('safeFetch', () => {
     const callback = vi.fn();
     lookup('rebound.internal', {}, callback);
     expect(callback).toHaveBeenCalledWith(null, '8.8.8.8', 4);
+  });
+
+  it('keeps a caller-supplied User-Agent', async () => {
+    const { transport, state } = fakeTransport();
+    const pending = safeFetch(
+      'https://api.example.com',
+      { headers: { 'User-Agent': 'custom/1' } },
+      { lookup: publicLookup('8.8.8.8'), transport },
+    );
+    await tick();
+    state.message!.end();
+    await pending;
+    expect(state.options!.headers).toMatchObject({ 'user-agent': 'custom/1' });
   });
 
   it('rejects redirects', async () => {
