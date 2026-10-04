@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
   app:
     build: { target: tools }
-    command: pnpm dev --hostname 0.0.0.0
+    command: pnpm dev:next --hostname 0.0.0.0
     environment:
       NODE_ENV: development
       AZURE_STORAGE_CONNECTION_STRING: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;

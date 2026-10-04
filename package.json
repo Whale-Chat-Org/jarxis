@@ -4,7 +4,8 @@
   "private": true,
   "packageManager": "pnpm@12.8.1",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:next": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -22,6 +23,7 @@
     "db:seed:users": "tsx scripts/seed-users.ts",
     "owner": "tsx scripts/owner.ts",
     "ml:worker": "NODE_OPTIONS=--conditions=react-server tsx scripts/ml-worker.ts",
+    "postinstall": "prisma generate",
     "prepare": "husky"
   },
   "dependencies": {

@@ -3,5 +3,21 @@
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit"
+  },
+  "[prisma]": {
+    "editor.defaultFormatter": "Prisma.prisma"
+  },
+  // Tailwind v4: CSS files use @theme/@apply, and class names inside cn()/cva() get IntelliSense.
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+  "tailwindCSS.experimental.configFile": "src/app/globals.css",
+  "tailwindCSS.classFunctions": ["cn", "cva"],
+  "typescript.preferences.importModuleSpecifier": "non-relative",
+  "search.exclude": {
+    "**/.next": true,
+    "**/playwright-report": true,
+    "**/test-results": true,
+    "**/coverage": true
   }
 }
