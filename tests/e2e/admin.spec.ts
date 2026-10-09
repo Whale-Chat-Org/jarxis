@@ -86,6 +86,64 @@ test('owner browses the admin shell, user management and the role catalog', asyn
     .toBe(true);
 });
 
+/**
+ * The brand mark is the only thing left in the sidebar header once the rail collapses, so its box
+ * must not change size and the home link must stay reachable with its label hidden rather than
+ * removed.
+ */
+test('the sidebar brand mark keeps its size when the rail collapses', async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
+  const { email, id } = await register(request, baseURL!);
+  await verify(request, email, baseURL!);
+  await makeOwner(id);
+  await login(request, email, baseURL!);
+  await context.addCookies((await request.storageState()).cookies);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/admin');
+
+  const sidebar = page.locator('[data-slot="sidebar"]');
+  const header = sidebar.locator('[data-slot="sidebar-header"]');
+  const home = header.getByRole('link').first();
+  // Prefer the dedicated mark; fall back to whatever glyph the header renders today.
+  const svgMark = header.locator('svg[data-slot="brand-mark"]');
+  const mark = (await svgMark.count())
+    ? svgMark.first()
+    : (await header.locator('svg').count())
+      ? header.locator('svg').first()
+      : home.locator(':scope > *').first();
+
+  const expectSquareMark = async (state: string) => {
+    const box = await mark.boundingBox();
+    expect(box, `The brand mark must be laid out while ${state}`).not.toBeNull();
+    expect(box!.width, `Brand mark width while ${state}`).toBeCloseTo(32, 0);
+    expect(box!.height, `Brand mark height while ${state}`).toBeCloseTo(32, 0);
+  };
+
+  await expect(sidebar).toHaveAttribute('data-state', 'expanded');
+  await expect(home).toBeVisible();
+  await expect(home).toHaveAttribute('href', '/admin');
+  await expect(home).toContainText('Jarxis Admin');
+  await expectSquareMark('expanded');
+
+  const sidebarTrigger = page.getByRole('main').getByRole('button', { name: 'Toggle Sidebar' });
+  await sidebarTrigger.click();
+  await expect(sidebar).toHaveAttribute('data-state', 'collapsed');
+  // The link keeps its accessible name even though the wordmark itself is no longer rendered.
+  await expect(home).toBeVisible();
+  await expect(home).toHaveAccessibleName(/Jarxis Admin/);
+  await expect(home.getByText('Jarxis Admin', { exact: true })).toBeHidden();
+  await expectSquareMark('collapsed');
+
+  await sidebarTrigger.click();
+  await expect(sidebar).toHaveAttribute('data-state', 'expanded');
+  await expectSquareMark('expanded again');
+});
+
 test('a viewer gets a read-only user table', async ({ page, context, request, baseURL }) => {
   const { email, id } = await register(request, baseURL!);
   await verify(request, email, baseURL!);

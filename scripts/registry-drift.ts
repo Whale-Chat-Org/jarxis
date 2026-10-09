@@ -395,7 +395,7 @@ const REVIEWED: Record<string, string> = {
   'src/lib/auth/two-factor-methods.ts':
     'upstream doc comment dropped when the file was first token-converted',
   'src/components/auth/admin/admin-users.tsx':
-    'token conversion of the registry user-management table (spacing, type and control sizes, and Button instead of a raw sort button), plus safe allowlisted mutation error copy, inline error presentation on inline-displaying mutations, a copy-user-id clipboard failure toast, and a viewport-bounded scrolling create-user dialog',
+    'token conversion of the registry user-management table (spacing, type and control sizes, and Button instead of a raw sort button), plus safe allowlisted mutation error copy, inline error presentation on inline-displaying mutations, a copy-user-id clipboard failure toast, and adaptation to the shared responsive admin panel (docked panel on desktop, right sheet on small screens) from @/components/ui/admin-panel: the inspector uses layout="inspector" with its toolbar/header/scrolling body, nested panels (set password, dangerous-action confirmation) get Back handling from the wrapper, the narrow inspector collapses the profile fields and account metadata to one column with a non-overflowing header and truncated-but-titled email, the plugin tab bar scrolls horizontally within bounds, and pending saves or confirmations block accidental dismissal',
   'src/components/ui/sidebar.tsx':
     'widths read design tokens instead of raw lengths, and the skeleton width is fixed so server and client markup match',
   'src/components/ui/skeleton.tsx':
@@ -414,7 +414,8 @@ const REVIEWED: Record<string, string> = {
   'src/components/ui/input-group.tsx': 'control-size tokens for the addon buttons',
   'src/components/ui/button.tsx': 'control-size tokens for the icon sizes',
   'src/components/ui/radio-group.tsx': 'centred indicator with top-1/2 left-1/2',
-  'src/components/ui/sheet.tsx': 'ease-standard and token edge widths',
+  'src/components/ui/sheet.tsx':
+    'ease-standard and token edge widths; exports SheetPortal and SheetOverlay so the shared admin panel can reuse the registry sheet composition with a desktop dock target',
 };
 
 const VERBOSE = process.argv.includes('--verbose');

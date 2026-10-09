@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
 
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { AdminPanelHost } from '@/components/ui/admin-panel';
 
 import { AppSidebar } from './app-sidebar';
 import { SiteHeader } from './site-header';
@@ -24,9 +25,11 @@ export async function AdminShell({
   return (
     <SidebarProvider defaultOpen={defaultOpen}>
       <AppSidebar permissions={permissions} />
-      <SidebarInset>
-        <SiteHeader />
-        <div className="flex flex-1 flex-col p-page md:p-page-lg">{children}</div>
+      <SidebarInset className="min-w-none">
+        <AdminPanelHost>
+          <SiteHeader />
+          <div className="flex min-w-none flex-1 flex-col p-page md:p-page-lg">{children}</div>
+        </AdminPanelHost>
       </SidebarInset>
     </SidebarProvider>
   );

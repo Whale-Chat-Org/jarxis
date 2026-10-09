@@ -11,6 +11,21 @@ import { test } from './fixtures';
 import { login, makeOwner, originHeaders, register, setRole, verify } from './helpers';
 
 const discoverPath = '**/api/admin/ml-providers/discover';
+/**
+ * Administration surfaces are docked panels, not modals: `AdminPanelHost` renders a
+ * `role="region"` beside the page from `lg` (1024px) upward and only falls back to a
+ * `role="dialog"` sheet below it, so panels are addressed by their data slot and heading.
+ */
+const DOCK_WIDTH = 384;
+const DOCK_WIDTH_WIDE = 448;
+const DESKTOP_PANEL_WIDTH = 1024;
+
+function adminPanel(page: Page, heading: string): Locator {
+  return page
+    .locator('[data-slot="admin-panel"]:visible')
+    .filter({ has: page.getByRole('heading', { name: heading, exact: true }) });
+}
+
 type DiscoveryBody = { provider: string; apiKey: string; baseUrl?: string };
 type Discovery = {
   status: 'ok' | 'unsupported' | 'failed';
@@ -67,12 +82,12 @@ async function ignoreDiscoveryAbort(page: Page) {
   });
 }
 
-async function openCreateDialog(page: Page) {
+async function openCreatePanel(page: Page) {
   await page.goto('/admin/ml-providers');
   await page.getByRole('button', { name: 'Add connection', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Add connection' });
-  await expect(dialog).toBeVisible();
-  return { dialog, preview: dialog.getByRole('region', { name: 'Model preview' }) };
+  const panel = adminPanel(page, 'Add connection');
+  await expect(panel).toBeVisible();
+  return { panel, preview: panel.getByRole('region', { name: 'Model preview' }) };
 }
 
 const settle = (page: Page) => page.waitForTimeout(1200);
@@ -242,6 +257,9 @@ test('owner provider screen reflows in both themes at all required viewports', a
     [440, 956],
     [768, 1024],
     [960, 1440],
+    // Either side of the dock breakpoint: a sheet at 1023, the docked region at 1024.
+    [1023, 800],
+    [1024, 800],
     [1280, 800],
     [1440, 900],
   ];
@@ -258,19 +276,19 @@ test('owner provider screen reflows in both themes at all required viewports', a
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
         .toBe(true);
       await page.getByRole('button', { name: 'Add connection', exact: true }).click();
-      const dialog = page.getByRole('dialog', { name: 'Add connection' });
-      await expect(dialog).toBeVisible();
-      await dialog.getByLabel('Name', { exact: true }).fill('Responsive connection');
-      await dialog.getByLabel('API key', { exact: true }).fill('acceptance-only-key');
-      const preview = dialog.getByRole('region', { name: 'Model preview' });
+      const panel = adminPanel(page, 'Add connection');
+      await expect(panel).toBeVisible();
+      await panel.getByLabel('Name', { exact: true }).fill('Responsive connection');
+      await panel.getByLabel('API key', { exact: true }).fill('acceptance-only-key');
+      const preview = panel.getByRole('region', { name: 'Model preview' });
       await expect(preview.getByText('Available models (40)')).toBeVisible();
       await expect(
         preview.getByRole('list', { name: 'Discovered models' }).getByRole('listitem'),
       ).toHaveCount(40);
-      const save = dialog.getByRole('button', { name: /save/i });
+      const save = panel.getByRole('button', { name: /save/i });
       await save.scrollIntoViewIfNeeded();
       await expect(save).toBeVisible();
-      const bounds = await dialog.boundingBox();
+      const bounds = await panel.boundingBox();
       expect(bounds).not.toBeNull();
       expect(bounds!.x).toBeGreaterThanOrEqual(0);
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1);
@@ -280,9 +298,27 @@ test('owner provider screen reflows in both themes at all required viewports', a
       expect(saveBounds).not.toBeNull();
       expect(saveBounds!.y).toBeGreaterThanOrEqual(0);
       expect(saveBounds!.y + saveBounds!.height).toBeLessThanOrEqual(height + 1);
-      await page.screenshot({ path: `/tmp/jarxis-discover-dialog-${theme}-${width}.png` });
+
+      const docked = width >= DESKTOP_PANEL_WIDTH;
+      await expect(panel).toHaveAttribute('data-mode', docked ? 'docked' : 'sheet');
+      await expect(panel).toHaveRole(docked ? 'region' : 'dialog');
+      if (docked) {
+        // The dock is flush with the right viewport edge at its fixed width and dims nothing.
+        const dockBounds = await page.locator('[data-slot="admin-panel-dock"]').boundingBox();
+        expect(dockBounds).not.toBeNull();
+        expect(dockBounds!.x + dockBounds!.width).toBeGreaterThanOrEqual(width - 1);
+        expect(dockBounds!.x + dockBounds!.width).toBeLessThanOrEqual(width + 1);
+        expect(dockBounds!.width).toBeCloseTo(width < 1280 ? DOCK_WIDTH : DOCK_WIDTH_WIDE, 0);
+        await expect(page.locator('[data-slot="sheet-overlay"]:visible')).toHaveCount(0);
+      } else {
+        await expect(page.locator('[data-slot="sheet-overlay"]')).toBeVisible();
+      }
+      await page.screenshot({ path: `/tmp/jarxis-discover-panel-${theme}-${width}.png` });
       await page.keyboard.press('Escape');
-      await expect(dialog).toBeHidden();
+      await expect(panel).toBeHidden();
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
+        .toBe(true);
       await page.screenshot({ path: `/tmp/jarxis-ml-${theme}-${width}.png`, fullPage: true });
     }
   }
@@ -304,9 +340,9 @@ test('model preview debounces credential input and ignores name and priority edi
   const calls = await interceptDiscovery(page, (_, route) =>
     fulfill(route, ok('preview-a', 'preview-b')),
   );
-  const { dialog, preview } = await openCreateDialog(page);
+  const { panel, preview } = await openCreatePanel(page);
   await expect(preview).toContainText('Enter an API key to preview available models.');
-  const apiKey = dialog.getByLabel('API key', { exact: true });
+  const apiKey = panel.getByLabel('API key', { exact: true });
   await apiKey.fill('abc');
   await page.waitForTimeout(300);
   expect(calls).toHaveLength(0);
@@ -315,14 +351,14 @@ test('model preview debounces credential input and ignores name and priority edi
   await expect(models).toHaveCount(2);
   expect(calls).toEqual([{ provider: 'openai', apiKey: 'abc-acceptance-only-key' }]);
 
-  await dialog.getByLabel('Name', { exact: true }).fill('Renamed preview connection');
-  await dialog.getByLabel('Priority', { exact: true }).fill('7');
-  await dialog.getByLabel(/Manual model IDs/).fill('manual-one');
+  await panel.getByLabel('Name', { exact: true }).fill('Renamed preview connection');
+  await panel.getByLabel('Priority', { exact: true }).fill('7');
+  await panel.getByLabel(/Manual model IDs/).fill('manual-one');
   await settle(page);
   expect(calls).toHaveLength(1);
   await expect(preview).toContainText('Available models (2)');
 
-  await dialog.getByLabel(/Base URL/).fill('https://gateway.example.test/v1');
+  await panel.getByLabel(/Base URL/).fill('https://gateway.example.test/v1');
   await expect.poll(() => calls.length).toBe(2);
   expect(calls[1]).toEqual({
     provider: 'openai',
@@ -330,14 +366,14 @@ test('model preview debounces credential input and ignores name and priority edi
     baseUrl: 'https://gateway.example.test/v1',
   });
 
-  await dialog.getByRole('combobox', { name: 'Provider' }).click();
+  await panel.getByRole('combobox', { name: 'Provider' }).click();
   await page.getByRole('option', { name: 'custom', exact: true }).click();
   await expect(preview).toContainText('Enter an API key and an HTTPS base URL');
   await apiKey.fill('custom-acceptance-key');
-  await dialog.getByLabel(/Base URL/).fill('http://insecure.example.test/v1');
+  await panel.getByLabel(/Base URL/).fill('http://insecure.example.test/v1');
   await settle(page);
   expect(calls).toHaveLength(2);
-  await dialog.getByLabel(/Base URL/).fill('https://custom.example.test/v1');
+  await panel.getByLabel(/Base URL/).fill('https://custom.example.test/v1');
   await expect.poll(() => calls.length).toBe(3);
   expect(calls[2]).toEqual({
     provider: 'custom',
@@ -345,7 +381,7 @@ test('model preview debounces credential input and ignores name and priority edi
     baseUrl: 'https://custom.example.test/v1',
   });
 
-  await dialog.getByRole('combobox', { name: 'Provider' }).click();
+  await panel.getByRole('combobox', { name: 'Provider' }).click();
   await page.getByRole('option', { name: 'codex', exact: true }).click();
   await expect(preview).toHaveCount(0);
   await settle(page);
@@ -371,8 +407,8 @@ test('model preview discards stale successes and failures', async ({
     }
     return fulfill(route, ok('fresh-model'));
   });
-  const { dialog, preview } = await openCreateDialog(page);
-  const apiKey = dialog.getByLabel('API key', { exact: true });
+  const { panel, preview } = await openCreatePanel(page);
+  const apiKey = panel.getByLabel('API key', { exact: true });
 
   await apiKey.fill('stale-success-key');
   await expect.poll(() => calls.length).toBe(1);
@@ -392,7 +428,7 @@ test('model preview discards stale successes and failures', async ({
   await expect(preview.getByText('Models could not be loaded', { exact: false })).toHaveCount(0);
 });
 
-test('closing the dialog cancels the preview and retry requests the current input', async ({
+test('closing the panel cancels the preview and retry requests the current input', async ({
   page,
   request,
   context,
@@ -413,22 +449,22 @@ test('closing the dialog cancels the preview and retry requests the current inpu
       });
     return fulfill(route, ok('retried-model'));
   });
-  let { dialog, preview } = await openCreateDialog(page);
-  await dialog.getByLabel('API key', { exact: true }).fill('close-key');
+  let { panel, preview } = await openCreatePanel(page);
+  await panel.getByLabel('API key', { exact: true }).fill('close-key');
   await expect.poll(() => calls.length).toBe(1);
   await expect(preview.getByRole('status', { name: 'Checking available models' })).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
+  await expect(panel).toBeHidden();
 
   await page.getByRole('button', { name: 'Add connection', exact: true }).click();
-  dialog = page.getByRole('dialog', { name: 'Add connection' });
-  preview = dialog.getByRole('region', { name: 'Model preview' });
+  panel = adminPanel(page, 'Add connection');
+  preview = panel.getByRole('region', { name: 'Model preview' });
   await expect(preview).toContainText('Enter an API key to preview available models.');
   await delay(1500);
   await expect(preview.getByText('closed-model name')).toHaveCount(0);
   expect(calls).toHaveLength(1);
 
-  await dialog.getByLabel('API key', { exact: true }).fill('retry-key');
+  await panel.getByLabel('API key', { exact: true }).fill('retry-key');
   await expect(preview).toContainText('Models could not be loaded');
   await expect(preview).not.toContainText('upstream-secret-detail');
   await preview.getByRole('button', { name: 'Retry' }).click();
@@ -470,8 +506,8 @@ test('model preview shows empty, unsupported and failed catalogs safely', async 
       return fulfill(route, { status: 'failed', models: [], error: 'sk-leaked-upstream-detail' });
     return fulfill(route, { status: 'failed', models: [], error: 'server-side detail' }, 500);
   });
-  const { dialog, preview } = await openCreateDialog(page);
-  const apiKey = dialog.getByLabel('API key', { exact: true });
+  const { panel, preview } = await openCreatePanel(page);
+  const apiKey = panel.getByLabel('API key', { exact: true });
   await apiKey.fill('empty-key');
   await expect(preview).toContainText('No models were returned. Add model IDs manually below.');
   await expect(preview).toContainText('Available models (0)');
@@ -491,7 +527,7 @@ test('model preview shows empty, unsupported and failed catalogs safely', async 
   await apiKey.fill('http-error-key');
   await expect(preview).toContainText('Models could not be loaded');
   await expect(preview).not.toContainText('server-side detail');
-  await expect(dialog.getByLabel(/Manual model IDs/)).toBeEditable();
+  await expect(panel.getByLabel(/Manual model IDs/)).toBeEditable();
 });
 
 test('saving is not blocked by the preview and sends only manual models', async ({
@@ -576,15 +612,15 @@ test('saving is not blocked by the preview and sends only manual models', async 
   await page.goto('/admin/ml-providers');
   for (const [index, scenario] of scenarios.entries()) {
     await page.getByRole('button', { name: 'Add connection', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add connection' });
-    const preview = dialog.getByRole('region', { name: 'Model preview' });
-    await dialog.getByLabel('Name', { exact: true }).fill('Preview save');
-    await dialog.getByLabel('API key', { exact: true }).fill(scenario.apiKey);
-    await dialog.getByLabel(/Manual model IDs/).fill('manual-only');
+    const panel = adminPanel(page, 'Add connection');
+    const preview = panel.getByRole('region', { name: 'Model preview' });
+    await panel.getByLabel('Name', { exact: true }).fill('Preview save');
+    await panel.getByLabel('API key', { exact: true }).fill(scenario.apiKey);
+    await panel.getByLabel(/Manual model IDs/).fill('manual-only');
     await scenario.ready(preview);
     await expect.poll(() => calls.length).toBe(index + 1);
-    await dialog.getByRole('button', { name: /save/i }).click();
-    await expect(dialog).toBeHidden();
+    await panel.getByRole('button', { name: /save/i }).click();
+    await expect(panel).toBeHidden();
     await expect(page.getByRole('status').filter({ hasText: scenario.notice })).toBeVisible();
     expect(created[index]).toEqual({
       name: 'Preview save',
@@ -599,7 +635,7 @@ test('saving is not blocked by the preview and sends only manual models', async 
   await expect(page.getByText('late-model name')).toHaveCount(0);
 });
 
-test('provider failures show safe guidance once: toasts for page actions, inline in dialogs', async ({
+test('provider failures show safe guidance once: toasts for page actions, inline in panels', async ({
   page,
   request,
   context,
@@ -640,8 +676,10 @@ test('provider failures show safe guidance once: toasts for page actions, inline
   await page.getByRole('switch', { name: `Enable ${fixtureName}` }).click();
   await expect(toasts).toHaveCount(1);
   await expect(toasts.first()).toContainText('temporarily unavailable');
+  // Let the earlier page-action toast expire before checking that the panel adds none.
+  await expect(toasts).toHaveCount(0);
 
-  // A dialog failure stays inline in that dialog and does not also toast.
+  // A panel failure stays inline in that panel and does not also toast.
   await page.route('**/api/admin/ml-providers/discover', (route) =>
     route.fulfill({ json: { discovery: { status: 'ok', models: [], error: null } } }),
   );
@@ -654,19 +692,19 @@ test('provider failures show safe guidance once: toasts for page actions, inline
       : route.fallback(),
   );
   await page.getByRole('button', { name: 'Add connection', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Add connection' });
-  await dialog.getByLabel('Name', { exact: true }).fill('Blocked endpoint');
-  await dialog.getByLabel('API key', { exact: true }).fill('acceptance-only-key');
-  await dialog.getByRole('button', { name: /save/i }).click();
-  await expect(dialog.getByRole('alert')).toContainText('public HTTPS base URL');
-  await expect(dialog).toBeVisible();
-  await expect(toasts).toHaveCount(1);
+  const panel = adminPanel(page, 'Add connection');
+  await panel.getByLabel('Name', { exact: true }).fill('Blocked endpoint');
+  await panel.getByLabel('API key', { exact: true }).fill('acceptance-only-key');
+  await panel.getByRole('button', { name: /save/i }).click();
+  await expect(panel.getByRole('alert')).toContainText('public HTTPS base URL');
+  await expect(panel).toBeVisible();
+  await expect(toasts).toHaveCount(0, { timeout: 1_000 });
   await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
+  await expect(panel).toBeHidden();
 
-  // Reopening a dialog never carries the previous failure.
+  // Reopening a panel never carries the previous failure.
   await page.getByRole('button', { name: 'Add connection', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await expect(panel.getByRole('alert')).toHaveCount(0);
   expect(await page.content()).not.toContain(secret);
 
   await page.unrouteAll({ behavior: 'ignoreErrors' });

@@ -1,83 +1,93 @@
-/* Imported after Tailwind and tw-animate-css; dark variant lives in globals.css. */
+/*
+ * Imported after Tailwind and tw-animate-css; dark variant lives in globals.css.
+ *
+ * Colour values are the official shadcn/ui *Neutral* light and dark themes
+ * (https://ui.shadcn.com/docs/theming), kept byte-for-byte so `shadcn add` output needs no
+ * colour conversion. Only the four tokens shadcn does not ship are project additions:
+ * `--destructive-foreground`, `--overlay`, `--thumb` and `--warning` (see below).
+ * The spacing, type, radius and font systems are unchanged and remain project-defined.
+ */
 :root {
   color-scheme: light;
   --radius: 0.625rem;
   --font-ui: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --background: #fafafa;
-  --foreground: #18181b;
-  --card: #ffffff;
-  --card-foreground: #18181b;
-  --popover: #ffffff;
-  --popover-foreground: #18181b;
-  --primary: #6d28d9;
-  --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #27272a;
-  --muted: #f4f4f5;
-  --muted-foreground: #52525b;
-  --accent: #ede9fe;
-  --accent-foreground: #4c1d95;
-  --destructive: #c62828;
-  --destructive-foreground: #ffffff;
-  --border: #d4d4d8;
-  --input: #71717a;
-  --ring: #7c3aed;
-  --chart-1: #6d28d9;
-  --chart-2: #0f766e;
-  --chart-3: #b45309;
-  --chart-4: #0369a1;
-  --chart-5: #be185d;
-  --sidebar: #f4f4f5;
-  --sidebar-foreground: #27272a;
-  --sidebar-primary: #6d28d9;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e4e4e7;
-  --sidebar-accent-foreground: #18181b;
-  --sidebar-border: #d4d4d8;
-  --sidebar-ring: #7c3aed;
-  --overlay: #000000;
-  --thumb: #ffffff;
-  --warning: #a04a08;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  /* Not a shadcn token: the fill text colour for destructive buttons and badges. */
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+  /* Not shadcn tokens: modal scrim, control thumbs and warning text. */
+  --overlay: oklch(0 0 0);
+  --thumb: oklch(1 0 0);
+  --warning: oklch(0.5 0.15 55);
 }
 
 .dark {
   color-scheme: dark;
-  --background: #09090b;
-  --foreground: #fafafa;
-  --card: #18181b;
-  --card-foreground: #fafafa;
-  --popover: #18181b;
-  --popover-foreground: #fafafa;
-  --primary: #c4b5fd;
-  --primary-foreground: #2e1065;
-  --secondary: #27272a;
-  --secondary-foreground: #fafafa;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #2e2150;
-  --accent-foreground: #ede9fe;
-  --destructive: #dd3535;
-  --destructive-foreground: #ffffff;
-  --border: #3f3f46;
-  --input: #74747d;
-  --ring: #a78bfa;
-  --chart-1: #a78bfa;
-  --chart-2: #2dd4bf;
-  --chart-3: #fbbf24;
-  --chart-4: #38bdf8;
-  --chart-5: #f472b6;
-  --sidebar: #111113;
-  --sidebar-foreground: #f4f4f5;
-  --sidebar-primary: #c4b5fd;
-  --sidebar-primary-foreground: #2e1065;
-  --sidebar-accent: #27272a;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #3f3f46;
-  --sidebar-ring: #a78bfa;
-  --overlay: #000000;
-  --thumb: #ffffff;
-  --warning: #fbbf24;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.269 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.371 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+  --overlay: oklch(0 0 0);
+  --thumb: oklch(1 0 0);
+  --warning: oklch(0.828 0.189 84.429);
 }
 
 /*
@@ -141,6 +151,8 @@
   --spacing-sidebar: 16rem;
   --spacing-sidebar-mobile: 18rem;
   --spacing-sidebar-icon: 3rem;
+  --spacing-drawer: 24rem;
+  --spacing-drawer-wide: 28rem;
   --spacing-search: 16rem;
   --spacing-select-sm: 8rem;
   --spacing-select-md: 9rem;
@@ -409,7 +421,52 @@
   height: calc(100% - var(--spacing-hairline));
 }
 
-/* Admin user inspector: fixed-size dialog with a scrolling body and fixed header. */
+/* Shared admin panel motion and the desktop space reserved beside the page. */
+@keyframes admin-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateX(var(--spacing-xl));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes admin-panel-exit {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(var(--spacing-xl));
+  }
+}
+
+@utility admin-panel-motion {
+  &[data-state='open'] {
+    animation: admin-panel-enter 200ms var(--ease-standard) both;
+  }
+  &[data-state='closed'] {
+    animation: admin-panel-exit 150ms var(--ease-standard) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &[data-state='open'],
+    &[data-state='closed'] {
+      animation: none;
+    }
+  }
+}
+
+@utility admin-dock-motion {
+  transition: width 200ms var(--ease-standard);
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+/* Legacy inspector geometry retained for registry token conversion. */
 @utility h-inspector {
   height: min(var(--spacing-inspector), calc(100vh - var(--spacing-xl)));
 }

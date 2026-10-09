@@ -49,7 +49,7 @@ import {
   UserPlusIcon,
   UserRound,
 } from 'lucide-react';
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { UserAvatar } from '@/components/auth/user/user-avatar';
 import {
@@ -61,18 +61,16 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from '@/components/ui/admin-panel';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -302,7 +300,7 @@ export function AdminUsers({
           ) : null}
         </div>
 
-        <div className="grid gap-sm sm:grid-cols-2 lg:grid-cols-admin-filters">
+        <div className="grid gap-sm sm:grid-cols-2 lg:grid-cols-admin-filters group-data-[panel-open=true]/admin-workspace:lg:grid-cols-1 group-data-[panel-open=true]/admin-workspace:xl:grid-cols-2">
           <Select
             value={searchField}
             onValueChange={(value) => {
@@ -662,9 +660,26 @@ function CreateUserDialog({
     onOpenChange(false);
   };
 
+  const isCreating = createUser.isPending;
+
   return (
-    <Dialog open={open} onOpenChange={(value) => (value ? onOpenChange(true) : close())}>
-      <DialogContent className="max-h-svh overflow-y-auto">
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (value) {
+          onOpenChange(true);
+          return;
+        }
+        // A create in flight must not be interrupted by an accidental dismissal.
+        if (isCreating) return;
+        close();
+      }}
+    >
+      <DialogContent
+        className="max-h-svh overflow-y-auto"
+        onEscapeKeyDown={(event) => isCreating && event.preventDefault()}
+        onInteractOutside={(event) => isCreating && event.preventDefault()}
+      >
         <form.AppForm>
           <form.AuthFormRoot className="flex flex-col gap-lg">
             <DialogHeader>
@@ -806,7 +821,7 @@ function CreateUserDialog({
             </FieldGroup>
             <FieldError>{getAdminErrorMessage(createUser.error)}</FieldError>
             <DialogFooter>
-              <Button onClick={close} type="button" variant="outline">
+              <Button disabled={isCreating} onClick={close} type="button" variant="outline">
                 {config.localization.cancel}
               </Button>
               <form.AuthFormSubmitButton disabled={createUser.isPending}>
@@ -925,6 +940,8 @@ function UserInspector({
   const banDurationSeconds = getBanDurationSeconds(banDuration);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [dangerousAction, setDangerousAction] = useState<DangerousAction>();
+  const confirmationInFlight = useRef(false);
+  const profileInFlight = useRef(false);
   const isSelf = user?.id === actor?.user.id;
 
   const updateUser = useMutation(
@@ -970,13 +987,16 @@ function UserInspector({
   const profileForm = useAuthForm({
     defaultValues: {
       additionalFields: getAdditionalFieldDefaultValues(configuredUserFields),
-      email: '',
-      emailVerified: false,
-      name: '',
-      roles: [config.defaultRole],
+      // Keep hook defaults aligned with reset values: later permission/query renders
+      // otherwise replace an untouched profile with the empty initial defaults.
+      email: user?.email ?? '',
+      emailVerified: user?.emailVerified ?? false,
+      name: user?.name ?? '',
+      roles: parseAdminRoles(user?.role, config.defaultRole, config.allowMultipleRoles),
     },
     onSubmit: async ({ value }) => {
       if (!user) return;
+      profileInFlight.current = true;
 
       const mutations: Promise<unknown>[] = [];
       if (canUpdate.data?.success) {
@@ -1010,6 +1030,8 @@ function UserInspector({
         onOpenChange(false);
       } catch {
         // Mutation errors are rendered next to the form.
+      } finally {
+        profileInFlight.current = false;
       }
     },
   });
@@ -1034,7 +1056,12 @@ function UserInspector({
   ]);
 
   const confirm = () => {
-    if (!user) return;
+    if (!user || !dangerousAction || confirmationInFlight.current) return;
+    if (dangerousAction === 'ban' && banDurationSeconds === null) return;
+    confirmationInFlight.current = true;
+    const onSettled = () => {
+      confirmationInFlight.current = false;
+    };
     if (dangerousAction === 'ban') {
       if (banDurationSeconds === null) return;
       ban.mutate(
@@ -1044,6 +1071,7 @@ function UserInspector({
           userId: user.id,
         },
         {
+          onSettled,
           onSuccess: () => {
             setBanDuration('');
             setBanReason('');
@@ -1056,6 +1084,7 @@ function UserInspector({
       remove.mutate(
         { userId: user.id },
         {
+          onSettled,
           onSuccess: () => {
             setDangerousAction(undefined);
             onOpenChange(false);
@@ -1065,12 +1094,13 @@ function UserInspector({
     if (dangerousAction === 'revokeAll')
       revokeSessions.mutate(
         { userId: user.id },
-        { onSuccess: () => setDangerousAction(undefined) },
+        { onSettled, onSuccess: () => setDangerousAction(undefined) },
       );
     if (dangerousAction === 'impersonate')
       impersonate.mutate(
         { userId: user.id },
         {
+          onSettled,
           onSuccess: () => {
             setDangerousAction(undefined);
             if (config.impersonationRedirectTo)
@@ -1097,6 +1127,9 @@ function UserInspector({
           ? revokeSessions
           : impersonate;
   const dangerousError = getAdminErrorMessage(dangerousMutation.error);
+  // Declared before the panels so the dismissal guards below never read it early.
+  const isSavingProfile = updateUser.isPending || setRoleMutation.isPending;
+  const isConfirming = dangerousMutation.isPending;
   const dangerLabel =
     dangerousAction === 'ban'
       ? config.localization.banUser
@@ -1108,16 +1141,31 @@ function UserInspector({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="h-inspector grid-rows-inspector gap-none overflow-hidden p-none sm:max-w-panel">
-          <DialogHeader className="border-b px-xl py-lg-plus pr-header">
+      <Dialog
+        open={open}
+        onOpenChange={(value) => {
+          // A profile save in flight must not be interrupted by an accidental dismissal.
+          if (!value && (isSavingProfile || profileInFlight.current)) return;
+          onOpenChange(value);
+        }}
+      >
+        <DialogContent
+          layout="inspector"
+          onEscapeKeyDown={(event) =>
+            (isSavingProfile || profileInFlight.current) && event.preventDefault()
+          }
+          onInteractOutside={(event) => isSavingProfile && event.preventDefault()}
+        >
+          <DialogHeader className="border-b px-xl py-lg-plus">
             {user ? (
-              <div className="flex items-center justify-between gap-lg">
-                <div className="flex min-w-none items-center gap-md">
-                  <UserAvatar className="size-4xl" user={user} />
+              <div className="flex flex-wrap items-center justify-between gap-md">
+                <div className="flex min-w-none flex-1 items-center gap-md">
+                  <UserAvatar className="size-4xl shrink-0" user={user} />
                   <div className="min-w-none">
                     <DialogTitle className="truncate">{user.name}</DialogTitle>
-                    <DialogDescription className="truncate">{user.email}</DialogDescription>
+                    <DialogDescription className="truncate" title={user.email}>
+                      {user.email}
+                    </DialogDescription>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-sm">
@@ -1169,8 +1217,11 @@ function UserInspector({
               <Skeleton className="h-icon w-sidebar" />
             </div>
           ) : user ? (
-            <Tabs className="min-h-none gap-none overflow-hidden" defaultValue="overview">
-              <TabsList className="mx-xl h-tabs-bar shrink-0" variant="line">
+            <Tabs className="min-h-none flex-1 gap-none overflow-hidden" defaultValue="overview">
+              <TabsList
+                className="mx-xl h-tabs-bar max-w-full shrink-0 justify-start overflow-x-auto"
+                variant="line"
+              >
                 <TabsTrigger value="overview">
                   <UserRound aria-hidden="true" className="text-muted-foreground" />
                   {config.localization.overview}
@@ -1194,7 +1245,8 @@ function UserInspector({
                     <div className="overflow-y-auto">
                       <section className="flex flex-col gap-lg-plus p-xl">
                         <h3 className="font-medium">{config.localization.profileAndAccess}</h3>
-                        <FieldGroup className="grid gap-lg-plus md:grid-cols-2">
+                        {/* Single column: the shared panel is narrower than the old wide modal. */}
+                        <FieldGroup className="grid gap-lg-plus">
                           <profileForm.Field name="name">
                             {(field) => (
                               <Field>
@@ -1329,7 +1381,7 @@ function UserInspector({
                       <Separator />
                       <section className="flex flex-col gap-lg p-xl">
                         <h3 className="font-medium">{config.localization.accountInformation}</h3>
-                        <dl className="grid gap-x-2xl gap-y-lg text-body-sm sm:grid-cols-2">
+                        <dl className="grid gap-x-2xl gap-y-lg text-body-sm">
                           <div className="flex flex-col gap-2xs">
                             <dt className="text-muted-foreground">{config.localization.userId}</dt>
                             <dd className="flex min-w-none items-center gap-2xs">
@@ -1431,7 +1483,14 @@ function UserInspector({
                       </section>
                     </div>
                     <div className="flex flex-col-reverse gap-sm border-t bg-muted/50 px-xl py-lg sm:flex-row sm:justify-end">
-                      <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
+                      <Button
+                        disabled={isSavingProfile}
+                        onClick={() => {
+                          if (!profileInFlight.current) onOpenChange(false);
+                        }}
+                        type="button"
+                        variant="outline"
+                      >
                         {config.localization.cancel}
                       </Button>
                       <profileForm.Subscribe
@@ -1544,9 +1603,18 @@ function UserInspector({
       <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} userId={user?.id} />
       <AlertDialog
         open={Boolean(dangerousAction)}
-        onOpenChange={(value) => !value && closeDangerousAction()}
+        onOpenChange={(value) => {
+          if (value) return;
+          // A confirmed action in flight must not be interrupted by an accidental dismissal.
+          if (isConfirming || confirmationInFlight.current) return;
+          closeDangerousAction();
+        }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onEscapeKeyDown={(event) =>
+            (isConfirming || confirmationInFlight.current) && event.preventDefault()
+          }
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>{dangerLabel}</AlertDialogTitle>
             <AlertDialogDescription>{user?.email}</AlertDialogDescription>
@@ -1585,12 +1653,12 @@ function UserInspector({
           ) : null}
           {dangerousError ? <FieldError>{dangerousError}</FieldError> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel>{config.localization.cancel}</AlertDialogCancel>
+            <AlertDialogCancel disabled={isConfirming}>
+              {config.localization.cancel}
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={
-                isSelf ||
-                dangerousMutation.isPending ||
-                (dangerousAction === 'ban' && banDurationSeconds === null)
+                isSelf || isConfirming || (dangerousAction === 'ban' && banDurationSeconds === null)
               }
               onClick={(event) => {
                 event.preventDefault();
@@ -1633,6 +1701,7 @@ function PasswordDialog({
     mutation.reset();
     onOpenChange(false);
   };
+  const isSaving = mutation.isPending;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setErrorMessage(undefined);
@@ -1646,8 +1715,22 @@ function PasswordDialog({
       );
   };
   return (
-    <Dialog open={open} onOpenChange={(value) => (value ? onOpenChange(true) : close())}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (value) {
+          onOpenChange(true);
+          return;
+        }
+        // A password write in flight must not be interrupted by an accidental dismissal.
+        if (isSaving) return;
+        close();
+      }}
+    >
+      <DialogContent
+        onEscapeKeyDown={(event) => isSaving && event.preventDefault()}
+        onInteractOutside={(event) => isSaving && event.preventDefault()}
+      >
         <form className="flex flex-col gap-lg" onSubmit={submit}>
           <DialogHeader>
             <DialogTitle>{config.localization.setPassword}</DialogTitle>
@@ -1669,10 +1752,10 @@ function PasswordDialog({
             <FieldError>{errorMessage}</FieldError>
           </Field>
           <DialogFooter>
-            <Button onClick={close} type="button" variant="outline">
+            <Button disabled={isSaving} onClick={close} type="button" variant="outline">
               {config.localization.cancel}
             </Button>
-            <Button disabled={!password || mutation.isPending} type="submit">
+            <Button disabled={!password || isSaving} type="submit">
               {config.localization.setPassword}
             </Button>
           </DialogFooter>

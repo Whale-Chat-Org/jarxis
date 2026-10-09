@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 208 64" width="208" height="64" role="img" aria-labelledby="t d">
+  <title id="t">Jarxis</title>
+  <desc id="d">Jarxis wordmark: the J monogram and name.</desc>
+  <rect width="64" height="64" rx="14" fill="#171717"/>
+  <path transform="translate(3 -4)" d="M24 18 H44 V39 C44 49 38 54 29 54 C20 54 14 49 14 40 H24 C24 44 26 45 29 45 C32 45 34 43 34 39 V28 H24 Z" fill="#fafafa"/>
+  <text x="80" y="43" fill="#171717" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="34" font-weight="600" letter-spacing="-0.5">Jarxis</text>
+</svg>

@@ -83,7 +83,7 @@ Mandatory for every UI change. All design implementations must be responsive on 
 
 - Icons: `icon-xs` 0.75rem, `icon-sm` 0.875rem, `icon` 1rem, `icon-lg` 1.25rem, `icon-xl` 2rem, `hero-icon` 4rem.
 - Controls: `control-xs` 1.5rem, `control-sm` 2rem, `control` 2.25rem, `control-lg` 2.5rem, `avatar` 1.75rem, `avatar-xl` 3.5rem, `chip` 1.375rem, `switch` 1.15rem, `cell` 2rem.
-- Layout: `header` 3.5rem, `sidebar` 16rem, `sidebar-mobile` 18rem, `sidebar-icon` 3rem, `search` 16rem, `select-sm` 8rem, `select-md` 9rem, `menu` 14rem, `menu-min` 8rem, `menu-sm` 10rem, `menu-xs` 12rem, `popover` 18rem.
+- Layout: `header` 3.5rem, `sidebar` 16rem, `sidebar-mobile` 18rem, `sidebar-icon` 3rem, `drawer` 24rem, `drawer-wide` 28rem, `search` 16rem, `select-sm` 8rem, `select-md` 9rem, `menu` 14rem, `menu-min` 8rem, `menu-sm` 10rem, `menu-xs` 12rem, `popover` 18rem.
 - Tables and lists: `col-icon` 2.5rem, `col-actions` 4rem, `col-scope` 7rem, `empty-row` 6rem, `empty-row-lg` 10rem, `list-max` 16rem, `dropdown-max` 24rem, `name-max` 8rem.
 - Misc: `qr` 10rem, `textarea-min` 4rem, `slider-vertical` 11rem, `chip-input-min` 4rem, `nudge` 2px, `addon-button` 0.45rem, `addon-kbd` 0.35rem, `combobox-offset` 1.75rem, `tabs-list` 3px, `tabs-bar` 2.75rem, `tabs-indicator` 5px, `inspector` 52rem.
 - Skeleton placeholder widths: `bar-3xs` 3rem, `bar-2xs` 3.5rem, `bar-xs` 4rem, `bar-sm` 5rem, `bar-md` 6rem, `bar-lg` 7rem, `bar-xl` 8rem, `bar-2xl` 9rem, `bar-3xl` 10rem, `bar-4xl` 12rem, `bar-5xl` 14rem, `bar-6xl` 16rem.
@@ -124,11 +124,11 @@ Both effect values match the Tailwind default they replaced, so migrating a clas
 
 ### Composite utilities (`@utility` in `tokens.css`)
 
-`transition-control`, `grid-cols-alert`, `grid-cols-alert-icon`, `grid-rows-card-header`, `grid-cols-card-header`, `cell-size-default`, `min-w-combobox`, `max-h-combobox-list`, `max-w-viewport-inset`, `max-w-viewport-menu`, `translate-x-switch-on`, `tooltip-arrow-offset`, `sidebar-icon-width`, `sidebar-icon-width-plus`, `left-sidebar-offset`, `right-sidebar-offset`, `shadow-sidebar-outline`, `shadow-sidebar-accent-outline`, `transition-sidebar-shell`, `transition-sidebar-label`, `transition-sidebar-menu-button`, `transition-sidebar-rail`, `transition-sidebar-header`, `grid-rows-alert-dialog`, `grid-rows-alert-dialog-media`, `h-tabs-trigger`, `h-inspector`, `grid-rows-inspector`, `grid-rows-inspector-form`, `grid-cols-admin-filters`.
+`transition-control`, `grid-cols-alert`, `grid-cols-alert-icon`, `grid-rows-card-header`, `grid-cols-card-header`, `cell-size-default`, `min-w-combobox`, `max-h-combobox-list`, `max-w-viewport-inset`, `max-w-viewport-menu`, `translate-x-switch-on`, `tooltip-arrow-offset`, `sidebar-icon-width`, `sidebar-icon-width-plus`, `left-sidebar-offset`, `right-sidebar-offset`, `shadow-sidebar-outline`, `shadow-sidebar-accent-outline`, `transition-sidebar-shell`, `transition-sidebar-label`, `transition-sidebar-menu-button`, `transition-sidebar-rail`, `transition-sidebar-header`, `grid-rows-alert-dialog`, `grid-rows-alert-dialog-media`, `h-tabs-trigger`, `admin-panel-motion`, `admin-dock-motion`, `h-inspector`, `grid-rows-inspector`, `grid-rows-inspector-form`, `grid-cols-admin-filters`.
 
 ## 4. Colour
 
-Neutral zinc surfaces, restrained violet actions and understated borders suit dense admin screens. Use semantic utilities only:
+Use the shadcn default Neutral light/dark palette for surfaces, actions, charts and navigation. Use semantic utilities only:
 
 - Page: `bg-background text-foreground`.
 - Panels and overlays: `bg-card text-card-foreground`, `bg-popover text-popover-foreground`.
@@ -218,8 +218,8 @@ Discover what exists in this order:
 
 - `tests/unit/theme.test.ts` checks:
   - token completeness and aliases, the cleared default scales, the scale/type catalog, and that `designTokens` in `src/lib/utils.ts` matches `tokens.css`;
-  - at least 4.5:1 contrast for semantic foreground pairs, and for muted and warning text on every panel/hover surface (`background`, `card`, `popover`, `secondary`, `muted`, `accent`, `sidebar`, `sidebar-accent`);
-  - at least 3:1 for input borders and focus colours on those same surfaces;
+  - text contrast for the default Neutral semantic foreground pairs and actual supporting-text surfaces, with explicit upstream exceptions for muted fills;
+  - OKLCH conversion and alpha compositing for default translucent dark borders; subtle input borders are checked against the upstream theme rather than the previous custom 3:1 border requirement, and rendered keyboard focus is verified in browser tests;
   - that the §3 catalog and the composite `@utility` list still describe `tokens.css` (a name-level drift alarm; values are pinned by the `designTokens` equality test and the contrast assertions).
 - `tests/unit/design-system.test.ts` guards the guard: it runs ESLint in-process and asserts that every class the rules forbid is still rejected and every token-based equivalent still passes, that inline `style`/hand-rolled primitives/direct `clsx` imports fail in feature code but not in `src/components/ui`, and that no stylesheet other than `tokens.css` holds a raw colour or dimension. Weakening a rule in `eslint.config.mjs` fails here instead of silently passing lint.
 - `enforce-canonical-classes` and `enforce-shorthand-classes` are deliberately **off**. They rewrite by numeric equivalence and propose collapsing `px-page py-lg` into `p-icon` (both 1rem), erasing the semantic distinction the token system exists to express. Don't enable them.

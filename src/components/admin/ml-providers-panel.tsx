@@ -5,7 +5,6 @@ import { AlertCircleIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import Loading from '@/app/admin/ml-providers/loading';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -14,18 +13,17 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from '@/components/ui/admin-panel';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -519,7 +517,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
               </CardHeader>
             </Card>
           )}
-          <div className="grid min-w-none gap-stack lg:grid-cols-2">
+          <div className="grid min-w-none gap-stack lg:grid-cols-2 group-data-[panel-open=true]/admin-workspace:lg:grid-cols-1">
             {data.connections.map((connection) => (
               <Card key={connection.id} className="min-w-none">
                 <CardHeader>
