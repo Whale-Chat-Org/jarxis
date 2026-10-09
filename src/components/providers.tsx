@@ -63,7 +63,7 @@ function AuthProviders({ queryClient, children }: PropsWithChildren<{ queryClien
     <QueryClientProvider client={queryClient}>
       <AuthProvider
         authClient={authClient}
-        redirectTo="/admin"
+        redirectTo="/auth/post-login"
         navigate={({ to, replace }) => (replace ? router.replace(to) : router.push(to))}
         Link={Link}
         plugins={plugins}
