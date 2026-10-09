@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { BrandMark } from '@/components/brand';
 import { PublicAccountNav } from '@/components/public-account-nav';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { HttpError } from '@/lib/errors';
@@ -15,9 +16,8 @@ import { pageGrants } from '@/lib/rbac';
 function Brand() {
   return (
     <Link href="/" className="flex items-center gap-sm" aria-label="Jarxis home">
-      <span className="flex size-avatar items-center justify-center rounded-md bg-primary text-body-sm font-bold text-primary-foreground">
-        J
-      </span>
+      {/* The link is already labelled, so the mark stays decorative. */}
+      <BrandMark />
       <span className="text-body-sm font-semibold">Jarxis</span>
     </Link>
   );

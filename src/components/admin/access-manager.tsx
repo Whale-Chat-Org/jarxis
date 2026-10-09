@@ -190,7 +190,7 @@ export function AccessManager({ currentUserId, canManageAccess }: AccessManagerP
             aria-busy={users.isFetching}
             className="hidden overflow-hidden rounded-lg border lg:block"
           >
-            <Table className="table-fixed">
+            <Table className="table-fixed group-data-[panel-open=true]/admin-workspace:min-w-inspector">
               <TableHeader>
                 <TableRow>
                   <TableHead>Person</TableHead>

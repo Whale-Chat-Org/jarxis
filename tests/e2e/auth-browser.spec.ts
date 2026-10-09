@@ -16,7 +16,7 @@ async function signIn(page: Page, email: string, secret: string) {
   );
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   expect((await response).status()).toBe(200);
-  await expect(page).toHaveURL(/\/access-denied(?:\?|$)/);
+  await expect(page).toHaveURL(new URL('/', page.url()).href);
 }
 
 test('email links, browser login, access denial, forgot/reset password and logout', async ({

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { ComponentProps } from 'react';
 
 import { UserButton } from '@/components/auth/user/user-button';
+import { BrandMark } from '@/components/brand';
 import {
   Sidebar,
   SidebarContent,
@@ -42,12 +43,21 @@ export function AppSidebar({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/admin">
-                <span className="flex size-2xl items-center justify-center rounded-md bg-primary text-body-sm font-bold text-primary-foreground">
-                  J
+            {/*
+              Collapsed to the icon rail the wordmark is hidden, so the link carries its own
+              accessible name and a tooltip — matching how every nav item behaves. The mark is
+              centred because the button loses its text column at that width.
+             */}
+            <SidebarMenuButton size="lg" asChild tooltip="Jarxis Admin">
+              <Link
+                href="/admin"
+                aria-label="Jarxis Admin"
+                className="group-data-[collapsible=icon]:justify-center"
+              >
+                <BrandMark />
+                <span className="text-body-sm font-semibold group-data-[collapsible=icon]:hidden">
+                  Jarxis Admin
                 </span>
-                <span className="text-body-sm font-semibold">Jarxis Admin</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

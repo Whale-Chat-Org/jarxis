@@ -9,8 +9,6 @@ import { AlertTriangleIcon, ShieldAlertIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { LoadingRegion } from '@/components/skeletons';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -18,7 +16,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from '@/components/ui/admin-panel';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Field, FieldLabel, FieldSet } from '@/components/ui/field';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';

@@ -11,13 +11,33 @@ import { login, makeOwner, register, testDatabase, verify } from './helpers';
 
 /**
  * Acceptance coverage for Users & access: the simplified access directory, the "Change role"
- * dialog, the real `/api/auth/admin/set-role` round trip and the responsive/theme behaviour of the
+ * panel, the real `/api/auth/admin/set-role` round trip and the responsive/theme behaviour of the
  * access screens.
+ *
+ * Administration surfaces are no longer modal dialogs: `AdminPanelHost` docks them beside the page
+ * as a `role="region"` from `lg` (1024px) upward and only falls back to a `role="dialog"` sheet
+ * below it, so the panel is addressed by its data slot instead of by the dialog role.
  *
  * Every test registers its own unique fixture users and never resets or truncates shared tables.
  */
 
 const GENERIC_SAVE_FAILURE = 'The role was not changed. Try again.';
+/** The dock is 24rem from `lg` and 28rem from `xl`; the sheet below `lg` is full width. */
+const DOCK_WIDTH = 384;
+const DOCK_WIDTH_WIDE = 448;
+const DESKTOP_PANEL_WIDTH = 1024;
+
+/**
+ * The active administration panel. Every panel stays mounted while drilling down, and inactive
+ * ones are `hidden`, so only the visible one is addressed; the heading disambiguates it from the
+ * other regions on the page (the dock itself, model previews, …).
+ */
+function adminPanel(page: Page, heading?: string): Locator {
+  const panels = page.locator('[data-slot="admin-panel"]:visible');
+  return heading
+    ? panels.filter({ has: page.getByRole('heading', { name: heading, exact: true }) })
+    : panels;
+}
 
 /** Fixture-only SQL: the API deliberately refuses these states, so the test data is written here. */
 async function setAccountFlags(
@@ -95,14 +115,14 @@ async function findAccessEntry(page: Page, email: string) {
   return row;
 }
 
-/** Open the change-role dialog for one email. */
+/** Open the change-role panel for one email. */
 async function openChangeRole(page: Page, email: string) {
   const row = await findAccessEntry(page, email);
   await row.getByRole('button', { name: 'Change role' }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Change role' })).toBeVisible();
-  await expect(dialog.getByText(email)).toBeVisible();
-  return dialog;
+  const panel = adminPanel(page, 'Change role');
+  await expect(panel.getByRole('heading', { name: 'Change role' })).toBeVisible();
+  await expect(panel.getByText(email)).toBeVisible();
+  return panel;
 }
 
 test('an owner changes a role through the admin API', async ({
@@ -125,20 +145,20 @@ test('an owner changes a role through the admin API', async ({
   await expect(page.getByRole('combobox', { name: 'Status' })).toHaveCount(0);
   await expect(page.getByRole('combobox', { name: 'Search field' })).toHaveCount(0);
 
-  const dialog = await openChangeRole(page, target.email);
-  await expect(dialog.getByText('Current: User')).toBeVisible();
+  const panel = await openChangeRole(page, target.email);
+  await expect(panel.getByText('Current: User')).toBeVisible();
   // Nothing is selected away from the stored role yet, so there is nothing to save.
-  await expect(dialog.getByRole('button', { name: 'Save role' })).toBeDisabled();
+  await expect(panel.getByRole('button', { name: 'Save role' })).toBeDisabled();
 
-  await dialog.getByRole('radio', { name: /^Viewer/ }).check();
+  await panel.getByRole('radio', { name: /^Viewer/ }).check();
 
   const setRoleCall = page.waitForResponse(
     (response) =>
       response.url().includes('/api/auth/admin/set-role') && response.request().method() === 'POST',
   );
-  await dialog.getByRole('button', { name: 'Save role' }).click();
+  await panel.getByRole('button', { name: 'Save role' }).click();
   expect((await setRoleCall).status()).toBe(200);
-  await expect(dialog).toBeHidden();
+  await expect(panel).toBeHidden();
 
   // The stored value and the refreshed row both show the new role.
   expect(await readRole(target.id)).toBe('viewer');
@@ -168,21 +188,21 @@ test('selecting owner warns inline and saves with one Make owner button', async 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/admin/users');
 
-  const dialog = await openChangeRole(page, target.email);
-  await expect(dialog.getByRole('button', { name: 'Save role' })).toBeDisabled();
-  await dialog.getByRole('radio', { name: /^Owner/ }).check();
+  const panel = await openChangeRole(page, target.email);
+  await expect(panel.getByRole('button', { name: 'Save role' })).toBeDisabled();
+  await panel.getByRole('radio', { name: /^Owner/ }).check();
   await expect(
-    dialog.getByText('Owners have full control, including assigning roles and deleting accounts.'),
+    panel.getByText('Owners have full control, including assigning roles and deleting accounts.'),
   ).toBeVisible();
 
   // The second confirmation modal is gone: the primary button renames itself instead.
-  const makeOwnerButton = dialog.getByRole('button', { name: 'Make owner' });
+  const makeOwnerButton = panel.getByRole('button', { name: 'Make owner' });
   await expect(makeOwnerButton).toBeEnabled();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
 
   // Cancelling writes nothing.
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
-  await expect(dialog).toBeHidden();
+  await panel.getByRole('button', { name: 'Cancel' }).click();
+  await expect(panel).toBeHidden();
   expect(await readRole(target.id)).toBe('viewer');
 
   const reopened = await openChangeRole(page, target.email);
@@ -249,22 +269,22 @@ test('owner is refused for unverified and banned accounts with an explanation', 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/admin/users');
 
-  const unverifiedDialog = await openChangeRole(page, unverified.email);
-  await expect(unverifiedDialog.getByRole('radio', { name: /^Owner/ })).toBeDisabled();
+  const unverifiedPanel = await openChangeRole(page, unverified.email);
+  await expect(unverifiedPanel.getByRole('radio', { name: /^Owner/ })).toBeDisabled();
   await expect(
-    unverifiedDialog.getByText(
+    unverifiedPanel.getByText(
       'An owner must have a verified email address, so this user cannot be an owner yet.',
     ),
   ).toBeVisible();
   // A lesser role is still assignable, so the refusal is specific to owner.
-  await expect(unverifiedDialog.getByRole('radio', { name: /^Viewer/ })).toBeEnabled();
-  await unverifiedDialog.getByRole('button', { name: 'Cancel' }).click();
-  await expect(unverifiedDialog).toBeHidden();
+  await expect(unverifiedPanel.getByRole('radio', { name: /^Viewer/ })).toBeEnabled();
+  await unverifiedPanel.getByRole('button', { name: 'Cancel' }).click();
+  await expect(unverifiedPanel).toBeHidden();
 
-  const bannedDialog = await openChangeRole(page, banned.email);
-  await expect(bannedDialog.getByRole('radio', { name: /^Owner/ })).toBeDisabled();
+  const bannedPanel = await openChangeRole(page, banned.email);
+  await expect(bannedPanel.getByRole('radio', { name: /^Owner/ })).toBeDisabled();
   await expect(
-    bannedDialog.getByText(
+    bannedPanel.getByText(
       'An owner must be an active account, so a banned user cannot be an owner.',
     ),
   ).toBeVisible();
@@ -286,24 +306,24 @@ test('a multi-role account shows every stored role and warns that saving replace
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/admin/users');
 
-  const dialog = await openChangeRole(page, target.email);
+  const panel = await openChangeRole(page, target.email);
   await expect(accessEntry(page, target.email)).toContainText('Viewer');
   await expect(accessEntry(page, target.email)).toContainText('Administrator');
-  await expect(dialog.getByText('Current: Viewer, Administrator')).toBeVisible();
-  await expect(dialog.getByText('Saving replaces all current roles.')).toBeVisible();
+  await expect(panel.getByText('Current: Viewer, Administrator')).toBeVisible();
+  await expect(panel.getByText('Saving replaces all current roles.')).toBeVisible();
   // No single role is preselected while two are stored.
   for (const name of [/^Viewer/, /^Administrator/]) {
-    await expect(dialog.getByRole('radio', { name })).not.toBeChecked();
+    await expect(panel.getByRole('radio', { name })).not.toBeChecked();
   }
 
-  await dialog.getByRole('radio', { name: /^User/ }).check();
-  await dialog.getByRole('button', { name: 'Save role' }).click();
-  await expect(dialog).toBeHidden();
+  await panel.getByRole('radio', { name: /^User/ }).check();
+  await panel.getByRole('button', { name: 'Save role' }).click();
+  await expect(panel).toBeHidden();
   expect(await readRole(target.id)).toBe('user');
   await expect(accessEntry(page, target.email)).toContainText('User');
 });
 
-test('a refused role change keeps the dialog open and the selection, then succeeds on retry', async ({
+test('a refused role change keeps the panel open and the selection, then succeeds on retry', async ({
   page,
   context,
   request,
@@ -328,15 +348,15 @@ test('a refused role change keeps the dialog open and the selection, then succee
   );
 
   const storedBefore = await readRole(target.id);
-  const dialog = await openChangeRole(page, target.email);
-  await dialog.getByRole('radio', { name: /^Viewer/ }).check();
-  await dialog.getByRole('button', { name: 'Save role' }).click();
+  const panel = await openChangeRole(page, target.email);
+  await panel.getByRole('radio', { name: /^Viewer/ }).check();
+  await panel.getByRole('button', { name: 'Save role' }).click();
 
-  await expect(dialog.getByText('Role not changed')).toBeVisible();
-  await expect(dialog.getByText(GENERIC_SAVE_FAILURE)).toBeVisible();
-  await expect(dialog.getByText(/alert\(1\)/)).toHaveCount(0);
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('radio', { name: /^Viewer/ })).toBeChecked();
+  await expect(panel.getByText('Role not changed')).toBeVisible();
+  await expect(panel.getByText(GENERIC_SAVE_FAILURE)).toBeVisible();
+  await expect(panel.getByText(/alert\(1\)/)).toHaveCount(0);
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('radio', { name: /^Viewer/ })).toBeChecked();
   expect(await readRole(target.id)).toBe(storedBefore);
 
   await page.unroute('**/api/auth/admin/set-role');
@@ -344,9 +364,9 @@ test('a refused role change keeps the dialog open and the selection, then succee
     (response) =>
       response.url().includes('/api/auth/admin/set-role') && response.request().method() === 'POST',
   );
-  await dialog.getByRole('button', { name: 'Save role' }).click();
+  await panel.getByRole('button', { name: 'Save role' }).click();
   expect((await setRoleCall).status()).toBe(200);
-  await expect(dialog).toBeHidden();
+  await expect(panel).toBeHidden();
   expect(await readRole(target.id)).toBe('viewer');
 });
 
@@ -443,6 +463,9 @@ const viewports = [
   { label: 'mobile-440x956', width: 440, height: 956 },
   { label: 'tablet-768x1024', width: 768, height: 1024 },
   { label: 'tablet-960x1440', width: 960, height: 1440 },
+  // The two sides of the dock breakpoint: the sheet at 1023 and the dock at 1024.
+  { label: 'tablet-1023x800', width: 1023, height: 800 },
+  { label: 'desktop-1024x800', width: 1024, height: 800 },
   { label: 'desktop-1280x800', width: 1280, height: 800 },
   { label: 'desktop-1440x900', width: 1440, height: 900 },
 ] as const;
@@ -495,27 +518,70 @@ test('the access screens fit every supported viewport in both themes', async ({
       await noOverflow();
 
       await row.getByRole('button', { name: 'Change role' }).click();
-      const dialog = page.getByRole('dialog');
-      await expect(dialog.getByText(target.email)).toBeVisible();
+      const panel = adminPanel(page, 'Change role');
+      await expect(panel.getByText(target.email)).toBeVisible();
+      const docked = viewport.width >= DESKTOP_PANEL_WIDTH;
+      await expect(panel).toHaveAttribute('data-mode', docked ? 'docked' : 'sheet');
+      // The dock is a landmark region beside the page; only the narrow fallback is a modal sheet.
+      await expect(panel).toHaveRole(docked ? 'region' : 'dialog');
 
-      // The dialog must stay inside the viewport and both actions must be reachable.
-      const box = await dialog.boundingBox();
-      expect(box, 'The change-role dialog must be laid out').not.toBeNull();
+      // The panel must stay inside the viewport and both actions must be reachable.
+      const box = await panel.boundingBox();
+      expect(box, 'The change-role panel must be laid out').not.toBeNull();
       expect(box!.x).toBeGreaterThanOrEqual(-1);
       expect(box!.y).toBeGreaterThanOrEqual(-1);
       expect(box!.width).toBeLessThanOrEqual(viewport.width + 1);
       expect(box!.height).toBeLessThanOrEqual(viewport.height + 1);
       for (const name of ['Cancel', 'Save role']) {
-        const action = dialog.getByRole('button', { name });
+        const action = panel.getByRole('button', { name });
         await action.scrollIntoViewIfNeeded();
         await expect(action).toBeVisible();
       }
-      await page.screenshot({ path: `${shot}-dialog.png` });
+
+      if (docked) {
+        // The dock sits flush against the right viewport edge at its fixed width, and nothing
+        // dims the page behind it: the directory stays visible and interactive.
+        const dock = page.locator('[data-slot="admin-panel-dock"]');
+        const dockBox = await dock.boundingBox();
+        expect(dockBox, 'The dock must be laid out beside the page').not.toBeNull();
+        expect(dockBox!.x + dockBox!.width).toBeGreaterThanOrEqual(viewport.width - 1);
+        expect(dockBox!.x + dockBox!.width).toBeLessThanOrEqual(viewport.width + 1);
+        expect(dockBox!.width).toBeCloseTo(viewport.width < 1280 ? DOCK_WIDTH : DOCK_WIDTH_WIDE, 0);
+        await expect(page.locator('[data-slot="sheet-overlay"]:visible')).toHaveCount(0);
+        // A docked panel is not modal, so the page behind it keeps its accessibility tree.
+        await expect(panel).not.toHaveAttribute('aria-modal', 'true');
+
+        // The directory's own search box still works while the panel is open.
+        const search = page.getByRole('textbox', { name: 'Search by name or email' });
+        await search.fill(target.email.toUpperCase());
+        await expect(search).toHaveValue(target.email.toUpperCase());
+        await expect(search).toBeFocused();
+        await expect(panel).toBeVisible();
+        await search.fill(target.email);
+        await expect(accessEntry(page, target.email)).toHaveCount(1);
+
+        // Tabbing out of the panel reaches the page again instead of cycling inside it.
+        await panel.getByRole('button', { name: 'Cancel' }).focus();
+        let escaped = false;
+        for (let press = 0; press < 25 && !escaped; press += 1) {
+          await page.keyboard.press('Tab');
+          escaped = await page.evaluate(() => {
+            const active = document.activeElement;
+            const panelNode = document.querySelector('[data-slot="admin-panel"]:not([hidden])');
+            return Boolean(active) && !panelNode?.contains(active);
+          });
+        }
+        expect(escaped, 'A docked panel must not trap keyboard focus').toBe(true);
+        await expect(panel).toBeVisible();
+      } else {
+        await expect(page.locator('[data-slot="sheet-overlay"]')).toBeVisible();
+      }
+      await page.screenshot({ path: `${shot}-panel.png` });
       await noOverflow();
 
-      // Escape closes the dialog and returns focus to the row trigger that opened it.
+      // Escape closes the panel and returns focus to the row trigger that opened it.
       await page.keyboard.press('Escape');
-      await expect(dialog).toBeHidden();
+      await expect(panel).toBeHidden();
       await expect(row.getByRole('button', { name: 'Change role' })).toBeFocused();
 
       for (const path of ['/admin/roles', '/admin/permissions']) {

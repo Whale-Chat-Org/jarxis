@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="t d">
+  <title id="t">Jarxis</title>
+  <desc id="d">Jarxis monogram: a geometric J on a rounded square tile.</desc>
+  <path fill="currentColor" fill-rule="evenodd" d="M0 14a14 14 0 0 1 14 -14h36a14 14 0 0 1 14 14v36a14 14 0 0 1 -14 14h-36a14 14 0 0 1 -14 -14Z M27 14 H47 V35 C47 45 41 50 32 50 C23 50 17 45 17 36 H27 C27 40 29 41 32 41 C35 41 37 39 37 35 V24 H27 Z"/>
+</svg>

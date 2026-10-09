@@ -45,6 +45,8 @@ export const designTokens = {
     'sidebar',
     'sidebar-mobile',
     'sidebar-icon',
+    'drawer',
+    'drawer-wide',
     'search',
     'select-sm',
     'select-md',
