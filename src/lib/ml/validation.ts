@@ -44,12 +44,6 @@ export const createConnectionSchema = z
         path: ['baseUrl'],
         message: 'Custom providers require an endpoint',
       });
-    if ((value.provider === 'codex' || value.provider === 'claude') && value.apiKey)
-      context.addIssue({
-        code: 'custom',
-        path: ['apiKey'],
-        message: 'Subscription providers require sign in',
-      });
   });
 export const updateConnectionSchema = z
   .object({
@@ -80,16 +74,6 @@ export const discoveryPreviewSchema = z
   });
 export const manualModelSchema = z.object({ upstreamId: modelIdSchema }).strict();
 export const gatewayKeySchema = z.object({ name }).strict();
-export const loginInputSchema = z
-  .object({
-    input: z
-      .string()
-      .trim()
-      .min(1)
-      .max(8192)
-      .regex(/^[^\x00-\x1f\x7f]+$/),
-  })
-  .strict();
 export type CreateConnectionInput = z.infer<typeof createConnectionSchema>;
 export type UpdateConnectionInput = z.infer<typeof updateConnectionSchema>;
 export type DiscoveryPreviewInput = z.infer<typeof discoveryPreviewSchema>;

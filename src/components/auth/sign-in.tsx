@@ -12,13 +12,7 @@ import { useState } from 'react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldSeparator,
-} from '@/components/ui/field';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
   InputGroup,
@@ -30,31 +24,25 @@ import { useSignInContinuation } from '@/lib/auth/use-sign-in-continuation';
 import { cn } from '@/lib/utils';
 import { isAuthFormFieldInvalid, useAuthForm } from './auth-form';
 import { LastUsedBadge } from './last-login-method/last-used-badge';
-import { ProviderButtons, type SocialLayout } from './provider-buttons';
 import { ReauthenticationNotice } from './reauthentication';
 
 export type SignInProps = {
   className?: string;
-  socialLayout?: SocialLayout;
-  socialPosition?: 'top' | 'bottom';
 };
 
 /**
- * Render the sign-in form UI with email/password, magic link, and social provider options.
+ * Render the email/password sign-in form.
  *
  * @param className - Optional additional container class names
- * @param socialLayout - Layout style for social provider buttons
- * @param socialPosition - Position of social provider buttons; `"top"` or `"bottom"`. Defaults to `"bottom"`.
  * @returns The rendered sign-in UI as a JSX element
  */
-export function SignIn({ className, socialLayout, socialPosition = 'bottom' }: SignInProps) {
+export function SignIn({ className }: SignInProps) {
   const {
     authClient,
     basePaths,
     emailAndPassword,
     localization,
     plugins,
-    socialProviders,
     viewPaths,
     navigate,
     Link,
@@ -103,8 +91,6 @@ export function SignIn({ className, socialLayout, socialPosition = 'bottom' }: S
       }),
   });
 
-  const showSeparator = emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;
-
   return (
     <Card className={cn('w-full max-w-narrow', className)}>
       <AuthPrompts view="signIn" />
@@ -115,20 +101,6 @@ export function SignIn({ className, socialLayout, socialPosition = 'bottom' }: S
 
       <CardContent>
         <div className="flex flex-col gap-xl">
-          {socialPosition === 'top' && (
-            <>
-              {socialProviders && socialProviders.length > 0 && (
-                <ProviderButtons socialLayout={socialLayout} view="signIn" />
-              )}
-
-              {showSeparator && (
-                <FieldSeparator className="m-none flex items-center text-caption *:data-[slot=field-separator-content]:bg-card">
-                  {localization.auth.or}
-                </FieldSeparator>
-              )}
-            </>
-          )}
-
           {emailAndPassword?.enabled && (
             <form.AppForm>
               <form.AuthFormRoot>
@@ -288,20 +260,6 @@ export function SignIn({ className, socialLayout, socialPosition = 'bottom' }: S
                 </FieldGroup>
               </form.AuthFormRoot>
             </form.AppForm>
-          )}
-
-          {socialPosition === 'bottom' && (
-            <>
-              {showSeparator && (
-                <FieldSeparator className="flex items-center text-caption *:data-[slot=field-separator-content]:bg-card">
-                  {localization.auth.or}
-                </FieldSeparator>
-              )}
-
-              {socialProviders && socialProviders.length > 0 && (
-                <ProviderButtons socialLayout={socialLayout} view="signIn" />
-              )}
-            </>
           )}
         </div>
 

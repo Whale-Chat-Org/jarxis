@@ -43,18 +43,10 @@ import {
   mlErrorMessage,
   readErrorCode,
 } from '@/lib/ml/errors';
-import { defaultBaseUrl } from '@/lib/ml/types';
+import { defaultBaseUrl, providerKinds } from '@/lib/ml/types';
 
-const providers = ['openai', 'anthropic', 'openrouter', 'custom', 'codex', 'claude'] as const;
+const providers = providerKinds;
 type Provider = (typeof providers)[number];
-type LoginJob = {
-  id: string;
-  status: string;
-  expiresAt: string;
-  loginUrl?: string | null;
-  instructions?: string | null;
-  error?: string | null;
-};
 type Model = {
   id: string;
   publicId: string;
@@ -75,7 +67,6 @@ type Connection = {
   discoveryError?: string | null;
   lastDiscoveredAt?: string | null;
   models: Model[];
-  loginJob?: LoginJob | null;
 };
 type GatewayKey = {
   id: string;
@@ -103,9 +94,6 @@ const emptyEditor: Editor = {
   priority: '0',
   manualModels: '',
 };
-const activeLogin = (job: LoginJob) => ['queued', 'running', 'waiting'].includes(job.status);
-const subscription = (provider: Provider) => provider === 'codex' || provider === 'claude';
-
 type PreviewModel = { id: string; name: string };
 type PreviewResult = {
   status: 'loading' | 'ok' | 'unsupported' | 'failed';
@@ -147,7 +135,7 @@ function validBaseUrl(value: string) {
 // Serialised discovery request body for a create-dialog draft, or null when the
 // draft cannot be previewed. Only the fields that affect the catalog are used.
 function previewKey(editor: Editor | null) {
-  if (!editor || editor.id || subscription(editor.provider)) return null;
+  if (!editor || editor.id) return null;
   const apiKey = editor.apiKey.trim();
   const baseUrl = editor.baseUrl.trim();
   if (!validApiKey(apiKey) || !validBaseUrl(baseUrl || defaultBaseUrl(editor.provider)))
@@ -185,8 +173,7 @@ function parseDiscovery(value: unknown): PreviewResult {
 }
 
 function creationNotice(connection: Connection | undefined) {
-  if (!connection || subscription(connection.provider))
-    return 'Connection saved. Model discovery is scheduled automatically.';
+  if (!connection) return 'Connection saved. Model discovery is scheduled automatically.';
   const discovered = connection.models?.filter((model) => model.discovered).length ?? 0;
   switch (connection.discoveryStatus) {
     case 'ok':
@@ -235,8 +222,6 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
     id: string;
     name: string;
   } | null>(null);
-  const [login, setLogin] = useState<LoginJob | null>(null);
-  const [loginInput, setLoginInput] = useState('');
   const [manualModels, setManualModels] = useState<Record<string, string>>({});
   const [keyName, setKeyName] = useState('');
   const [issuedKey, setIssuedKey] = useState<string | null>(null);
@@ -256,13 +241,11 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
 
   const dialogKey = editor
     ? `editor:${editor.id ?? 'new'}`
-    : login
-      ? `login:${login.id}`
-      : issuedKey !== null
-        ? 'issued-key'
-        : confirmation
-          ? `confirm:${confirmation.id}`
-          : null;
+    : issuedKey !== null
+      ? 'issued-key'
+      : confirmation
+        ? `confirm:${confirmation.id}`
+        : null;
   // Opening, closing or switching dialogs starts clean, even when the same dialog is reopened.
   const [seenDialogKey, setSeenDialogKey] = useState(dialogKey);
   if (seenDialogKey !== dialogKey) {
@@ -303,36 +286,6 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
       controller.abort();
     };
   }, [data, reload]);
-
-  useEffect(() => {
-    if (!login || !activeLogin(login)) return;
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      if (busyRef.current) {
-        setLogin((current) => (current ? { ...current } : current));
-        return;
-      }
-      void request<{ job: LoginJob }>(`/login/${login.id}`, 'GET', undefined, controller.signal)
-        .then(async ({ job }) => {
-          setLogin(job);
-          if (!activeLogin(job)) await reload(controller.signal);
-        })
-        .catch((failure) => {
-          if (!controller.signal.aborted)
-            setDialogError({
-              key: `login:${login.id}`,
-              message: mlErrorMessage(
-                failure,
-                'Sign-in status could not be updated. Use Check status to retry.',
-              ),
-            });
-        });
-    }, 3000);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [login, reload]);
 
   useEffect(() => {
     if (!requestKey) return;
@@ -511,9 +464,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
             <Card>
               <CardHeader>
                 <CardTitle>No provider connections</CardTitle>
-                <CardDescription>
-                  Add an API provider or connect a Codex or Claude subscription to get started.
-                </CardDescription>
+                <CardDescription>Add an API-key provider to get started.</CardDescription>
               </CardHeader>
             </Card>
           )}
@@ -608,38 +559,6 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                       </>
                     )}
                   </div>
-                  {subscription(connection.provider) && canManage && (
-                    <div className="flex flex-wrap gap-sm">
-                      <Button
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() =>
-                          void perform(async () => {
-                            const result = await request<{ job: LoginJob }>(
-                              `/${connection.id}/login`,
-                              'POST',
-                            );
-                            setLoginInput('');
-                            setLogin(result.job);
-                          })
-                        }
-                      >
-                        {connection.status === 'ready' ? 'Reconnect account' : 'Connect account'}
-                      </Button>
-                      {connection.loginJob && (
-                        <Button
-                          variant="outline"
-                          disabled={busy}
-                          onClick={() => {
-                            setLoginInput('');
-                            setLogin(connection.loginJob ?? null);
-                          }}
-                        >
-                          View login
-                        </Button>
-                      )}
-                    </div>
-                  )}
                   <div className="flex min-w-none flex-col gap-sm">
                     <h3 className="text-body-sm font-semibold">
                       Models ({connection.models.length})
@@ -788,10 +707,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
         <DialogContent className="max-h-svh overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editor?.id ? 'Edit connection' : 'Add connection'}</DialogTitle>
-            <DialogDescription>
-              API providers use an API key. Subscription providers connect through their vendor
-              login.
-            </DialogDescription>
+            <DialogDescription>Connect a provider using an API key.</DialogDescription>
           </DialogHeader>
           {editor && (
             <form className="flex min-w-none flex-col gap-stack" onSubmit={saveConnection}>
@@ -839,21 +755,19 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                   onChange={(event) => setEditor({ ...editor, baseUrl: event.target.value })}
                 />
               </Field>
-              {!subscription(editor.provider) && (
-                <Field>
-                  <FieldLabel htmlFor="connection-key">
-                    {editor.id ? 'Replace API key (optional)' : 'API key'}
-                  </FieldLabel>
-                  <Input
-                    id="connection-key"
-                    type="password"
-                    autoComplete="off"
-                    required={!editor.id}
-                    value={editor.apiKey}
-                    onChange={(event) => setEditor({ ...editor, apiKey: event.target.value })}
-                  />
-                </Field>
-              )}
+              <Field>
+                <FieldLabel htmlFor="connection-key">
+                  {editor.id ? 'Replace API key (optional)' : 'API key'}
+                </FieldLabel>
+                <Input
+                  id="connection-key"
+                  type="password"
+                  autoComplete="off"
+                  required={!editor.id}
+                  value={editor.apiKey}
+                  onChange={(event) => setEditor({ ...editor, apiKey: event.target.value })}
+                />
+              </Field>
               <Field>
                 <FieldLabel htmlFor="connection-priority">Priority</FieldLabel>
                 <Input
@@ -867,7 +781,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                   onChange={(event) => setEditor({ ...editor, priority: event.target.value })}
                 />
               </Field>
-              {!editor.id && !subscription(editor.provider) && (
+              {!editor.id && (
                 <section
                   aria-label="Model preview"
                   aria-live="polite"
@@ -951,115 +865,6 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                 <Button disabled={busy}>{busy && <Spinner />}Save connection</Button>
               </DialogFooter>
             </form>
-          )}
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={login !== null}
-        onOpenChange={(open) => {
-          if (!open && !busy) {
-            setLogin(null);
-            setLoginInput('');
-          }
-        }}
-      >
-        <DialogContent className="max-h-svh overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Connect subscription account</DialogTitle>
-            <DialogDescription>
-              Complete the vendor login. Closing this dialog leaves the login running until it
-              expires.
-            </DialogDescription>
-          </DialogHeader>
-          {login && (
-            <div className="flex min-w-none flex-col gap-stack">
-              <Badge className="w-fit" variant="outline">
-                {login.status}
-              </Badge>
-              <p className="text-body-sm">Expires {new Date(login.expiresAt).toLocaleString()}</p>
-              {login.instructions && (
-                <p className="text-body-sm break-words whitespace-pre-wrap">{login.instructions}</p>
-              )}
-              {login.loginUrl && activeLogin(login) && (
-                <Button asChild variant="outline">
-                  <a href={login.loginUrl} target="_blank" rel="noopener noreferrer">
-                    Open vendor login
-                  </a>
-                </Button>
-              )}
-              {login.error && (
-                <p role="alert" className="text-body-sm break-words">
-                  {login.error}
-                </p>
-              )}
-              {login.status === 'completed' && (
-                <p role="status" className="text-body-sm">
-                  Account connected. Model discovery is scheduled.
-                </p>
-              )}
-              {canManage && login.status === 'waiting' && (
-                <form
-                  className="flex flex-col gap-sm"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void perform(async () => {
-                      const result = await request<{ job: LoginJob }>(
-                        `/login/${login.id}`,
-                        'POST',
-                        { input: loginInput },
-                      );
-                      setLoginInput('');
-                      setLogin(result.job);
-                    });
-                  }}
-                >
-                  <Field>
-                    <FieldLabel htmlFor="login-input">Login code or requested input</FieldLabel>
-                    <Input
-                      id="login-input"
-                      type="password"
-                      autoComplete="off"
-                      required
-                      value={loginInput}
-                      onChange={(event) => setLoginInput(event.target.value)}
-                    />
-                  </Field>
-                  <Button disabled={busy}>Submit login input</Button>
-                </form>
-              )}
-              {shownDialogError && <DialogErrorMessage message={shownDialogError} />}
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    void perform(async () => {
-                      const result = await request<{ job: LoginJob }>(`/login/${login.id}`);
-                      setLogin(result.job);
-                      await reload();
-                    })
-                  }
-                >
-                  Check status
-                </Button>
-                {canManage && activeLogin(login) && (
-                  <Button
-                    variant="destructive"
-                    disabled={busy}
-                    onClick={() =>
-                      void perform(async () => {
-                        await request(`/login/${login.id}`, 'DELETE');
-                        setLogin(null);
-                        setLoginInput('');
-                        await reload();
-                      })
-                    }
-                  >
-                    Cancel login
-                  </Button>
-                )}
-              </DialogFooter>
-            </div>
           )}
         </DialogContent>
       </Dialog>

@@ -3,7 +3,21 @@ import { handler, json } from '@/lib/http';
 import { rateLimit, requestIP } from '@/lib/redis';
 export const runtime = 'nodejs';
 const run = handler(async (req) => {
-  const path = new URL(req.url).pathname;
+  const path = decodeURIComponent(new URL(req.url).pathname).replace(/\/+$/, '');
+  const endpoint = path.slice('/api/auth'.length);
+  if (
+    [
+      '/sign-in/social',
+      '/link-social',
+      '/unlink-account',
+      '/get-access-token',
+      '/refresh-token',
+      '/account-info',
+    ].includes(endpoint) ||
+    endpoint === '/callback' ||
+    endpoint.startsWith('/callback/')
+  )
+    return json({ error: { code: 'NOT_FOUND', message: 'Not found' } }, 404);
   // Scalar and the merged schema are served only through our guarded routes.
   if (path.endsWith('/reference') || path.endsWith('/open-api/generate-schema'))
     return json({ error: { code: 'NOT_FOUND', message: 'Not found' } }, 404);

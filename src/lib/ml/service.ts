@@ -1,6 +1,6 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import type { MlConnection, MlGatewayKey, MlLoginJob, MlModel } from '@prisma/client';
+import type { MlConnection, MlGatewayKey, MlModel } from '@prisma/client';
 import { db, type Transaction } from '@/db';
 import { HttpError } from '@/lib/errors';
 import { parseRoles } from '@/lib/permissions';
@@ -8,7 +8,7 @@ import { activeUserWhere } from '@/lib/rbac';
 import { encryptCredential, mintGatewayKey } from './crypto';
 import { discoverModels } from './discovery';
 import { validateDestination } from './network';
-import { defaultBaseUrl, isSubscription, type ProviderKind } from './types';
+import { defaultBaseUrl, type ProviderKind } from './types';
 import { storedDiscoveryFailureMessage } from './errors';
 import { poolModelId } from './model-id';
 import {
@@ -16,25 +16,18 @@ import {
   updateConnectionSchema,
   modelIdSchema,
   gatewayKeySchema,
-  loginInputSchema,
   discoveryPreviewSchema,
   type CreateConnectionInput,
   type DiscoveryPreviewInput,
   type UpdateConnectionInput,
 } from './validation';
 
-const activeJobs = ['queued', 'running', 'waiting'];
 const connectionInclude = {
   models: { orderBy: { upstreamId: 'asc' as const } },
-  loginJobs: { orderBy: { createdAt: 'desc' as const }, take: 1 },
 };
 function missing(): never {
   throw new HttpError(404, 'NOT_FOUND', 'ML resource not found');
 }
-function conflict(): never {
-  throw new HttpError(409, 'LOGIN_STATE', 'Login is not accepting this action');
-}
-
 async function owner(transaction: Transaction, actorId: string) {
   const user = await transaction.user.findFirst({
     where: { id: actorId, ...activeUserWhere() },
@@ -58,65 +51,7 @@ async function lockConnection(transaction: Transaction, id: string) {
   await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`ml:connection:${id}`}, 0))`;
 }
 
-export function loginDto(job: MlLoginJob, interactive = true) {
-  let loginUrl: string | null = null;
-  if (
-    interactive &&
-    job.loginUrl &&
-    activeJobs.includes(job.status) &&
-    job.expiresAt > new Date()
-  ) {
-    try {
-      const url = new URL(job.loginUrl);
-      if (
-        url.protocol === 'https:' &&
-        !url.username &&
-        !url.password &&
-        !url.hash &&
-        !url.port &&
-        job.loginUrl.length <= 4096 &&
-        ((url.hostname === 'auth.openai.com' && url.pathname === '/codex/device') ||
-          (['claude.ai', 'console.anthropic.com', 'platform.claude.com'].includes(url.hostname) &&
-            ['/oauth/authorize', '/oauth/authorize/'].includes(url.pathname))) &&
-        [...url.searchParams.keys()].every((key) =>
-          [
-            'client_id',
-            'response_type',
-            'redirect_uri',
-            'scope',
-            'state',
-            'code_challenge',
-            'code_challenge_method',
-            'organization_uuid',
-          ].includes(key),
-        )
-      )
-        loginUrl = url.toString();
-    } catch {}
-  }
-  return {
-    id: job.id,
-    connectionId: job.connectionId,
-    ownerId: job.ownerId,
-    status: job.status,
-    expiresAt: job.expiresAt.toISOString(),
-    loginUrl,
-    instructions: loginUrl
-      ? job.instructions &&
-        /^Open the vendor login page and enter device code [A-Z0-9]{4,5}-[A-Z0-9]{4,5}\.$/.test(
-          job.instructions,
-        )
-        ? job.instructions
-        : 'Open the vendor login page, then paste its authorization code here if requested.'
-      : null,
-    error: job.error ? 'Sign in failed. Start a new login to reconnect.' : null,
-    createdAt: job.createdAt.toISOString(),
-    updatedAt: job.updatedAt.toISOString(),
-  };
-}
-export function connectionDto(
-  connection: MlConnection & { models: MlModel[]; loginJobs: MlLoginJob[] },
-) {
+export function connectionDto(connection: MlConnection & { models: MlModel[] }) {
   return {
     id: connection.id,
     name: connection.name,
@@ -146,8 +81,6 @@ export function connectionDto(
       discovered: model.discovered,
       createdAt: model.createdAt.toISOString(),
     })),
-    // The pool is shared by owners, but the login flow belongs only to its initiator.
-    loginJob: connection.loginJobs[0] ? loginDto(connection.loginJobs[0], false) : null,
   };
 }
 export function gatewayKeyDto(record: MlGatewayKey) {
@@ -162,7 +95,6 @@ export function gatewayKeyDto(record: MlGatewayKey) {
   };
 }
 export type ConnectionDto = ReturnType<typeof connectionDto>;
-export type LoginDto = ReturnType<typeof loginDto>;
 export type GatewayKeyDto = ReturnType<typeof gatewayKeyDto>;
 
 export async function listConnections() {
@@ -213,8 +145,6 @@ export async function createConnection(
 ) {
   const value = createConnectionSchema.parse(input);
   const baseUrl = value.baseUrl ?? defaultBaseUrl(value.provider);
-  if (isSubscription(value.provider) && baseUrl !== defaultBaseUrl(value.provider))
-    throw new HttpError(400, 'INVALID_ENDPOINT', 'Subscription endpoint is fixed');
   await assertPublicEndpoint(baseUrl);
   const id = randomUUID();
   const encryptedCredential = value.apiKey ? encryptCredential({ apiKey: value.apiKey }, id) : null;
@@ -258,23 +188,8 @@ export async function updateConnection(actorId: string, id: string, input: Updat
     await lockConnection(transaction, id);
     const previous = await transaction.mlConnection.findUnique({ where: { id } });
     if (!previous) missing();
-    if (
-      isSubscription(previous.provider) &&
-      (value.apiKey ||
-        (value.baseUrl && value.baseUrl !== defaultBaseUrl(previous.provider as ProviderKind)))
-    )
-      throw new HttpError(
-        400,
-        'INVALID_CREDENTIAL',
-        'Subscription providers require vendor sign in and endpoint',
-      );
     const { apiKey, ...fields } = value;
     const reset = !!apiKey || !!value.baseUrl;
-    if (apiKey)
-      await transaction.mlLoginJob.updateMany({
-        where: { connectionId: id, status: { in: activeJobs } },
-        data: { status: 'canceled', encryptedInput: null, encryptedState: null },
-      });
     const connection = await transaction.mlConnection.update({
       where: { id },
       data: {
@@ -369,74 +284,5 @@ export async function revokeGatewayKey(actorId: string, id: string) {
       data: { revokedAt: new Date() },
     });
     await audit(transaction, actorId, 'key:revoke', id, {});
-  });
-}
-export async function startLogin(actorId: string, id: string) {
-  return db.$transaction(async (transaction) => {
-    await owner(transaction, actorId);
-    await lockConnection(transaction, id);
-    const connection = await transaction.mlConnection.findUnique({ where: { id } });
-    if (!connection) missing();
-    if (!isSubscription(connection.provider))
-      throw new HttpError(400, 'LOGIN_UNSUPPORTED', 'This provider uses an API key');
-    await transaction.mlLoginJob.updateMany({
-      where: { connectionId: id, status: { in: activeJobs } },
-      data: { status: 'canceled', encryptedInput: null, encryptedState: null },
-    });
-    const job = await transaction.mlLoginJob.create({
-      data: { connectionId: id, ownerId: actorId, expiresAt: new Date(Date.now() + 600000) },
-    });
-    await audit(transaction, actorId, 'login:start', job.id, { connectionId: id });
-    return loginDto(job);
-  });
-}
-export async function getLogin(actorId: string, id: string) {
-  const job = await db.mlLoginJob.findFirst({ where: { id, ownerId: actorId } });
-  if (!job) missing();
-  return loginDto(job);
-}
-export async function submitLogin(actorId: string, id: string, input: string) {
-  const value = loginInputSchema.parse({ input });
-  return db.$transaction(async (transaction) => {
-    await owner(transaction, actorId);
-    const job = await transaction.mlLoginJob.findFirst({ where: { id, ownerId: actorId } });
-    if (!job) missing();
-    const result = await transaction.mlLoginJob.updateMany({
-      where: {
-        id,
-        ownerId: actorId,
-        status: 'waiting',
-        encryptedInput: null,
-        expiresAt: { gt: new Date() },
-      },
-      data: { encryptedInput: encryptCredential(value.input, `login:${id}:input`) },
-    });
-    if (!result.count) conflict();
-    await audit(transaction, actorId, 'login:input', id, {});
-    const updated = await transaction.mlLoginJob.findUnique({ where: { id } });
-    if (!updated) missing();
-    return loginDto(updated);
-  });
-}
-export async function cancelLogin(actorId: string, id: string) {
-  return db.$transaction(async (transaction) => {
-    await owner(transaction, actorId);
-    const job = await transaction.mlLoginJob.findFirst({ where: { id, ownerId: actorId } });
-    if (!job) missing();
-    const result = await transaction.mlLoginJob.updateMany({
-      where: { id, ownerId: actorId, status: { in: activeJobs } },
-      data: {
-        status: 'canceled',
-        encryptedInput: null,
-        encryptedState: null,
-        loginUrl: null,
-        instructions: null,
-      },
-    });
-    if (!result.count) conflict();
-    await audit(transaction, actorId, 'login:cancel', id, {});
-    const updated = await transaction.mlLoginJob.findUnique({ where: { id } });
-    if (!updated) missing();
-    return loginDto(updated);
   });
 }

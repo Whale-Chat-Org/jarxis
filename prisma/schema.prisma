@@ -24,7 +24,6 @@ model MlConnection {
   createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
   models              MlModel[]
-  loginJobs           MlLoginJob[]
 
   @@index([nextDiscoveryAt])
   @@map("ml_connections")
@@ -55,27 +54,6 @@ model MlGatewayKey {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("ml_gateway_keys")
-}
-
-model MlLoginJob {
-  id             String       @id @default(uuid())
-  connectionId   String       @map("connection_id")
-  ownerId        String       @map("owner_id")
-  status         String       @default("queued")
-  expiresAt      DateTime     @map("expires_at") @db.Timestamptz(6)
-  encryptedState String?      @map("encrypted_state")
-  encryptedInput String?      @map("encrypted_input")
-  loginUrl       String?      @map("login_url")
-  instructions   String?
-  error          String?
-  claimedAt      DateTime?    @map("claimed_at") @db.Timestamptz(6)
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
-  connection     MlConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-
-  @@index([status, expiresAt])
-  @@index([connectionId, createdAt])
-  @@map("ml_login_jobs")
 }
 
 model User {

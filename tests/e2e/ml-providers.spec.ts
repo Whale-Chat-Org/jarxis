@@ -173,53 +173,30 @@ test('owner manages redacted connections and revocable application keys', async 
   ).toBeLessThan(300);
 });
 
-test('subscription login is bound to its initiating owner and cancellation rejects replay', async ({
+test('removed subscription providers and login routes are unavailable', async ({
   request,
+  context,
   baseURL,
 }) => {
-  const initiator = await register(request, baseURL!);
-  await verify(request, initiator.email, baseURL!);
-  await makeOwner(initiator.id);
-  await login(request, initiator.email, baseURL!);
+  await ownerSession(request, context, baseURL!);
   const headers = originHeaders(baseURL!);
-  const created = await request.post('/api/admin/ml-providers', {
-    headers,
-    data: { name: 'Isolated login fixture', provider: 'codex' },
-  });
-  expect(created.status(), await created.text()).toBe(201);
-  const { connection } = await created.json();
-  const started = await request.post(`/api/admin/ml-providers/${connection.id}/login`, { headers });
-  expect(started.status(), await started.text()).toBeLessThan(300);
-  const { job } = await started.json();
-  const other = await register(request, baseURL!);
-  await verify(request, other.email, baseURL!);
-  await makeOwner(other.id);
-  await login(request, other.email, baseURL!);
-  expect((await request.get(`/api/admin/ml-providers/login/${job.id}`)).status()).toBe(404);
-  expect(
-    (
-      await request.post(`/api/admin/ml-providers/login/${job.id}`, {
-        headers,
-        data: { input: 'fake-code' },
-      })
-    ).status(),
-  ).toBe(404);
-  expect(
-    (await request.delete(`/api/admin/ml-providers/login/${job.id}`, { headers })).status(),
-  ).toBe(404);
-  await login(request, initiator.email, baseURL!);
-  expect(
-    (await request.delete(`/api/admin/ml-providers/login/${job.id}`, { headers })).status(),
-  ).toBeLessThan(300);
-  expect(
-    (
-      await request.post(`/api/admin/ml-providers/login/${job.id}`, {
-        headers,
-        data: { input: 'fake-code' },
-      })
-    ).status(),
-  ).toBe(409);
-  await request.delete(`/api/admin/ml-providers/${connection.id}`, { headers });
+  for (const provider of ['codex', 'claude']) {
+    expect(
+      (
+        await request.post('/api/admin/ml-providers', {
+          headers,
+          data: { name: 'Removed provider', provider },
+        })
+      ).status(),
+    ).toBe(400);
+  }
+  expect((await request.post('/api/admin/ml-providers/removed/login', { headers })).status()).toBe(
+    404,
+  );
+  for (const method of ['get', 'post', 'delete'] as const)
+    expect(
+      (await request[method]('/api/admin/ml-providers/login/removed', { headers })).status(),
+    ).toBe(404);
 });
 
 test('owner provider screen reflows in both themes at all required viewports', async ({
@@ -382,10 +359,8 @@ test('model preview debounces credential input and ignores name and priority edi
   });
 
   await panel.getByRole('combobox', { name: 'Provider' }).click();
-  await page.getByRole('option', { name: 'codex', exact: true }).click();
-  await expect(preview).toHaveCount(0);
-  await settle(page);
-  expect(calls).toHaveLength(3);
+  await expect(page.getByRole('option', { name: 'codex', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('option', { name: 'claude', exact: true })).toHaveCount(0);
 });
 
 test('model preview discards stale successes and failures', async ({

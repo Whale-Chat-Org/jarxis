@@ -97,7 +97,7 @@ describe('client request parsing', () => {
     { tools: [{ type: 'web_search' }] },
   ])('rejects stateful or built-in Responses option %j', (extra) => {
     expect(() =>
-      parseGatewayRequest('responses', { model: 'codex/gpt-5', input: 'hi', ...extra }),
+      parseGatewayRequest('responses', { model: 'openai/gpt-5', input: 'hi', ...extra }),
     ).toThrow(expect.objectContaining({ code: 'UNSUPPORTED' }));
   });
 
@@ -124,9 +124,12 @@ describe('client request parsing', () => {
 
 describe('upstream request rendering', () => {
   it('maps providers to dialects', () => {
-    expect(
-      ['openai', 'openrouter', 'custom', 'codex', 'anthropic', 'claude'].map(upstreamDialect),
-    ).toEqual(['chat', 'chat', 'chat', 'responses', 'anthropic', 'anthropic']);
+    expect(['openai', 'openrouter', 'custom', 'anthropic'].map(upstreamDialect)).toEqual([
+      'chat',
+      'chat',
+      'chat',
+      'anthropic',
+    ]);
   });
 
   it('renders native Anthropic messages with tools and merged tool results', () => {
@@ -153,29 +156,10 @@ describe('upstream request rendering', () => {
 
   it('rejects options Anthropic cannot honour', () => {
     expect(() =>
-      renderUpstreamRequest(chat({ response_format: { type: 'json_object' } }), 'claude'),
+      renderUpstreamRequest(chat({ response_format: { type: 'json_object' } }), 'anthropic'),
     ).toThrow(expect.objectContaining({ code: 'UNSUPPORTED' }));
     expect(() => renderUpstreamRequest(chat({ temperature: 1.5 }), 'anthropic')).toThrow(
       ProtocolError,
-    );
-  });
-
-  it('renders stateless streaming Codex Responses', () => {
-    const body = renderUpstreamRequest(chat(), 'codex');
-    expect(body).toMatchObject({
-      model: 'claude-sonnet',
-      stream: true,
-      store: false,
-      instructions: 'Be brief',
-    });
-    expect(body.input).toEqual(
-      expect.arrayContaining([
-        { type: 'function_call', call_id: 'c1', name: 'lookup', arguments: '{"q":"a"}' },
-        { type: 'function_call_output', call_id: 'c2', output: 'B' },
-      ]),
-    );
-    expect(() => renderUpstreamRequest(chat({ temperature: 0.2 }), 'codex')).toThrow(
-      expect.objectContaining({ code: 'UNSUPPORTED' }),
     );
   });
 

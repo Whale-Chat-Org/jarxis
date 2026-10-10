@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   user: { findFirst: vi.fn() },
   session: { findFirst: vi.fn() },
   mlConnection: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
-  mlLoginJob: { findFirst: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
   mlGatewayKey: { create: vi.fn(), findMany: vi.fn() },
   auditLog: { create: vi.fn() },
   execute: vi.fn(),
@@ -21,7 +20,6 @@ vi.mock('@/db', () => ({
     user: mocks.user,
     session: mocks.session,
     mlConnection: mocks.mlConnection,
-    mlLoginJob: mocks.mlLoginJob,
     mlGatewayKey: mocks.mlGatewayKey,
     auditLog: mocks.auditLog,
   },
@@ -39,12 +37,8 @@ import { requireMlOwner } from '@/lib/ml/admin-auth';
 import {
   connectionDto,
   createConnection,
-  getLogin,
   issueGatewayKey,
-  loginDto,
   scheduleRefresh,
-  startLogin,
-  submitLogin,
   updateConnection,
 } from '@/lib/ml/service';
 import { createConnectionSchema, updateConnectionSchema } from '@/lib/ml/validation';
@@ -53,21 +47,6 @@ import { flattenStatements, isAllowed, roles } from '@/lib/permissions';
 import { GET, POST } from '@/app/api/admin/ml-providers/route';
 
 const now = new Date();
-const job = {
-  id: 'job',
-  connectionId: 'connection',
-  ownerId: 'owner',
-  status: 'waiting',
-  expiresAt: new Date(Date.now() + 600000),
-  encryptedState: 'secret-state',
-  encryptedInput: null,
-  loginUrl: 'https://claude.ai/oauth/authorize?state=public-state',
-  instructions: 'raw secret output',
-  error: 'raw secret error',
-  claimedAt: now,
-  createdAt: now,
-  updatedAt: now,
-};
 const connection = {
   id: 'connection',
   name: 'Provider',
@@ -86,7 +65,6 @@ const connection = {
   createdAt: now,
   updatedAt: now,
   models: [],
-  loginJobs: [job],
 };
 beforeEach(() => {
   vi.resetAllMocks();
@@ -99,9 +77,6 @@ beforeEach(() => {
   mocks.mlConnection.findUnique.mockResolvedValue(connection);
   mocks.mlConnection.create.mockResolvedValue(connection);
   mocks.mlConnection.update.mockResolvedValue(connection);
-  mocks.mlLoginJob.findFirst.mockResolvedValue(job);
-  mocks.mlLoginJob.findUnique.mockResolvedValue(job);
-  mocks.mlLoginJob.updateMany.mockResolvedValue({ count: 1 });
 });
 afterEach(() => vi.unstubAllEnvs());
 describe('ML management authorization', () => {
@@ -157,21 +132,6 @@ describe('ML management records', () => {
     ])
       expect(text).not.toContain(secret);
     expect(connectionDto(connection).createdAt).toBe(now.toISOString());
-    expect(connectionDto(connection).loginJob?.loginUrl).toBeNull();
-    expect(connectionDto(connection).loginJob?.instructions).toBeNull();
-    expect(loginDto({ ...job, loginUrl: 'https://evil.test/steal' }).loginUrl).toBeNull();
-    expect(loginDto({ ...job, expiresAt: new Date(0) }).loginUrl).toBeNull();
-    expect(
-      loginDto({ ...job, loginUrl: 'https://claude.ai/oauth/authorize?access_token=secret' })
-        .loginUrl,
-    ).toBeNull();
-    expect(
-      loginDto({
-        ...job,
-        loginUrl: 'https://auth.openai.com/codex/device',
-        instructions: 'Open the vendor login page and enter device code ABCD-1234.',
-      }).instructions,
-    ).toContain('ABCD-1234');
   });
   it('encrypts API keys with the connection ID and redacts the atomic audit', async () => {
     await createConnection('owner', {
@@ -245,33 +205,8 @@ describe('ML management records', () => {
     expect(issued.record).not.toHaveProperty('hash');
     expect(JSON.stringify(mocks.auditLog.create.mock.calls)).not.toContain(issued.key);
   });
-  it('restricts jobs to the initiating owner and rejects stale login input', async () => {
-    mocks.mlLoginJob.findFirst.mockResolvedValue(null);
-    await expect(getLogin('other', 'job')).rejects.toMatchObject({ status: 404 });
-    expect(mocks.mlLoginJob.findFirst).toHaveBeenCalledWith({
-      where: { id: 'job', ownerId: 'other' },
-    });
-    mocks.mlLoginJob.findFirst.mockResolvedValue(job);
-    mocks.mlLoginJob.updateMany.mockResolvedValue({ count: 0 });
-    await expect(submitLogin('owner', 'job', 'login-code')).rejects.toMatchObject({ status: 409 });
-    expect(mocks.mlLoginJob.updateMany.mock.calls[0][0].where).toMatchObject({
-      status: 'waiting',
-      ownerId: 'owner',
-      encryptedInput: null,
-    });
-    expect(mocks.auditLog.create).not.toHaveBeenCalled();
-  });
-  it('encrypts pasted input with a purpose-specific context and audits no code', async () => {
-    await submitLogin('owner', 'job', 'login-code');
-    const encrypted = mocks.mlLoginJob.updateMany.mock.calls[0][0].data.encryptedInput;
-    expect(decryptCredential(encrypted, 'login:job:input')).toBe('login-code');
-    expect(JSON.stringify(mocks.auditLog.create.mock.calls)).not.toContain('login-code');
-  });
-  it('rejects login for API providers', async () => {
-    await expect(startLogin('owner', 'connection')).rejects.toMatchObject({ status: 400 });
-    expect(mocks.mlLoginJob.create).not.toHaveBeenCalled();
-  });
-  it('validates strict inputs and subscription credentials', () => {
+
+  it('validates strict inputs and rejects removed providers', () => {
     expect(createConnectionSchema.safeParse({ name: 'Custom', provider: 'custom' }).success).toBe(
       false,
     );
@@ -282,6 +217,9 @@ describe('ML management records', () => {
         apiKey: 'secret',
       }).success,
     ).toBe(false);
+    expect(createConnectionSchema.safeParse({ name: 'Removed', provider: 'claude' }).success).toBe(
+      false,
+    );
     expect(updateConnectionSchema.safeParse({ encryptedCredential: 'attacker' }).success).toBe(
       false,
     );

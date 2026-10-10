@@ -9,8 +9,6 @@ x-app-env: &app-env
   MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM to a Brevo-verified sender in .env}
   TRUST_PROXY: ${TRUST_PROXY:-false}
   ML_ENCRYPTION_KEY: ${ML_ENCRYPTION_KEY:?Set ML_ENCRYPTION_KEY to an independent 64-character hex key}
-  ML_CODEX_OAUTH_CLIENT_ID: ${ML_CODEX_OAUTH_CLIENT_ID:-}
-  ML_CLAUDE_OAUTH_CLIENT_ID: ${ML_CLAUDE_OAUTH_CLIENT_ID:-}
 services:
   postgres:
     image: postgres:latest
@@ -44,11 +42,7 @@ services:
     build:
       context: .
       target: worker
-      args:
-        CODEX_CLI_VERSION: ${ML_CODEX_CLI_VERSION:-0.160.0}
-        CLAUDE_CLI_VERSION: ${ML_CLAUDE_CLI_VERSION:-2.1.288}
     environment: *app-env
-    volumes: [ml-worker-state:/var/lib/jarxis-ml]
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
@@ -69,4 +63,3 @@ services:
 volumes:
   postgres-data:
   redis-data:
-  ml-worker-state:

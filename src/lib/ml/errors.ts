@@ -7,9 +7,6 @@ import { safeActionErrorMessage } from '@/lib/action-errors';
 const ML_CODE_MESSAGES: Record<string, string> = {
   INVALID_ENDPOINT:
     'Use a public HTTPS base URL. Private, local and redirecting endpoints are blocked.',
-  INVALID_CREDENTIAL: 'Subscription providers connect through vendor sign-in, not an API key.',
-  LOGIN_UNSUPPORTED: 'This provider uses an API key, so there is no sign-in to start.',
-  LOGIN_STATE: 'This sign-in is no longer accepting input. Start a new sign-in.',
   NOT_FOUND: 'This item no longer exists. Reload to see the latest providers.',
   VALIDATION_ERROR: 'Some details are invalid. Check the form and try again.',
   INVALID_JSON: 'That request was invalid. Reload the page and try again.',
@@ -84,7 +81,7 @@ export function discoveryFailureMessage(
     case 'auth':
       return `The provider rejected this API key${status}. Check that the key is valid and allowed to list models.`;
     case 'credential':
-      return 'The saved credential could not be used. Replace the API key, or sign in again for subscriptions.';
+      return 'The saved credential could not be used. Replace the API key.';
     case 'rate_limited':
       return `The provider is rate limiting this key${status}. ${
         retryAfterSeconds

@@ -21,6 +21,14 @@ function makeAuth() {
     appName: 'Jarxis',
     baseURL: e.BETTER_AUTH_URL,
     secret: e.BETTER_AUTH_SECRET,
+    disabledPaths: [
+      '/sign-in/social',
+      '/link-social',
+      '/unlink-account',
+      '/get-access-token',
+      '/refresh-token',
+      '/account-info',
+    ],
     trustedOrigins: [new URL(e.BETTER_AUTH_URL).origin],
     database: prismaAdapter(db, { provider: 'postgresql' }),
     emailAndPassword: {

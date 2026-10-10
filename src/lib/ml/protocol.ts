@@ -5,7 +5,7 @@ import { z } from 'zod';
  * Wire translation for the gateway.
  *
  * The gateway speaks two client dialects (OpenAI Chat Completions and OpenAI Responses) and three
- * upstream dialects (OpenAI-compatible Chat, OpenAI Responses including the Codex backend, and
+ * upstream dialects (OpenAI-compatible Chat, OpenAI Responses, and
  * native Anthropic Messages). Rather than translating N x M, every request is parsed into a
  * canonical form here and each adapter renders that canonical form, both for the request and for
  * the response and stream events.
@@ -1428,11 +1428,7 @@ export function createUpstreamStreamParser(dialect: UpstreamDialect) {
 }
 
 export function upstreamDialect(provider: string): UpstreamDialect {
-  return provider === 'codex'
-    ? 'responses'
-    : provider === 'anthropic' || provider === 'claude'
-      ? 'anthropic'
-      : 'chat';
+  return provider === 'anthropic' ? 'anthropic' : 'chat';
 }
 
 export function renderUpstreamRequest(
@@ -1566,56 +1562,6 @@ export function renderUpstreamRequest(
       ? { parallel_tool_calls: request.parallelToolCalls }
       : {}),
   };
-  if (dialect === 'responses') {
-    if (
-      request.stop ||
-      request.temperature !== undefined ||
-      request.topP !== undefined ||
-      request.maxOutputTokens !== undefined ||
-      request.user ||
-      (request.responseFormat?.kind !== undefined && request.responseFormat.kind !== 'text')
-    )
-      unsupported('This option is unsupported on Codex Responses');
-    const input = request.messages.flatMap((message): unknown[] => {
-      if (message.role === 'tool')
-        return [
-          {
-            type: 'function_call_output',
-            call_id: message.result.toolCallId,
-            output: message.result.content,
-          },
-        ];
-      const text = message.content.map((part) => ('text' in part ? part.text : '')).join('\n');
-      return [
-        ...(text
-          ? [
-              {
-                role: message.role,
-                content: [
-                  { type: message.role === 'assistant' ? 'output_text' : 'input_text', text },
-                ],
-              },
-            ]
-          : []),
-        ...(message.role === 'assistant'
-          ? message.toolCalls.map((call) => ({
-              type: 'function_call',
-              call_id: call.id,
-              name: call.name,
-              arguments: call.arguments,
-            }))
-          : []),
-      ];
-    });
-    return {
-      ...common,
-      stream: true,
-      store: false,
-      instructions: request.system.join('\n\n'),
-      input,
-      ...options,
-    };
-  }
   const messages = [
     ...request.system.map((content) => ({ role: 'system', content })),
     ...request.messages.map((message) =>

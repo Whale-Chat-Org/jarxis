@@ -15,14 +15,7 @@ import { useIsMutating } from '@tanstack/react-query';
 import { Eye, EyeOff } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-  FieldSeparator,
-} from '@/components/ui/field';
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
   InputGroup,
@@ -33,22 +26,19 @@ import {
 import { cn } from '@/lib/utils';
 import { getAuthAdditionalFieldValidators, isAuthFormFieldInvalid, useAuthForm } from './auth-form';
 import { PasswordStrengthMeter } from './password-strength-meter';
-import { ProviderButtons, type SocialLayout } from './provider-buttons';
 
 export type SignUpProps = {
   className?: string;
-  socialLayout?: SocialLayout;
-  socialPosition?: 'top' | 'bottom';
   /**
    * Runs instead of the post-sign-up redirect, but only when the sign-up
    * created an immediately usable session. Email verification still takes
-   * priority, and social sign-ups are unaffected.
+   * priority.
    */
   onSignUpSuccess?: () => void;
 };
 
 /**
- * Renders a sign-up form with name, email, and password fields, optional social provider buttons, and submission handling.
+ * Renders a sign-up form with name, email, and password fields, and submission handling.
  *
  * Submits credentials to the configured auth client and handles the response:
  * - If email verification is required, shows a notification and navigates to sign-in
@@ -57,17 +47,10 @@ export type SignUpProps = {
  * - Manages a pending state while the request is in-flight
  *
  * @param className - Additional CSS classes applied to the outer container
- * @param socialLayout - Social layout to apply to the component
- * @param socialPosition - Social position to apply to the component
  * @param onSignUpSuccess - Replaces the post-sign-up redirect when the new account is immediately usable
  * @returns The sign-up form React element.
  */
-export function SignUp({
-  className,
-  socialLayout,
-  socialPosition = 'bottom',
-  onSignUpSuccess,
-}: SignUpProps) {
+export function SignUp({ className, onSignUpSuccess }: SignUpProps) {
   const {
     additionalFields,
     authClient,
@@ -76,7 +59,6 @@ export function SignUp({
     localization,
     plugins,
     redirectTo,
-    socialProviders,
     viewPaths,
     navigate,
     Link,
@@ -151,8 +133,6 @@ export function SignUp({
     },
   });
 
-  const showSeparator = emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;
-
   return (
     <Card className={cn('w-full max-w-narrow', className)}>
       <AuthPrompts view="signUp" />
@@ -162,20 +142,6 @@ export function SignUp({
 
       <CardContent>
         <div className="flex flex-col gap-xl">
-          {socialPosition === 'top' && (
-            <>
-              {socialProviders && socialProviders.length > 0 && (
-                <ProviderButtons socialLayout={socialLayout} view="signUp" />
-              )}
-
-              {showSeparator && (
-                <FieldSeparator className="flex items-center text-caption *:data-[slot=field-separator-content]:bg-card">
-                  {localization.auth.or}
-                </FieldSeparator>
-              )}
-            </>
-          )}
-
           {emailAndPassword?.enabled && (
             <form.AppForm>
               <form.AuthFormRoot>
@@ -475,20 +441,6 @@ export function SignUp({
                 </FieldGroup>
               </form.AuthFormRoot>
             </form.AppForm>
-          )}
-
-          {socialPosition === 'bottom' && (
-            <>
-              {showSeparator && (
-                <FieldSeparator className="flex items-center text-caption *:data-[slot=field-separator-content]:bg-card">
-                  {localization.auth.or}
-                </FieldSeparator>
-              )}
-
-              {socialProviders && socialProviders.length > 0 && (
-                <ProviderButtons socialLayout={socialLayout} view="signUp" />
-              )}
-            </>
           )}
         </div>
 
