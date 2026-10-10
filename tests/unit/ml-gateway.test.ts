@@ -18,7 +18,7 @@ vi.mock('@/db', () => ({
   },
 }));
 vi.mock('@/lib/redis', () => ({ rateLimit: mocks.rateLimit }));
-vi.mock('@/lib/ml/login', () => ({ getUsableCredential: mocks.credential }));
+vi.mock('@/lib/ml/credential', () => ({ getUsableCredential: mocks.credential }));
 vi.mock('@/lib/ml/network', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/ml/network')>()),
   safeFetch: mocks.fetch,
@@ -132,7 +132,7 @@ describe('model listing', () => {
   it('lists provider-qualified models including cooled connections', async () => {
     mocks.connections.mockResolvedValue([
       connection('a', 'anthropic', { cooldownUntil: new Date(Date.now() + 60000) }),
-      connection('b', 'codex'),
+      connection('b', 'openrouter'),
     ]);
     const response = await handleGateway(
       new Request('https://gateway.test/api/llm/v1/models', {
@@ -143,7 +143,7 @@ describe('model listing', () => {
     const body = await response.json();
     expect(body.data.map((model: { id: string }) => model.id)).toEqual([
       'anthropic/shared',
-      'codex/shared',
+      'openrouter/shared',
     ]);
     expect(mocks.connections).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -194,6 +194,26 @@ describe('request validation', () => {
 });
 
 describe('routing and failover', () => {
+  it('keeps the Responses endpoint working with an API-key provider', async () => {
+    mocks.fetch.mockResolvedValue(chatResult('API-key response'));
+    const response = await handleGateway(
+      post({ model: 'openai/shared', input: 'Hi' }, 'responses'),
+      ['responses'],
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      object: 'response',
+      output: [{ type: 'message', content: [{ type: 'output_text', text: 'API-key response' }] }],
+    });
+    const [url, init] = mocks.fetch.mock.calls[0];
+    expect(url).toBe('https://api.openai.com/v1/chat/completions');
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer sk' });
+    expect(JSON.parse(init.body)).toMatchObject({
+      model: 'shared',
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+  });
+
   it('strips the provider and translates native Anthropic responses', async () => {
     mocks.connections.mockResolvedValue([connection('a', 'anthropic')]);
     mocks.credential.mockResolvedValue({ apiKey: 'ak' });
@@ -218,27 +238,6 @@ describe('routing and failover', () => {
     expect(url).toBe('https://api.anthropic.com/v1/messages');
     expect(init.headers).toMatchObject({ 'x-api-key': 'ak', 'anthropic-version': '2023-06-01' });
     expect(JSON.parse(init.body)).toMatchObject({ model: 'shared', messages: [{ role: 'user' }] });
-  });
-
-  it('uses Codex Responses with subscription headers and collects the stream for non-streaming clients', async () => {
-    mocks.connections.mockResolvedValue([connection('a', 'codex')]);
-    mocks.credential.mockResolvedValue({ accessToken: 'at', accountId: 'acct' });
-    mocks.fetch.mockResolvedValue(
-      sse([
-        { type: 'response.created', response: { id: 'r' } },
-        { type: 'response.output_text.delta', delta: 'Yo' },
-        { type: 'response.completed', response: { usage: { input_tokens: 1, output_tokens: 1 } } },
-      ]),
-    );
-    const response = await handleGateway(post(chatBody('codex/shared')), ['chat', 'completions']);
-    expect(await response.json()).toMatchObject({ choices: [{ message: { content: 'Yo' } }] });
-    const [url, init] = mocks.fetch.mock.calls[0];
-    expect(url).toBe('https://chatgpt.com/backend-api/codex/responses');
-    expect(init.headers).toMatchObject({
-      Authorization: 'Bearer at',
-      'ChatGPT-Account-Id': 'acct',
-    });
-    expect(JSON.parse(init.body)).toMatchObject({ store: false, stream: true });
   });
 
   it('fails over on 429 and records the Retry-After cooldown', async () => {
@@ -360,9 +359,28 @@ describe('routing and failover', () => {
 });
 
 describe('streaming', () => {
+  it('streams Responses events from an API-key Chat upstream', async () => {
+    mocks.fetch.mockResolvedValue(
+      sse([
+        { id: 'c', choices: [{ delta: { content: 'Hello' } }] },
+        { id: 'c', choices: [{ delta: {}, finish_reason: 'stop' }] },
+        '[DONE]',
+      ]),
+    );
+    const response = await handleGateway(
+      post({ model: 'openai/shared', input: 'Hi', stream: true }, 'responses'),
+      ['responses'],
+    );
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    const text = await response.text();
+    expect(text).toContain('response.output_text.delta');
+    expect(text).toContain('Hello');
+    expect(text).toContain('response.completed');
+  });
+
   it('translates Anthropic SSE into Chat chunks', async () => {
-    mocks.connections.mockResolvedValue([connection('a', 'claude')]);
-    mocks.credential.mockResolvedValue({ accessToken: 'oauth' });
+    mocks.connections.mockResolvedValue([connection('a', 'anthropic')]);
+    mocks.credential.mockResolvedValue({ apiKey: 'ak' });
     mocks.fetch.mockResolvedValue(
       sse([
         { type: 'message_start', message: { id: 'm', usage: { input_tokens: 1 } } },
@@ -372,7 +390,7 @@ describe('streaming', () => {
       ]),
     );
     const response = await handleGateway(
-      post(chatBody('claude/shared', { stream: true, stream_options: { include_usage: true } })),
+      post(chatBody('anthropic/shared', { stream: true, stream_options: { include_usage: true } })),
       ['chat', 'completions'],
     );
     expect(response.headers.get('content-type')).toContain('text/event-stream');
@@ -381,8 +399,8 @@ describe('streaming', () => {
     expect(text).toContain('"total_tokens":2');
     expect(text.trim().endsWith('data: [DONE]')).toBe(true);
     expect(mocks.fetch.mock.calls[0][1].headers).toMatchObject({
-      Authorization: 'Bearer oauth',
-      'anthropic-beta': 'oauth-2025-04-20',
+      'x-api-key': 'ak',
+      'anthropic-version': '2023-06-01',
     });
   });
 

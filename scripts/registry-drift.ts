@@ -369,11 +369,23 @@ const TOKEN_MAP: Record<string, string> = {
  * for drift.
  */
 const OMITTED: Record<string, string> = {
+  'src/components/auth/provider-button.tsx': 'OAuth removed; email/password authentication only',
+  'src/components/auth/provider-buttons.tsx': 'OAuth removed; email/password authentication only',
+  'src/components/auth/settings/security/linked-account.tsx': 'OAuth account linking removed',
+  'src/components/auth/settings/security/linked-accounts.tsx': 'OAuth account linking removed',
   'src/components/auth/admin/admin.tsx':
     "the plugin's own horizontal-tab administration shell; this repo keeps the shadcn Sidebar shell and renders AdminUsers inside it",
 };
 
 const REVIEWED: Record<string, string> = {
+  'src/components/auth/auth.tsx': 'OAuth removed: no social layout props or forwarding',
+  'src/components/auth/sign-in.tsx':
+    'OAuth removed: email/password only, no social buttons or separators',
+  'src/components/auth/sign-up.tsx':
+    'OAuth removed: email/password only; optional onSignUpSuccess preserves verification priority',
+  'src/components/auth/settings/security/security-settings.tsx':
+    'OAuth removed: no linked accounts card',
+  'src/lib/auth/auth-plugin.ts': 'OAuth removed: no social layout props',
   'src/components/auth/sign-out.tsx':
     'a failed sign-out keeps the user on the current view and offers a retry; only a successful sign-out redirects, while Sonner owns failure feedback',
   'src/components/auth/additional-field.tsx':
@@ -388,8 +400,6 @@ const REVIEWED: Record<string, string> = {
     'raw <input type="file"> replaced by the Input primitive, plus managed-blob cleanup after avatar replacement and failed profile updates; cleanup failures warn instead of logging, and update failures use the safe error helper and skip errors already handled by the toaster',
   'src/components/auth/settings/security/active-sessions.tsx':
     'the session list error renders safe localized copy with role="alert" and a retry button that refetches, instead of the raw error.message',
-  'src/components/auth/settings/security/linked-account.tsx':
-    'the unlink error handler no longer logs the raw error before toasting the localized message',
   'src/components/auth/settings/account/user-profile.tsx':
     'profile form initialization is guarded by user id so controlled-field changes are not reset during rerenders',
   'src/lib/auth/two-factor-methods.ts':

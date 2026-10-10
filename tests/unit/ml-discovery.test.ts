@@ -22,7 +22,7 @@ vi.mock('@/db', () => ({
       }),
   },
 }));
-vi.mock('@/lib/ml/login', () => ({ getUsableCredential: mocks.credential }));
+vi.mock('@/lib/ml/credential', () => ({ getUsableCredential: mocks.credential }));
 vi.mock('@/lib/ml/network', async (original) => ({
   NetworkError: (await original<typeof import('@/lib/ml/network')>()).NetworkError,
   safeFetch: mocks.fetch,
@@ -139,47 +139,6 @@ describe('refreshConnection', () => {
     expect(mocks.updateMany).not.toHaveBeenCalled();
   });
 
-  it('reads the Codex model catalog without marking it unsupported', async () => {
-    mocks.findUnique.mockImplementation(async () =>
-      row({
-        provider: 'codex',
-        baseUrl: 'https://chatgpt.com/backend-api/codex',
-        encryptedCredential: JSON.stringify({ accessToken: 'at', accountId: 'acct' }),
-        nextDiscoveryAt: claimedAt ?? due,
-      }),
-    );
-    mocks.txFind.mockImplementation(async () =>
-      row({
-        provider: 'codex',
-        baseUrl: 'https://chatgpt.com/backend-api/codex',
-        encryptedCredential: JSON.stringify({ accessToken: 'at', accountId: 'acct' }),
-        nextDiscoveryAt: claimedAt,
-      }),
-    );
-    mocks.credential.mockResolvedValue({ accessToken: 'at', accountId: 'acct' });
-    mocks.fetch.mockResolvedValue(
-      Response.json({
-        models: [
-          { slug: 'gpt-5-codex', display_name: 'GPT-5 Codex', visibility: 'list' },
-          { slug: 'internal', visibility: 'hide' },
-        ],
-      }),
-    );
-    await refreshConnection('c1');
-    const url = mocks.fetch.mock.calls[0][0] as URL;
-    expect(url.pathname).toBe('/backend-api/codex/models');
-    expect(url.searchParams.get('client_version')).toBe('0.160.0');
-    expect(mocks.fetch.mock.calls[0][1].headers).toMatchObject({
-      Authorization: 'Bearer at',
-      'ChatGPT-Account-Id': 'acct',
-    });
-    expect(mocks.upsert.mock.calls.map((call) => call[0].create.upstreamId)).toEqual([
-      'gpt-5-codex',
-    ]);
-    expect(mocks.update.mock.calls[0][0].data.discoveryStatus).toBe('ok');
-    expect(JSON.stringify(mocks.updateMany.mock.calls)).not.toContain('unsupported');
-  });
-
   it('follows Anthropic pagination', async () => {
     mocks.findUnique.mockImplementation(async () =>
       row({ provider: 'anthropic', nextDiscoveryAt: claimedAt ?? due }),
@@ -217,26 +176,6 @@ describe('refreshConnection', () => {
     await refreshConnection('c1');
     expect(mocks.upsert).not.toHaveBeenCalled();
     expect(mocks.updateMany.mock.calls.at(-1)![0].data.discoveryStatus).toBe('failed');
-  });
-
-  it('uses the refreshed credential snapshot after token refresh', async () => {
-    const refreshed = JSON.stringify({ accessToken: 'new', expiresAt: 1 });
-    mocks.findUnique.mockImplementation(async () =>
-      claimedAt
-        ? row({ provider: 'claude', encryptedCredential: refreshed, nextDiscoveryAt: claimedAt })
-        : row({ provider: 'claude', encryptedCredential: JSON.stringify({ accessToken: 'old' }) }),
-    );
-    mocks.txFind.mockImplementation(async () =>
-      row({ provider: 'claude', encryptedCredential: refreshed, nextDiscoveryAt: claimedAt }),
-    );
-    mocks.credential.mockResolvedValue({ accessToken: 'new', expiresAt: 1 });
-    mocks.fetch.mockResolvedValue(Response.json({ data: [{ id: 'claude-x' }] }));
-    await refreshConnection('c1');
-    expect(mocks.fetch.mock.calls[0][1].headers).toMatchObject({
-      Authorization: 'Bearer new',
-      'anthropic-beta': 'oauth-2025-04-20',
-    });
-    expect(mocks.update).toHaveBeenCalled();
   });
 
   it('abandons the run when the credential changed underneath it', async () => {

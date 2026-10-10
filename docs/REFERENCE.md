@@ -75,14 +75,13 @@ The API supports users, user-role assignments, custom roles, permission catalog,
 
 ## ML provider pool
 
-Owners manage connections and application keys at `/admin/ml-providers`. API-key providers and
-isolated ChatGPT/Codex or Claude subscription login jobs share a priority-ordered model pool.
+Owners manage connections and application keys at `/admin/ml-providers`. OpenAI, Anthropic, OpenRouter and custom API-key providers share a priority-ordered model pool.
 The persistent worker discovers model catalogs on connection and hourly thereafter.
 
 Applications use an owner-issued gateway key with the base URL `/api/llm/v1` for model listing,
 Chat Completions, and stateless Responses, including streaming and tool calls. Upstream credentials
 remain encrypted on the server. See [ML provider deployment and API usage](ml-providers.md)
-for worker setup, subscription prerequisites, supported features, and validation limits.
+for worker setup, supported features, and validation limits.
 
 ## RBAC architecture
 

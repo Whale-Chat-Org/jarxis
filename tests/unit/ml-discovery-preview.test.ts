@@ -209,11 +209,8 @@ describe('POST /api/admin/ml-providers', () => {
     expect(text).not.toContain('secret');
   });
 
-  it('leaves keyless and subscription connections to queued discovery', async () => {
-    for (const value of [
-      { name: 'OpenAI', provider: 'openai' },
-      { name: 'Codex', provider: 'codex' },
-    ]) {
+  it('leaves keyless connections pending', async () => {
+    for (const value of [{ name: 'OpenAI', provider: 'openai' }]) {
       mocks.createConnection.mockResolvedValueOnce(saved({ status: 'pending' }));
       expect((await create(request('', value))).status).toBe(201);
     }

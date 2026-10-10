@@ -7,7 +7,22 @@ const schema = (v: z.ZodType) => z.toJSONSchema(v, { io: 'input' });
 export async function openapi() {
   const native = await getAuth().api.generateOpenAPISchema();
   const paths: Record<string, unknown> = {};
-  for (const [path, value] of Object.entries(native.paths)) paths[`/api/auth${path}`] = value;
+  for (const [path, value] of Object.entries(native.paths)) {
+    if (
+      [
+        '/sign-in/social',
+        '/link-social',
+        '/unlink-account',
+        '/get-access-token',
+        '/refresh-token',
+        '/account-info',
+      ].includes(path) ||
+      path === '/callback' ||
+      path.startsWith('/callback/')
+    )
+      continue;
+    paths[`/api/auth${path}`] = value;
+  }
   const op = (summary: string, input?: z.ZodType, auth = true) => ({
     summary,
     tags: ['Administration'],
@@ -109,7 +124,7 @@ export async function openapi() {
         ...providerOperation('Add a provider connection').responses,
         201: {
           description:
-            'Connection saved. API-key connections include the result of a bounded first discovery; an upstream discovery failure is reported in discoveryStatus, not as an error. Subscription connections discover after sign in.',
+            'Connection saved. API-key connections include the result of a bounded first discovery; an upstream discovery failure is reported in discoveryStatus, not as an error.',
         },
       },
     },
@@ -130,24 +145,14 @@ export async function openapi() {
     patch: providerOperation('Update a connection, credentials, or priority'),
     delete: providerOperation('Delete a provider connection'),
   };
-  for (const action of ['refresh', 'models', 'login']) {
+  for (const action of ['refresh', 'models']) {
     paths[`/api/admin/ml-providers/{id}/${action}`] = {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       post: providerOperation(
-        action === 'refresh'
-          ? 'Schedule model discovery'
-          : action === 'models'
-            ? 'Add an explicit model ID'
-            : 'Start an isolated subscription login',
+        action === 'refresh' ? 'Schedule model discovery' : 'Add an explicit model ID',
       ),
     };
   }
-  paths['/api/admin/ml-providers/login/{jobId}'] = {
-    parameters: [{ name: 'jobId', in: 'path', required: true, schema: { type: 'string' } }],
-    get: providerOperation('Inspect a login initiated by the current owner'),
-    post: providerOperation('Submit a login code or callback through a protected body'),
-    delete: providerOperation('Cancel a login initiated by the current owner'),
-  };
   paths['/api/admin/ml-providers/keys'] = {
     post: providerOperation('Issue an application key; reveal its value once'),
   };

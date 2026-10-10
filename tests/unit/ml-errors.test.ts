@@ -15,8 +15,8 @@ describe('ML provider error messages', () => {
     expect(mlErrorMessage(new MlRequestError(400, 'INVALID_ENDPOINT'), fallback)).toMatch(
       /public HTTPS base URL/,
     );
-    expect(mlErrorMessage(new MlRequestError(409, 'LOGIN_STATE'), fallback)).toMatch(
-      /Start a new sign-in/,
+    expect(mlErrorMessage(new MlRequestError(404, 'NOT_FOUND'), fallback)).toMatch(
+      /Reload to see the latest providers/,
     );
     expect(mlErrorMessage(new MlRequestError(403, 'FORBIDDEN'), fallback)).toBe(
       'Only owners can manage ML providers.',

@@ -4,7 +4,7 @@ import { rateLimit } from '@/lib/redis';
 import { isActiveUser } from '@/lib/user-status';
 import { hashGatewayKey } from './crypto';
 import { providerHeaders } from './discovery';
-import { getUsableCredential } from './login';
+import { getUsableCredential } from './credential';
 import { NetworkError, safeFetch } from './network';
 import {
   createClientStreamRenderer,

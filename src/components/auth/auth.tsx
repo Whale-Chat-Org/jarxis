@@ -7,7 +7,6 @@ import { type ComponentType, useEffect } from 'react';
 import { AuthRedirect } from './auth-redirect';
 import { AuthCallback, AuthError } from './auth-result';
 import { ForgotPassword } from './forgot-password';
-import type { SocialLayout } from './provider-buttons';
 import { ResetLinkSent } from './reset-link-sent';
 import { ResetPassword } from './reset-password';
 import { SignIn } from './sign-in';
@@ -18,8 +17,6 @@ import { VerifyEmail } from './verify-email';
 export type AuthProps = {
   className?: string;
   path?: string;
-  socialLayout?: SocialLayout;
-  socialPosition?: 'top' | 'bottom';
   /** @remarks `AuthView` */
   view?: AuthView;
 };
@@ -53,12 +50,10 @@ const AUTH_VIEWS: Partial<Record<AuthView, ComponentType<AuthProps>>> = {
  *   3. Built-in views.
  *
  * @param path - Route path used to resolve an auth view when `view` is not provided
- * @param socialLayout - Social layout to apply to sign-in/sign-up/magic-link views
- * @param socialPosition - Position for social buttons (`"top"` or `"bottom"`)
  * @param view - Explicit auth view to render (e.g., `"signIn"`, `"signUp"`)
  * @returns The React element for the resolved authentication view
  */
-export function Auth({ className, path, socialLayout, socialPosition, view }: AuthProps) {
+export function Auth({ className, path, view }: AuthProps) {
   const { basePaths, emailAndPassword, plugins, viewPaths, navigate } = useAuth();
 
   if (!view && !path) {
@@ -105,13 +100,7 @@ export function Auth({ className, path, socialLayout, socialPosition, view }: Au
     const PluginView = plugin.views?.auth?.[pluginView];
     if (!PluginView) continue;
 
-    return (
-      <PluginView
-        className={className}
-        socialLayout={socialLayout}
-        socialPosition={socialPosition}
-      />
-    );
+    return <PluginView className={className} />;
   }
 
   // 2. Plugin fallbacks — only when the built-in `signIn` isn't viable
@@ -122,13 +111,7 @@ export function Auth({ className, path, socialLayout, socialPosition, view }: Au
       ?.auth?.signIn;
 
     if (Fallback) {
-      return (
-        <Fallback
-          className={className}
-          socialLayout={socialLayout}
-          socialPosition={socialPosition}
-        />
-      );
+      return <Fallback className={className} />;
     }
   }
 
@@ -140,7 +123,5 @@ export function Auth({ className, path, socialLayout, socialPosition, view }: Au
     );
   }
 
-  return (
-    <AuthView className={className} socialLayout={socialLayout} socialPosition={socialPosition} />
-  );
+  return <AuthView className={className} />;
 }

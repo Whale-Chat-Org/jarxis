@@ -1,35 +1,21 @@
 import 'server-only';
 import { db } from '@/db';
 import { decryptCredential } from './crypto';
-import { getUsableCredential } from './login';
+import { getUsableCredential } from './credential';
 import {
   discoveryFailureMessage,
   encodeDiscoveryFailure,
   type DiscoveryFailureReason,
 } from './errors';
 import { NetworkError, safeFetch } from './network';
-import type { Credential } from './types';
+import { providerKinds, type Credential } from './types';
 
 export function providerHeaders(provider: string, credential: Credential): Record<string, string> {
-  const token = credential.apiKey ?? credential.accessToken;
-  if (!token) throw new Error('Provider requires reconnect');
-  if (provider === 'anthropic') return { 'x-api-key': token, 'anthropic-version': '2023-06-01' };
-  if (provider === 'claude')
-    return {
-      Authorization: `Bearer ${token}`,
-      'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'oauth-2025-04-20',
-    };
-  return {
-    Authorization: `Bearer ${token}`,
-    ...(provider === 'codex'
-      ? {
-          'ChatGPT-Account-Id': credential.accountId ?? '',
-          'OpenAI-Beta': 'responses=experimental',
-          originator: 'codex_cli_rs',
-        }
-      : {}),
-  };
+  if (!providerKinds.some((kind) => kind === provider) || !credential.apiKey)
+    throw new Error('Provider requires an API key');
+  if (provider === 'anthropic')
+    return { 'x-api-key': credential.apiKey, 'anthropic-version': '2023-06-01' };
+  return { Authorization: `Bearer ${credential.apiKey}` };
 }
 
 const DISCOVERY_TIMEOUT_MS = 15000;
@@ -126,7 +112,6 @@ export async function discoverModels(
       const remaining = deadline - Date.now();
       if (combined.aborted || remaining <= 0) throw new DiscoveryFailure('timeout');
       const url = new URL(`${baseUrl.replace(/\/$/, '')}/models`);
-      if (provider === 'codex') url.searchParams.set('client_version', '0.160.0');
       if (after) url.searchParams.set('after_id', after);
       const response = await safeFetch(url, {
         headers,
@@ -146,15 +131,13 @@ export async function discoverModels(
       }
       const payload = (await response.json()) as {
         data?: { id?: unknown; display_name?: unknown }[];
-        models?: { slug?: unknown; display_name?: unknown; visibility?: unknown }[];
         has_more?: boolean;
         last_id?: string;
       };
-      const catalog = provider === 'codex' ? payload.models : payload.data;
+      const catalog = payload.data;
       if (!Array.isArray(catalog)) throw new Error('Invalid catalog');
       for (const item of catalog) {
-        if ('visibility' in item && item.visibility === 'hide') continue;
-        const modelId = 'slug' in item ? item.slug : 'id' in item ? item.id : undefined;
+        const modelId = item.id;
         if (typeof modelId !== 'string' || !modelId || modelId.length > 256)
           throw new Error('Invalid catalog');
         if (models.has(modelId)) continue;
@@ -221,12 +204,7 @@ export async function refreshConnection(id: string, force = false): Promise<void
     )
       return;
     const currentCredential = decryptCredential<Credential>(connection.encryptedCredential, id);
-    if (
-      currentCredential.apiKey !== credential.apiKey ||
-      currentCredential.accessToken !== credential.accessToken ||
-      currentCredential.accountId !== credential.accountId
-    )
-      return;
+    if (currentCredential.apiKey !== credential.apiKey) return;
     snapshot = {
       ...snapshot,
       baseUrl: connection.baseUrl,

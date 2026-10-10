@@ -18,7 +18,7 @@ export const GET = handler(async (req) => {
 export const POST = handler(async (req) => {
   const actorId = await requireMlOwner(req, 'providers:manage');
   const created = await createConnection(actorId, await body(req, createConnectionSchema), true);
-  // Subscriptions discover after sign in, so only keyed connections fetch a catalog here.
+  // Only keyed connections fetch a catalog here.
   if (created.status !== 'ready') return json({ connection: created }, 201);
   // The connection is committed; a discovery failure is recorded on it, not returned as an error.
   try {
