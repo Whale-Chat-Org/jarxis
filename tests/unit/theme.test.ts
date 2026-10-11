@@ -221,8 +221,8 @@ const scaleTokens = [
   ...['page', 'page-lg', 'section', 'stack', 'stack-sm', 'inline', 'card'].map(
     (n) => `spacing-${n}`,
   ),
-  ...['icon', 'avatar', 'control', 'header', 'sidebar'].map((n) => `spacing-${n}`),
-  ...['narrow', 'form', 'dialog', 'content'].map((n) => `container-${n}`),
+  ...['icon', 'avatar', 'control', 'header', 'sidebar', 'attachment'].map((n) => `spacing-${n}`),
+  ...['narrow', 'form', 'dialog', 'content', 'bubble'].map((n) => `container-${n}`),
   ...['caption', 'body-sm', 'body', 'heading', 'title', 'headline', 'display'].map(
     (n) => `text-${n}`,
   ),
@@ -264,6 +264,8 @@ describe('class-merge token lists', () => {
     expect(cn('p-lg', 'p-sm')).toBe('p-sm');
     expect(cn('h-control', 'h-control-sm')).toBe('h-control-sm');
     expect(cn('max-w-narrow', 'max-w-dialog')).toBe('max-w-dialog');
+    expect(cn('max-w-panel', 'max-w-bubble')).toBe('max-w-bubble');
+    expect(cn('w-attachment', 'w-sidebar')).toBe('w-sidebar');
     expect(cn('rounded-chip', 'rounded-md')).toBe('rounded-md');
     expect(cn('blur-sm', 'blur-panel')).toBe('blur-panel');
     expect(cn('backdrop-blur-sm', 'backdrop-blur-panel')).toBe('backdrop-blur-panel');

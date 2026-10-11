@@ -32,6 +32,11 @@ Sign in with a seeded user such as `owner@jarxis.test`. All seeded users share t
 password in `scripts/seed-users.ts`. Seeding only runs in development and against a local
 database. To send real email, set `BREVO_API_KEY` and `MAIL_FROM` in `.env`.
 
+## Chat demo
+
+Visit `/chat` for a frontend-only chat workspace with local mock conversations and models.
+See [Chat UI demo](docs/chat-ui.md) for interactions and isolated browser checks.
+
 ## Usage
 
 | Command                        | What it does                                                |

@@ -65,6 +65,7 @@ export const designTokens = {
     'dropdown-max',
     'name-max',
     'qr',
+    'attachment',
     'textarea-min',
     'slider-vertical',
     'chip-input-min',
@@ -92,7 +93,7 @@ export const designTokens = {
     'bar-6xl',
   ],
   text: ['caption', 'hint', 'body-sm', 'body', 'heading', 'title', 'headline', 'display'],
-  container: ['narrow', 'form', 'dialog', 'dialog-sm', 'content', 'panel'],
+  container: ['narrow', 'form', 'dialog', 'dialog-sm', 'content', 'bubble', 'panel'],
   radius: ['xs', 'chip', 'inner', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl'],
   // tailwind-merge only accepts t-shirt sizes for blur (`blur: [isTshirtSize]`), so the custom
   // effect tokens must be declared or `blur-panel`/`backdrop-blur-panel`/`ease-standard` would

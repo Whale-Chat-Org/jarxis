@@ -22,6 +22,11 @@ const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 
 /** Registry item addresses whose files are copied into this repo. */
 const ITEMS = [
+  '@shadcn/message-scroller',
+  '@shadcn/message',
+  '@shadcn/bubble',
+  '@shadcn/attachment',
+  '@shadcn/marker',
   '@shadcn/alert',
   '@shadcn/alert-dialog',
   '@shadcn/avatar',
@@ -91,6 +96,31 @@ const FILE_MAP: Record<string, Record<string, string>> = {
  * `@utility` composites in `tokens.css`. Longest key wins so `gap-2.5` never becomes `gap-sm.5`.
  */
 const TOKEN_MAP: Record<string, string> = {
+  'p-1.5': 'p-xs',
+  'top-3': 'top-md',
+  'px-0': 'px-none',
+  'gap-8': 'gap-2xl',
+  'min-w-8': 'min-w-2xl',
+  '-translate-y-8': '-translate-y-2xl',
+  'max-w-[80%]': 'max-w-bubble',
+  'left-3': 'left-md',
+  'bottom-4': 'bottom-lg',
+  'translate-y-0': 'translate-y-none',
+  'w-10': 'w-control-lg',
+  'w-7': 'w-xl-plus',
+  'w-30': 'w-attachment',
+  'scroll-px-1': 'scroll-px-2xs',
+  '[contain-intrinsic-size:auto_10rem]': 'chat-item-containment',
+  '[content-visibility:auto]': 'chat-item-visibility',
+  'transition-[translate,scale,opacity]': 'transition-chat-scroll',
+  'ease-[cubic-bezier(0.7,0,0.84,0)]': 'ease-standard',
+  'ease-[cubic-bezier(0.23,1,0.32,1)]': 'ease-standard',
+  'bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]': 'bg-bubble-secondary-hover',
+  'bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]': 'bg-bubble-muted-hover',
+  'bg-[oklch(from_var(--primary)_0.93_calc(c*0.4)_h)]': 'bg-bubble-tinted',
+  'bg-[oklch(from_var(--primary)_0.3_calc(c*0.4)_h)]': 'bg-bubble-tinted-dark',
+  'bg-[oklch(from_var(--primary)_0.88_calc(c*0.5)_h)]': 'bg-bubble-tinted-hover',
+  'bg-[oklch(from_var(--primary)_0.35_calc(c*0.5)_h)]': 'bg-bubble-tinted-dark-hover',
   'p-0!': 'p-none',
   'p-2!': 'p-sm',
   'size-8!': 'size-2xl',
