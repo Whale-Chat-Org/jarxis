@@ -3,7 +3,8 @@
 ## Trunk-based workflow
 
 - main is the trunk; keep it deployable. No long-lived develop branch.
-- Before feature/fix work, inspect the branch and working tree, then create or switch to a suitable short-lived branch based on main: feature/<slug>, fix/<slug>, or chore/<slug>.
+- Before feature/fix work, inspect the branch and working tree, then create or switch to a suitable short-lived branch based on main, named after the Jira work item: feat/JAR-<number> for new features (e.g. feat/JAR-5) and fix/JAR-<number> for fixes (e.g. fix/JAR-12). Use chore/<slug> only for non-feature, non-fix maintenance.
+- If the work has no Jira key, ask the user for one before creating a feat/ or fix/ branch; do not invent a key.
 - Never perform or commit feature/fix work directly on main. Preserve in-progress work; do not switch a shared checkout out from under another agent.
 - If no Git repository exists, do not initialize it or commit without an explicit user request. Report that branching is unavailable; this is never an exception permitting work on main.
 - If branch changes are prohibited, honor that restriction and pause feature/fix work when the branch requirement cannot be met. This scoped documentation setup must not initialize Git or change branches.
