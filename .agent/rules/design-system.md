@@ -8,7 +8,7 @@ Mandatory for every UI change. All design implementations must be responsive on 
    - `search_items_in_registries` / `list_items_in_registries` for `@shadcn` and `@better-auth-ui`;
    - `view_items_in_registries` / `get_item_examples_from_registries` to confirm it fits;
    - `get_add_command_for_items`, then run the returned `pnpm dlx shadcn@latest add …`.
-2. **Compose from primitives.** Pages and feature components are built from `src/components/ui` (Button, Card, Table, Dialog, Sheet, DropdownMenu, Select, Combobox, Input/InputGroup, Field, Badge, Skeleton, Spinner, …). Never hand-roll a button, input, dialog, menu, table, card, badge, tooltip or skeleton with raw elements and classes. `pnpm lint` enforces this in `src/app` and `src/components/{admin,auth,landing}`; `<form>`, `<a>` and `<img>` stay raw because no primitive exists for them.
+2. **Compose from primitives.** Pages and feature components are built from `src/components/ui` (Button, Card, Table, Dialog, Sheet, DropdownMenu, Select, Combobox, Input/InputGroup, Field, Badge, Skeleton, Spinner, …). Never hand-roll a button, input, dialog, menu, table, card, badge, tooltip or skeleton with raw elements and classes. `pnpm lint` enforces this in `src/app` and `src/components/{admin,auth,landing,chat}`; `<form>`, `<a>` and `<img>` stay raw because no primitive exists for them.
 3. **Custom components are the exception.** Only when the registry has nothing suitable. Then:
    - it must compose existing primitives rather than re-style raw HTML;
    - generic pieces go in `src/components/ui`, feature pieces in their feature folder (e.g. `src/components/admin`);
@@ -46,7 +46,7 @@ Mandatory for every UI change. All design implementations must be responsive on 
 
 - **Left unbounded on purpose:** `scale-*` and `rotate-*` (shadcn enter/exit primitives use `scale-0/100`, `rotate-0/45/90/180`), alongside the opacity, z-index, border/ring width, `grid-cols-*`, `duration-*` and `order-*` keywords above.
 - **No hardcoded literals.** `no-restricted-syntax` rejects literal colours (`#fff`, `rgb(…)`, `oklch(…)`, `color-mix(…)`) and literal dimensions (`13px`, `0.5rem`, `100vh`…) anywhere in `src/**/*.{ts,tsx}`, including template literals and JSX attributes such as `fill="#fff"`.
-- **No inline `style` in feature code.** `style` is rejected in `src/app`, `src/components/admin`, `src/components/auth` and `src/components/landing`. It stays permitted in `src/components/ui`, where primitives bridge third-party runtime CSS variables (`sonner.tsx` maps `--normal-bg` to `var(--popover)`).
+- **No inline `style` in feature code.** `style` is rejected in `src/app`, `src/components/admin`, `src/components/auth` `src/components/landing` and `src/components/chat`. It stays permitted in `src/components/ui`, where primitives bridge third-party runtime CSS variables (`sonner.tsx` maps `--normal-bg` to `var(--popover)`).
 - **Compose primitives, don't hand-roll them.** Raw `button`, `input`, `select`, `textarea`, `dialog`, `table`/`thead`/`tbody`/`tfoot`/`tr`/`th`/`td` and `label` are rejected in those same feature directories. `<form>`, `<a>` and `<img>` are exempt: no primitive exists for them.
 - **Stylesheets other than `tokens.css` carry no raw values.** `tests/unit/design-system.test.ts` fails if any other `.css` file under `src/` contains a colour or dimension literal.
 - **Need a value that doesn't exist?** Add a token (or an `@utility` for composite values) to `tokens.css`, add it to the lists in `src/lib/utils.ts` (`designTokens`), and extend `tests/unit/theme.test.ts`. Prefer reusing an existing token over adding a near-duplicate.
@@ -85,12 +85,13 @@ Mandatory for every UI change. All design implementations must be responsive on 
 - Controls: `control-xs` 1.5rem, `control-sm` 2rem, `control` 2.25rem, `control-lg` 2.5rem, `avatar` 1.75rem, `avatar-xl` 3.5rem, `chip` 1.375rem, `switch` 1.15rem, `cell` 2rem.
 - Layout: `header` 3.5rem, `sidebar` 16rem, `sidebar-mobile` 18rem, `sidebar-icon` 3rem, `drawer` 24rem, `drawer-wide` 28rem, `search` 16rem, `select-sm` 8rem, `select-md` 9rem, `menu` 14rem, `menu-min` 8rem, `menu-sm` 10rem, `menu-xs` 12rem, `popover` 18rem.
 - Tables and lists: `col-icon` 2.5rem, `col-actions` 4rem, `col-scope` 7rem, `empty-row` 6rem, `empty-row-lg` 10rem, `list-max` 16rem, `dropdown-max` 24rem, `name-max` 8rem.
+- Chat: `attachment` 7.5rem for vertical attachment content.
 - Misc: `qr` 10rem, `textarea-min` 4rem, `slider-vertical` 11rem, `chip-input-min` 4rem, `nudge` 2px, `addon-button` 0.45rem, `addon-kbd` 0.35rem, `combobox-offset` 1.75rem, `tabs-list` 3px, `tabs-bar` 2.75rem, `tabs-indicator` 5px, `inspector` 52rem.
 - Skeleton placeholder widths: `bar-3xs` 3rem, `bar-2xs` 3.5rem, `bar-xs` 4rem, `bar-sm` 5rem, `bar-md` 6rem, `bar-lg` 7rem, `bar-xl` 8rem, `bar-2xl` 9rem, `bar-3xl` 10rem, `bar-4xl` 12rem, `bar-5xl` 14rem, `bar-6xl` 16rem.
 
 ### Max widths (`max-w-*`)
 
-`narrow` 24rem (auth cards, short text), `form` 28rem, `dialog` 32rem, `dialog-sm` 20rem (compact alert dialogs), `content` 80rem (page container), `panel` 56rem (wide inspector dialogs). Container queries use the same names (`@form/field-group:`).
+`narrow` 24rem (auth cards, short text), `form` 28rem, `dialog` 32rem, `dialog-sm` 20rem (compact alert dialogs), `content` 80rem (page container), `panel` 56rem (wide inspector dialogs). `bubble` 80% caps message bubbles. Container queries use the same names (`@form/field-group:`).
 
 ### Typography
 
@@ -124,7 +125,7 @@ Both effect values match the Tailwind default they replaced, so migrating a clas
 
 ### Composite utilities (`@utility` in `tokens.css`)
 
-`transition-control`, `grid-cols-alert`, `grid-cols-alert-icon`, `grid-rows-card-header`, `grid-cols-card-header`, `cell-size-default`, `min-w-combobox`, `max-h-combobox-list`, `max-w-viewport-inset`, `max-w-viewport-menu`, `translate-x-switch-on`, `tooltip-arrow-offset`, `sidebar-icon-width`, `sidebar-icon-width-plus`, `left-sidebar-offset`, `right-sidebar-offset`, `shadow-sidebar-outline`, `shadow-sidebar-accent-outline`, `transition-sidebar-shell`, `transition-sidebar-label`, `transition-sidebar-menu-button`, `transition-sidebar-rail`, `transition-sidebar-header`, `grid-rows-alert-dialog`, `grid-rows-alert-dialog-media`, `h-tabs-trigger`, `admin-panel-motion`, `admin-dock-motion`, `h-inspector`, `grid-rows-inspector`, `grid-rows-inspector-form`, `grid-cols-admin-filters`.
+`transition-control`, `grid-cols-alert`, `grid-cols-alert-icon`, `grid-rows-card-header`, `grid-cols-card-header`, `cell-size-default`, `min-w-combobox`, `max-h-combobox-list`, `max-w-viewport-inset`, `max-w-viewport-menu`, `translate-x-switch-on`, `tooltip-arrow-offset`, `sidebar-icon-width`, `sidebar-icon-width-plus`, `left-sidebar-offset`, `right-sidebar-offset`, `shadow-sidebar-outline`, `shadow-sidebar-accent-outline`, `transition-sidebar-shell`, `transition-sidebar-label`, `transition-sidebar-menu-button`, `transition-sidebar-rail`, `transition-sidebar-header`, `grid-rows-alert-dialog`, `grid-rows-alert-dialog-media`, `h-tabs-trigger`, `admin-panel-motion`, `admin-dock-motion`, `h-inspector`, `grid-rows-inspector`, `grid-rows-inspector-form`, `grid-cols-admin-filters`, `chat-item-containment`, `chat-item-visibility`, `transition-chat-scroll`, `bg-bubble-secondary-hover`, `bg-bubble-muted-hover`, `bg-bubble-tinted`, `bg-bubble-tinted-dark`, `bg-bubble-tinted-hover`, `bg-bubble-tinted-dark-hover`.
 
 ## 4. Colour
 

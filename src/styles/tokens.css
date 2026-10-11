@@ -171,6 +171,7 @@
   --spacing-dropdown-max: 24rem;
   --spacing-name-max: 8rem;
   --spacing-qr: 10rem;
+  --spacing-attachment: 7.5rem;
   --spacing-textarea-min: 4rem;
   --spacing-slider-vertical: 11rem;
   --spacing-chip-input-min: 4rem;
@@ -205,6 +206,7 @@
   --container-dialog: 32rem;
   --container-dialog-sm: 20rem;
   --container-content: 80rem;
+  --container-bubble: 80%;
   --container-panel: 56rem;
 
   /* Typography. */
@@ -492,4 +494,32 @@
     @apply bg-background font-sans text-foreground;
     line-height: 1.5;
   }
+}
+
+@utility chat-item-containment {
+  contain-intrinsic-size: auto 10rem;
+}
+@utility chat-item-visibility {
+  content-visibility: auto;
+}
+@utility transition-chat-scroll {
+  transition-property: translate, scale, opacity;
+}
+@utility bg-bubble-secondary-hover {
+  background-color: color-mix(in oklch, var(--secondary), var(--foreground) 5%);
+}
+@utility bg-bubble-muted-hover {
+  background-color: color-mix(in oklch, var(--muted), var(--foreground) 5%);
+}
+@utility bg-bubble-tinted {
+  background-color: oklch(from var(--primary) 0.93 calc(c* 0.4) h);
+}
+@utility bg-bubble-tinted-dark {
+  background-color: oklch(from var(--primary) 0.3 calc(c* 0.4) h);
+}
+@utility bg-bubble-tinted-hover {
+  background-color: oklch(from var(--primary) 0.88 calc(c* 0.5) h);
+}
+@utility bg-bubble-tinted-dark-hover {
+  background-color: oklch(from var(--primary) 0.35 calc(c* 0.5) h);
 }

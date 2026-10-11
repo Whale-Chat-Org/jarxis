@@ -157,6 +157,18 @@ describe('hardcoded values and unstandardised composition are rejected', () => {
       `export const A = () => <div style={{ '--normal-bg': 'var(--popover)' }} />;`,
       null,
     ],
+    [
+      'inline style in chat',
+      'src/components/chat/__probe__.tsx',
+      `export const A = () => <div style={{ width: 300 }} />;`,
+      SYNTAX,
+    ],
+    [
+      'hand-rolled chat control',
+      'src/components/chat/__probe__.tsx',
+      `export const A = () => <button />;`,
+      SYNTAX,
+    ],
     // Primitives are composed, not hand-rolled (§1).
     [
       'hand-rolled button',

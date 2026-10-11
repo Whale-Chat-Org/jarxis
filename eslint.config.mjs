@@ -175,6 +175,7 @@ export default defineConfig([
       'src/components/admin/**/*.{ts,tsx}',
       'src/components/auth/**/*.{ts,tsx}',
       'src/components/landing/**/*.{ts,tsx}',
+      'src/components/chat/**/*.{ts,tsx}',
     ],
     rules: {
       'no-restricted-syntax': ['error', ...hardcodedValueRules, ...featureCompositionRules],

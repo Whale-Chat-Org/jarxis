@@ -2,13 +2,12 @@
   "version": "0.2.0",
   "configurations": [
     {
-      // Full flow, same as `pnpm dev`: creates .env if missing, installs dependencies, starts
-      // postgres/redis/azurite, migrates and seeds, then starts Next with the debugger attached
-      // and opens a debug-attached browser. Safe to use every time; every step is idempotent.
+      // Use the existing .env and infrastructure (including Apple native containers).
+      // Start Next with the debugger attached and open a debug-attached browser.
       "name": "Dev",
       "type": "node-terminal",
       "request": "launch",
-      "command": "pnpm dev",
+      "command": "pnpm dev:next",
       "cwd": "${workspaceFolder}",
       "skipFiles": ["<node_internals>/**"],
       "serverReadyAction": {
@@ -20,11 +19,12 @@
       }
     },
     {
-      // Faster restart when services are already running: starts only the Next dev server.
-      "name": "Dev (server only)",
+      // Full Docker Compose setup: prepares .env, installs dependencies, starts services,
+      // applies migrations and seeds development users before starting Next.
+      "name": "Dev (Docker setup)",
       "type": "node-terminal",
       "request": "launch",
-      "command": "pnpm dev:next",
+      "command": "pnpm dev",
       "cwd": "${workspaceFolder}",
       "skipFiles": ["<node_internals>/**"],
       "serverReadyAction": {
