@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { expect, type APIRequestContext } from '@playwright/test';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { Pool } from 'pg';
 
 export const password = 'Acceptance-Only!58392';
@@ -135,4 +135,16 @@ export async function setRole(id: string, role: string) {
 
 export async function makeOwner(id: string) {
   await setRole(id, 'owner');
+}
+
+/**
+ * On a cold dev server the admin shell streams in after `load`, and React batches the reveal, so
+ * for a moment the AdminShellSkeleton sidebar and the still-hidden real one are both in the DOM.
+ * The skeleton is removed in the same step that reveals the shell, so wait for it to go before
+ * using strict `[data-slot="sidebar"]` locators.
+ */
+export async function waitForAdminShell(page: Page) {
+  await expect(page.getByRole('status').filter({ hasText: 'Loading administration' })).toHaveCount(
+    0,
+  );
 }
