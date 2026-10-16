@@ -6,6 +6,13 @@
 - Apply the current Prisma-compatible migrations to the disposable database before integration tests. Inspect updated setup/scripts before running; never run migrations, seeds or owner bootstrap against an unverified target.
 - Keep integration execution serial (fileParallelism: false), and do not run separate suites concurrently against the same database. Keep unit tests independent of live database/Redis services.
 
+# Unit tests and coverage
+
+- `pnpm test` runs two Vitest projects: **unit** (`tests/unit/**/*.test.ts`, Node) for server and library code, and **dom** (`tests/unit/**/*.test.tsx`, jsdom with `tests/setup-dom.ts`) for React components, using `@testing-library/react` and `@testing-library/user-event`.
+- Coverage is measured over all of `src/**/*.{ts,tsx}`, including the shadcn and Better Auth UI registry copies, and `pnpm test --coverage` fails below **80%** (lines, statements, functions, branches). CI runs it, so a change that drops coverage below the threshold fails the `test` job.
+- New or changed code needs tests in the same change. Mock the database, Redis, auth client, `fetch` and Next.js modules (`next/navigation`, `next/headers`) with `vi.mock`; assert behaviour (calls, text, roles, rejection paths), not snapshots.
+- Never lower the thresholds or add coverage exclusions to make a run pass.
+
 # Development user accounts
 
 - During development and manual or browser verification, use only the seeded fixture users from scripts/seed-users.ts (owner@, admin@, viewer@, member@, banned@ and unverified@jarxis.test). They cover every role and account state.

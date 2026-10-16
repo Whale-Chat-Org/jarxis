@@ -660,3 +660,34 @@ describe('POST /api/setup/resend', () => {
     expect(response.status).toBe(429);
   });
 });
+
+describe('unique-constraint races', () => {
+  it('reports a concurrent email registration as a sanitized email conflict', async () => {
+    store.user.create.mockRejectedValueOnce(
+      new KnownRequestError('P2002', { target: ['app_user_email'] }),
+    );
+    const error = await startInitialOwnerSetup(setupInput.parse(valid)).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 409, code: 'EMAIL_CONFLICT' });
+    expect(JSON.stringify(error)).not.toContain('app_user_email');
+  });
+
+  it('reports a concurrent completion as setup completed', async () => {
+    store.user.create.mockRejectedValueOnce(
+      new KnownRequestError('P2002', { target: 'installation_setup_pkey' }),
+    );
+    await expect(startInitialOwnerSetup(setupInput.parse(valid))).rejects.toMatchObject({
+      status: 409,
+      code: 'SETUP_COMPLETED',
+    });
+  });
+
+  it('treats a conflict without metadata as an email conflict and rethrows other errors', async () => {
+    store.user.create.mockRejectedValueOnce(new KnownRequestError('P2002'));
+    await expect(startInitialOwnerSetup(setupInput.parse(valid))).rejects.toMatchObject({
+      code: 'EMAIL_CONFLICT',
+    });
+    const other = new KnownRequestError('P2025');
+    store.user.create.mockRejectedValueOnce(other);
+    await expect(startInitialOwnerSetup(setupInput.parse(valid))).rejects.toBe(other);
+  });
+});

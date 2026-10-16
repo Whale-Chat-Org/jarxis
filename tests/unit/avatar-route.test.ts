@@ -149,3 +149,54 @@ describe('private avatar object route', () => {
     expect(deleteAvatar).toHaveBeenCalledWith(userId, blobId);
   });
 });
+
+describe('avatar route edge cases', () => {
+  it('rejects a declared oversized body before reading it', async () => {
+    const request = mutationRequest(png());
+    request.headers.set('Content-Length', String(1024 * 1024 + 1));
+    const response = await POST(request);
+    expect(response.status).toBe(413);
+    expect(uploadAvatar).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty or missing image body', async () => {
+    expect((await POST(mutationRequest(new Uint8Array(0)))).status).toBe(400);
+    const noBody = new Request('http://localhost:3000/api/profile/avatar', {
+      method: 'POST',
+      headers: { Origin: 'http://localhost:3000', 'Content-Type': 'image/png' },
+    });
+    const response = await POST(noBody);
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.code).toBe('IMAGE_REQUIRED');
+  });
+
+  it('answers 503 when storage returns no stream and defaults headers', async () => {
+    downloadAvatar.mockResolvedValueOnce({});
+    expect((await GET(new Request('http://localhost/avatar'), routeContext)).status).toBe(503);
+
+    downloadAvatar.mockResolvedValueOnce({ readableStreamBody: Readable.from(png()) });
+    const response = await GET(new Request('http://localhost/avatar'), routeContext);
+    expect(response.headers.get('Content-Type')).toBe('image/png');
+    expect(response.headers.get('ETag')).toBeNull();
+    expect(response.headers.get('Content-Length')).toBeNull();
+  });
+
+  it('hides unexpected storage failures behind a generic 503', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    downloadAvatar.mockRejectedValueOnce(
+      Object.assign(new Error('AccountKey=fake'), { statusCode: 500 }),
+    );
+    const response = await GET(new Request('http://localhost/avatar'), routeContext);
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain('AccountKey');
+    log.mockRestore();
+  });
+
+  it('validates route parameters', async () => {
+    const bad = {
+      params: Promise.resolve({ userId, blobId: 'not-a-uuid' }),
+    } as RouteContext<'/api/profile/avatar/[userId]/[blobId]'>;
+    expect((await GET(new Request('http://localhost/avatar'), bad)).status).toBe(400);
+    expect(downloadAvatar).not.toHaveBeenCalled();
+  });
+});

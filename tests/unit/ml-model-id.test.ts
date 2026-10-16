@@ -31,3 +31,17 @@ describe('pool model identity', () => {
     );
   });
 });
+
+describe('pool model identity edge cases', () => {
+  it('namespaces root endpoints and unknown providers by endpoint hash', () => {
+    expect(poolModelId({ provider: 'custom', baseUrl: 'https://root.example.test' }, 'm')).toMatch(
+      /^custom-[0-9a-f]{24}\/m$/,
+    );
+    expect(poolModelId({ provider: 'legacy', baseUrl: 'https://api.openai.com/v1' }, 'm')).toMatch(
+      /^legacy-[0-9a-f]{24}\/m$/,
+    );
+    expect(
+      poolModelId({ provider: 'openai', baseUrl: 'https://proxy.example.test/v1' }, 'm'),
+    ).toMatch(/^openai-[0-9a-f]{24}\/m$/);
+  });
+});

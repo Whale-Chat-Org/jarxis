@@ -90,3 +90,12 @@ describe('input validation', () => {
     expect(refreshInput.safeParse({ refreshToken: 'a'.repeat(64) }).success).toBe(true);
   });
 });
+
+describe('flattenStatements edge cases', () => {
+  it('treats missing statements and non-array actions as granting nothing', () => {
+    expect(flattenStatements({})).toEqual([]);
+    expect(flattenStatements({ statements: { user: 'list', session: ['revoke'] } })).toEqual([
+      'session:revoke',
+    ]);
+  });
+});

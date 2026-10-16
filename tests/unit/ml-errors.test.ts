@@ -58,3 +58,13 @@ describe('ML provider error messages', () => {
     expect(storedDiscoveryFailureMessage('auth:<script>')).not.toContain('<script>');
   });
 });
+
+describe('rate limit wait copy', () => {
+  it('formats seconds and rounded-up minutes', () => {
+    expect(discoveryFailureMessage('rate_limited', 429, 1)).toContain('Try again in 1 second.');
+    expect(discoveryFailureMessage('rate_limited', 429, 30)).toContain('Try again in 30 seconds.');
+    expect(discoveryFailureMessage('rate_limited', 429, 60)).toContain('Try again in 1 minute.');
+    expect(discoveryFailureMessage('rate_limited', null, 61)).toContain('Try again in 2 minutes.');
+    expect(discoveryFailureMessage('rate_limited')).toContain('Wait a moment, then retry.');
+  });
+});
