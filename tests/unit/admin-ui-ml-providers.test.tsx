@@ -141,7 +141,7 @@ const nonGet = () => calls.filter((call) => call.method !== 'GET');
 describe('MlProvidersPanel listing', () => {
   it('shows the loading skeleton, then connections, models and keys', async () => {
     renderPanel();
-    expect(screen.getByText('Loading ML providers…')).toBeTruthy();
+    expect(screen.getByText('Loading providers…')).toBeTruthy();
     expect(await screen.findByText('Primary')).toBeTruthy();
 
     expect(screen.getByText('openai · https://api.openai.com/v1')).toBeTruthy();
@@ -159,7 +159,9 @@ describe('MlProvidersPanel listing', () => {
     ).toBeTruthy();
     expect(screen.getByText(/No catalog discovered yet\./)).toBeTruthy();
     expect(
-      screen.getByText('No models yet. Refresh the catalog or add an upstream model ID.'),
+      screen.getByText(
+        'No models yet. Refresh the catalog, or add an upstream model ID from Edit.',
+      ),
     ).toBeTruthy();
 
     expect(screen.getByText('CI key')).toBeTruthy();
@@ -199,7 +201,7 @@ describe('MlProvidersPanel listing', () => {
     const user = renderPanel();
     expect(
       await screen.findByText(
-        'ML providers could not be loaded. Check your connection and try again.',
+        'Providers could not be loaded. Check your connection and try again.',
       ),
     ).toBeTruthy();
     expect(screen.getByText('Providers not up to date')).toBeTruthy();
@@ -207,9 +209,7 @@ describe('MlProvidersPanel listing', () => {
     // A failed retry has no dialog, so it is reported as a toast.
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith(
-        'ML providers could not be loaded. Try again shortly.',
-      ),
+      expect(toast.error).toHaveBeenCalledWith('Providers could not be loaded. Try again shortly.'),
     );
 
     fail = false;
@@ -280,18 +280,98 @@ describe('MlProvidersPanel page actions', () => {
     );
   });
 
-  it('adds a manual model and clears the field', async () => {
+  it('adds a manual model from the edit panel and keeps unsaved toggles', async () => {
+    const added = {
+      ...connections[0],
+      modelStateVersion: 'c'.repeat(64),
+      models: [
+        ...connections[0].models,
+        {
+          id: 'm3',
+          publicId: 'openai/gpt-extra',
+          upstreamId: 'gpt-extra',
+          displayName: 'gpt-extra',
+          enabled: true,
+          discovered: false,
+        },
+      ],
+    };
+    setup(({ path, method }) => {
+      if (path === '' && method === 'GET') return json(fullData);
+      if (path === '/c1/models' && method === 'POST') return json({ connection: added }, 201);
+      return json({ connection: added });
+    });
     const user = renderPanel();
     await screen.findByText('Primary');
-    const input = document.getElementById('model-c1') as HTMLInputElement;
-    await user.type(input, '  gpt-extra  ');
-    await user.click(screen.getAllByRole('button', { name: 'Add model' })[0]);
+    expect(screen.queryAllByLabelText('Manual upstream model ID')).toHaveLength(0);
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    await user.click(await screen.findByRole('switch', { name: 'Enable GPT (openai/gpt)' }));
+    const input = screen.getByLabelText('Manual upstream model ID') as HTMLInputElement;
+    expect(screen.getByRole('button', { name: 'Add model' })).toHaveProperty('disabled', true);
+    await user.type(input, '  gpt-extra  {Enter}');
     await waitFor(() =>
       expect(nonGet()).toEqual([
         { path: '/c1/models', method: 'POST', body: { upstreamId: 'gpt-extra' } },
       ]),
     );
     await waitFor(() => expect(input.value).toBe(''));
+    expect(await screen.findByText('Model gpt-extra added.')).toBeTruthy();
+    expect(
+      screen.getByRole('switch', { name: 'Enable GPT (openai/gpt)' }).getAttribute('aria-checked'),
+    ).toBe('false');
+    expect(
+      screen.getByRole('switch', { name: 'Enable gpt-extra (openai/gpt-extra)' }),
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Save connection' }));
+    // Sorted m1, m2, m3 with only m3 enabled: 0b100.
+    await waitFor(() =>
+      expect(nonGet().at(-1)).toEqual({
+        path: '/c1/models',
+        method: 'PATCH',
+        body: { version: 'c'.repeat(64), states: 'BA' },
+      }),
+    );
+  });
+
+  it('keeps the loaded version after adding a model when others changed concurrently', async () => {
+    const changed = {
+      ...connections[0],
+      modelStateVersion: 'd'.repeat(64),
+      models: connections[0].models.map((model) => ({ ...model, enabled: !model.enabled })),
+    };
+    setup(({ path, method }) => {
+      if (path === '' && method === 'GET') return json(fullData);
+      if (path === '/c1/models' && method === 'POST') return json({ connection: changed }, 201);
+      return json({ connection: changed });
+    });
+    const user = renderPanel();
+    await screen.findByText('Primary');
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    await user.type(await screen.findByLabelText('Manual upstream model ID'), 'other');
+    await user.click(screen.getByRole('button', { name: 'Add model' }));
+    await screen.findByText('Model other added.');
+    await user.click(screen.getByRole('button', { name: 'Save connection' }));
+    await waitFor(() =>
+      expect(nonGet().at(-1)).toEqual({
+        path: '/c1/models',
+        method: 'PATCH',
+        body: { version: 'a'.repeat(64), states: 'AQ' },
+      }),
+    );
+  });
+
+  it('keeps credential autofill off the editor inputs', async () => {
+    const user = renderPanel();
+    await screen.findByText('Primary');
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    const key = (await screen.findByLabelText('Replace API key (optional)')) as HTMLInputElement;
+    expect(key.autocomplete).toBe('new-password');
+    expect(key.placeholder).toBe('Saved key is kept unless you enter a new one');
+    expect(key.getAttribute('data-1p-ignore')).toBe('true');
+    const search = screen.getByLabelText('Search models') as HTMLInputElement;
+    expect(search.autocomplete).toBe('off');
+    expect(search.getAttribute('data-lpignore')).toBe('true');
   });
 });
 

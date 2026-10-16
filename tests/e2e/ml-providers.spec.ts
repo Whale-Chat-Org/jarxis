@@ -115,7 +115,7 @@ for (const role of ['user', 'viewer', 'administrator']) {
     ).toBe(403);
     await page.goto('/admin/ml-providers');
     await expect(page).toHaveURL(/\/access-denied(?:\?|$)/);
-    await expect(page.getByRole('link', { name: 'ML providers', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Providers', exact: true })).toHaveCount(0);
   });
 }
 
@@ -245,7 +245,7 @@ test('owner provider screen reflows in both themes at all required viewports', a
     for (const [width, height] of viewports) {
       await page.setViewportSize({ width, height });
       await page.goto('/admin/ml-providers');
-      await expect(page.getByRole('heading', { name: /ML providers/i }).first()).toBeVisible();
+      await expect(page.getByRole('heading', { name: /Providers/i }).first()).toBeVisible();
       await expect(
         page.getByText('Long connection name '.repeat(4).trim(), { exact: true }),
       ).toBeVisible();

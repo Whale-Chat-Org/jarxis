@@ -84,7 +84,7 @@ Mandatory for every UI change. All design implementations must be responsive on 
 - Icons: `icon-xs` 0.75rem, `icon-sm` 0.875rem, `icon` 1rem, `icon-lg` 1.25rem, `icon-xl` 2rem, `hero-icon` 4rem.
 - Controls: `control-xs` 1.5rem, `control-sm` 2rem, `control` 2.25rem, `control-lg` 2.5rem, `avatar` 1.75rem, `avatar-xl` 3.5rem, `chip` 1.375rem, `switch` 1.15rem, `cell` 2rem.
 - Layout: `header` 3.5rem, `sidebar` 16rem, `sidebar-mobile` 18rem, `sidebar-icon` 3rem, `drawer` 24rem, `drawer-wide` 28rem, `search` 16rem, `select-sm` 8rem, `select-md` 9rem, `menu` 14rem, `menu-min` 8rem, `menu-sm` 10rem, `menu-xs` 12rem, `popover` 18rem.
-- Tables and lists: `col-icon` 2.5rem, `col-actions` 4rem, `col-scope` 7rem, `empty-row` 6rem, `empty-row-lg` 10rem, `list-max` 16rem, `dropdown-max` 24rem, `name-max` 8rem.
+- Tables and lists: `col-icon` 2.5rem, `col-actions` 4rem, `col-scope` 7rem, `empty-row` 6rem, `empty-row-lg` 10rem, `list-max` 16rem, `list-min` 10rem (minimum height of a list that fills the remaining space), `dropdown-max` 24rem, `name-max` 8rem.
 - Chat: `attachment` 7.5rem for vertical attachment content.
 - Misc: `qr` 10rem, `textarea-min` 4rem, `slider-vertical` 11rem, `chip-input-min` 4rem, `nudge` 2px, `addon-button` 0.45rem, `addon-kbd` 0.35rem, `combobox-offset` 1.75rem, `tabs-list` 3px, `tabs-bar` 2.75rem, `tabs-indicator` 5px, `inspector` 52rem.
 - Skeleton placeholder widths: `bar-3xs` 3rem, `bar-2xs` 3.5rem, `bar-xs` 4rem, `bar-sm` 5rem, `bar-md` 6rem, `bar-lg` 7rem, `bar-xl` 8rem, `bar-2xl` 9rem, `bar-3xl` 10rem, `bar-4xl` 12rem, `bar-5xl` 14rem, `bar-6xl` 16rem.

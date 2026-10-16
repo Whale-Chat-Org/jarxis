@@ -62,6 +62,7 @@ export const designTokens = {
     'empty-row-lg',
     'inspector',
     'list-max',
+    'list-min',
     'dropdown-max',
     'name-max',
     'qr',

@@ -62,10 +62,10 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     id: 'ml',
-    label: 'Machine learning',
+    label: 'Proxy',
     items: [
       {
-        title: 'ML providers',
+        title: 'Providers',
         href: '/admin/ml-providers',
         permission: 'providers:read',
         icon: BotIcon,

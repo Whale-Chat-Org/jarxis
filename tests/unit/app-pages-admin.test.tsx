@@ -120,7 +120,7 @@ describe('admin loading skeletons', () => {
   it.each([
     [AdminLoading, 'Loading overview…'],
     [AuditLoading, 'Loading audit log…'],
-    [MlLoading, 'Loading ML providers…'],
+    [MlLoading, 'Loading providers…'],
     [PermissionsLoading, 'Loading permissions…'],
     [RolesLoading, 'Loading roles…'],
     [UsersLoading, 'Loading users and access…'],

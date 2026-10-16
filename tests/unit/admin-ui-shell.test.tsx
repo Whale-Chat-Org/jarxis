@@ -53,7 +53,7 @@ describe('SiteHeader', () => {
     ['/admin', 'General', 'Overview'],
     ['/admin/users', 'Access control', 'Users & access'],
     ['/admin/roles/extra', 'Access control', 'Roles'],
-    ['/admin/ml-providers', 'Machine learning', 'ML providers'],
+    ['/admin/ml-providers', 'Proxy', 'Providers'],
     ['/admin/unknown', 'General', 'Overview'],
     ['/elsewhere', 'Admin', 'Admin'],
   ])('labels %s as %s / %s', (pathname, group, title) => {
