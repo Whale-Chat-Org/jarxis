@@ -4,7 +4,7 @@ import { isAllowed } from '@/lib/permissions';
 import { requirePage } from '@/lib/rbac';
 
 /**
- * Users & access.
+ * Users.
  *
  * The page guard checks `users:read`; the Better Auth UI `AdminUsers` table checks its own
  * `user:*` controls. `canManageAccess` reflects the owner + `roles:assign` rule, and the table

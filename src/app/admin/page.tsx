@@ -28,7 +28,7 @@ export default async function AdminDashboardPage() {
           key: 'users',
           href: '/admin/users',
           icon: UsersIcon,
-          title: 'Users & access',
+          title: 'Users',
           value: usersTotal,
           description: `${usersTotal - bannedTotal} active, ${bannedTotal} banned`,
         }
