@@ -1,10 +1,43 @@
 name: ci-cd
 
+# Only application code, its build/test configuration and this workflow trigger a run. Docs, agent
+# rules and other Markdown do not; use "Run workflow" (workflow_dispatch) to force one, which never
+# deploys because deploy requires a push.
 on:
   pull_request:
     branches: [main]
+    paths: &app-paths
+      - 'src/**'
+      - 'prisma/**'
+      - 'scripts/**'
+      - 'public/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'next.config.ts'
+      - 'next-env.d.ts'
+      - 'prisma.config.ts'
+      - 'tsconfig.json'
+      - 'postcss.config.mjs'
+      - 'components.json'
+      - 'eslint.config.mjs'
+      - '.prettierrc'
+      - '.prettierignore'
+      - 'vitest.config.ts'
+      - 'vitest.integration.config.ts'
+      - 'playwright*.config.ts'
+      - 'sonar-project.properties'
+      - 'trivy-secret.yaml'
+      # tests/unit/theme.test.ts reads this rule file.
+      - '.agent/rules/design-system.md'
+      - '.github/workflows/ci-cd.yml'
   push:
     branches: [main]
+    paths: *app-paths
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -76,10 +109,15 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Build-record artifacts (one per build) are not used and only consume storage quota.
+      DOCKER_BUILD_RECORD_UPLOAD: false
+      TRIVY_SEVERITY: HIGH,CRITICAL
+      TRIVY_SECRET_CONFIG: trivy-secret.yaml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      # Images are saved as artifacts, not pushed: nothing reaches the registry before the scans pass.
+      # Images are saved as files, not pushed: nothing reaches the registry before the scans pass.
       - name: Build jarxis-app
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -99,10 +137,37 @@ jobs:
           tags: jarxis-tools:${{ github.sha }}
           outputs: type=docker,dest=${{ runner.temp }}/jarxis-tools.tar
           cache-from: type=gha,scope=jarxis
+      # The image is scanned here, where it was built, so pull requests never upload image tars.
+      - name: Scan jarxis-app image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          input: ${{ runner.temp }}/jarxis-app.tar
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: true
+          exit-code: 1
+      - name: Image SARIF report
+        if: always()
+        run: |
+          trivy image --input "$RUNNER_TEMP/jarxis-app.tar" --severity "$TRIVY_SEVERITY" \
+            --ignore-unfixed --format sarif --output trivy-image.sarif
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: trivy-image-sarif
+          path: trivy-image.sarif
+          if-no-files-found: ignore
+          retention-days: 7
+      # Only a push to main deploys, so only then are the (compressed) images kept for the deploy job.
+      - name: Compress images for deploy
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: gzip -1 "$RUNNER_TEMP"/jarxis-app.tar "$RUNNER_TEMP"/jarxis-tools.tar
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: images
-          path: ${{ runner.temp }}/jarxis-*.tar
+          path: ${{ runner.temp }}/jarxis-*.tar.gz
+          compression-level: 0 # already gzipped
           retention-days: 1
 
   sonarqube:
@@ -147,6 +212,7 @@ jobs:
           name: semgrep-sarif
           path: semgrep.sarif
           if-no-files-found: ignore
+          retention-days: 7
 
   trivy:
     needs: build
@@ -158,10 +224,7 @@ jobs:
       TRIVY_SECRET_CONFIG: trivy-secret.yaml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: images
-          path: ${{ runner.temp }}/images
+      # The jarxis-app image is scanned in the build job.
       - name: Scan repository (dependencies, secrets, Dockerfile)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -171,27 +234,18 @@ jobs:
           severity: ${{ env.TRIVY_SEVERITY }}
           ignore-unfixed: true
           exit-code: 1
-      - name: Scan jarxis-app image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: image
-          input: ${{ runner.temp }}/images/jarxis-app.tar
-          severity: ${{ env.TRIVY_SEVERITY }}
-          ignore-unfixed: true
-          exit-code: 1
-      - name: SARIF reports
+      - name: SARIF report
         if: always()
         run: |
           trivy fs --scanners vuln,secret,misconfig --severity "$TRIVY_SEVERITY" --ignore-unfixed \
             --format sarif --output trivy-fs.sarif .
-          trivy image --input "$RUNNER_TEMP/images/jarxis-app.tar" --severity "$TRIVY_SEVERITY" \
-            --ignore-unfixed --format sarif --output trivy-image.sarif
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: trivy-sarif
-          path: trivy-*.sarif
+          path: trivy-fs.sarif
           if-no-files-found: ignore
+          retention-days: 7
 
   deploy:
     needs: [sonarqube, semgrep, trivy]
@@ -223,8 +277,8 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Push images to ACR
         run: |
-          docker load --input "$RUNNER_TEMP/images/jarxis-app.tar"
-          docker load --input "$RUNNER_TEMP/images/jarxis-tools.tar"
+          docker load --input "$RUNNER_TEMP/images/jarxis-app.tar.gz"
+          docker load --input "$RUNNER_TEMP/images/jarxis-tools.tar.gz"
           docker tag "jarxis-app:$GITHUB_SHA" "$APP_IMAGE"
           docker tag "jarxis-tools:$GITHUB_SHA" "$TOOLS_IMAGE"
           az acr login --name "${{ vars.ACR_NAME }}"
