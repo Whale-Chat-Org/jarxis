@@ -7,7 +7,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/admin-panel';
@@ -288,10 +287,11 @@ export function RolesManager({
       </div>
       <Dialog open={draft !== null} onOpenChange={(value) => !value && !saving && setDraft(null)}>
         <DialogContent
+          layout="inspector"
           onEscapeKeyDown={(event) => saving && event.preventDefault()}
           onInteractOutside={(event) => saving && event.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="border-b px-xl py-lg-plus">
             <DialogTitle>
               {draft?.readOnly ? draft.name : draft?.key ? 'Edit role' : 'Create role'}
             </DialogTitle>
@@ -301,82 +301,91 @@ export function RolesManager({
                 : 'Choose the access granted by this role.'}
             </DialogDescription>
           </DialogHeader>
-          {draft && (
-            <div className="flex flex-col gap-lg">
-              <Field>
-                <FieldLabel htmlFor="role-name">Name</FieldLabel>
-                <Input
-                  id="role-name"
-                  value={draft.name}
-                  disabled={draft.readOnly || draft.system}
-                  onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-                  maxLength={64}
-                />
-                {draft.system && !draft.readOnly && (
-                  <FieldDescription>System roles keep their name.</FieldDescription>
-                )}
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="role-description">Description</FieldLabel>
-                <Textarea
-                  id="role-description"
-                  value={draft.description}
-                  disabled={draft.readOnly}
-                  onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-                  maxLength={500}
-                />
-              </Field>
-              {areas.map(([area, entries]) => (
-                <FieldSet key={area} className="gap-sm">
-                  <FieldLegend variant="label">{area}</FieldLegend>
-                  {entries?.map((entry) => (
-                    <Field key={entry.key} orientation="horizontal">
-                      <Checkbox
-                        id={`grant-${entry.key}`}
-                        checked={draft.permissions.includes(entry.key)}
-                        disabled={draft.readOnly || entry.restricted}
-                        onCheckedChange={(checked) =>
-                          setDraft({
-                            ...draft,
-                            permissions: checked
-                              ? [...draft.permissions, entry.key]
-                              : draft.permissions.filter((key) => key !== entry.key),
-                          })
-                        }
-                      />
-                      <FieldLabel htmlFor={`grant-${entry.key}`} className="flex-wrap">
-                        {entry.description}{' '}
-                        <span className="text-caption font-normal text-muted-foreground">
-                          ({entry.key}
-                          {entry.restricted ? ' · Owner only' : ''})
-                        </span>
-                      </FieldLabel>
-                    </Field>
+          {/* Same frame as the user inspector: only the form scrolls, the actions stay below it. */}
+          <div className="grid min-h-none flex-1 grid-rows-inspector-form">
+            <div className="overflow-y-auto p-xl">
+              {draft && (
+                <div className="flex flex-col gap-lg">
+                  <Field>
+                    <FieldLabel htmlFor="role-name">Name</FieldLabel>
+                    <Input
+                      id="role-name"
+                      value={draft.name}
+                      disabled={draft.readOnly || draft.system}
+                      onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                      maxLength={64}
+                    />
+                    {draft.system && !draft.readOnly && (
+                      <FieldDescription>System roles keep their name.</FieldDescription>
+                    )}
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="role-description">Description</FieldLabel>
+                    <Textarea
+                      id="role-description"
+                      value={draft.description}
+                      disabled={draft.readOnly}
+                      onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                      maxLength={500}
+                    />
+                  </Field>
+                  {areas.map(([area, entries]) => (
+                    <FieldSet key={area} className="gap-sm">
+                      <FieldLegend variant="label">{area}</FieldLegend>
+                      {entries?.map((entry) => (
+                        <Field key={entry.key} orientation="horizontal">
+                          <Checkbox
+                            id={`grant-${entry.key}`}
+                            checked={draft.permissions.includes(entry.key)}
+                            disabled={draft.readOnly || entry.restricted}
+                            onCheckedChange={(checked) =>
+                              setDraft({
+                                ...draft,
+                                permissions: checked
+                                  ? [...draft.permissions, entry.key]
+                                  : draft.permissions.filter((key) => key !== entry.key),
+                              })
+                            }
+                          />
+                          <FieldLabel htmlFor={`grant-${entry.key}`} className="flex-wrap">
+                            {entry.description}{' '}
+                            <span className="text-caption font-normal text-muted-foreground">
+                              ({entry.key}
+                              {entry.restricted ? ' · Owner only' : ''})
+                            </span>
+                          </FieldLabel>
+                        </Field>
+                      ))}
+                    </FieldSet>
                   ))}
-                </FieldSet>
-              ))}
-              {error && (
-                <p role="alert" className="text-body-sm text-destructive">
-                  {error}
-                </p>
+                  {error && (
+                    <p role="alert" className="text-body-sm text-destructive">
+                      {error}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
-          )}
-          <DialogFooter showCloseButton={draft?.readOnly}>
-            {!draft?.readOnly && (
-              <>
-                <Button variant="outline" onClick={() => setDraft(null)} disabled={saving}>
-                  Cancel
+            <div className="flex flex-col-reverse gap-sm border-t bg-muted/50 px-xl py-lg sm:flex-row sm:justify-end">
+              {draft?.readOnly ? (
+                <Button variant="outline" onClick={() => setDraft(null)}>
+                  Close
                 </Button>
-                <Button
-                  onClick={() => void save()}
-                  disabled={saving || (draft !== null && draft.name.trim().length < 2)}
-                >
-                  {saving ? 'Saving…' : 'Save role'}
-                </Button>
-              </>
-            )}
-          </DialogFooter>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={() => setDraft(null)} disabled={saving}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => void save()}
+                    disabled={saving || (draft !== null && draft.name.trim().length < 2)}
+                  >
+                    {saving ? 'Saving…' : 'Save role'}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
       <AlertDialog
