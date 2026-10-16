@@ -76,3 +76,82 @@ describe('HTTP security boundary', () => {
     }
   });
 });
+
+describe('handler error sanitisation', () => {
+  it('maps Better Auth errors to generic messages and clamps non-client statuses', async () => {
+    const { APIError } = await import('better-auth');
+    const run = (error: unknown) =>
+      handler(async () => {
+        throw error;
+      })(new Request('http://localhost'));
+    const limited = await run(new APIError('TOO_MANY_REQUESTS', { message: 'internal detail' }));
+    expect(limited.status).toBe(429);
+    expect(await limited.json()).toEqual({
+      error: { code: 'AUTH_ERROR', message: 'Too many requests' },
+    });
+    const failed = await run(new APIError('INTERNAL_SERVER_ERROR', { message: 'db detail' }));
+    expect(failed.status).toBe(500);
+    expect(await failed.json()).toEqual({
+      error: { code: 'AUTH_ERROR', message: 'Authentication failed' },
+    });
+  });
+
+  it('returns validation issues without echoing input and hides unknown errors', async () => {
+    const { z } = await import('zod');
+    const invalid = await handler(async () => {
+      z.object({ a: z.string() }).parse({ a: 1 });
+      return new Response();
+    })(new Request('http://localhost'));
+    expect(invalid.status).toBe(400);
+    expect((await invalid.json()).error).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      issues: [{ path: ['a'] }],
+    });
+
+    const log = (await import('vitest')).vi.spyOn(console, 'error').mockImplementation(() => {});
+    for (const thrown of [new TypeError('password=fake'), 'string failure']) {
+      const response = await handler(async () => {
+        throw thrown;
+      })(new Request('http://localhost'));
+      expect(response.status).toBe(503);
+      expect(await response.text()).not.toContain('password');
+    }
+    expect(log).toHaveBeenCalledWith('Request failed', { kind: 'TypeError' });
+    expect(log).toHaveBeenCalledWith('Request failed', { kind: 'UnknownError' });
+    log.mockRestore();
+  });
+
+  it('rejects a JSON request without a body and malformed JSON', async () => {
+    await expect(
+      body(
+        new Request('http://localhost/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        loginInput,
+      ),
+    ).rejects.toMatchObject({ status: 400, code: 'INVALID_JSON' });
+    await expect(
+      body(
+        new Request('http://localhost/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{nope',
+        }),
+        loginInput,
+      ),
+    ).rejects.toMatchObject({ status: 400, message: 'Invalid JSON body' });
+  });
+
+  it('skips origin checks for safe methods', () => {
+    for (const method of ['GET', 'HEAD', 'OPTIONS'])
+      expect(() =>
+        assertOrigin(
+          new Request('http://localhost:3000/', {
+            method,
+            headers: { Origin: 'https://evil.test' },
+          }),
+        ),
+      ).not.toThrow();
+  });
+});

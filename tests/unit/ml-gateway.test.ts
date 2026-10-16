@@ -23,7 +23,7 @@ vi.mock('@/lib/ml/network', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/ml/network')>()),
   safeFetch: mocks.fetch,
 }));
-import { cooldownUntil, handleGateway } from '@/lib/ml/gateway';
+import { cooldownUntil, handleGateway, readGatewayBody } from '@/lib/ml/gateway';
 import { hashGatewayKey } from '@/lib/ml/crypto';
 import { NetworkError } from '@/lib/ml/network';
 import { poolModelId } from '@/lib/ml/model-id';
@@ -556,4 +556,245 @@ describe('cooldownUntil', () => {
   });
   it('never shortens below the default', () =>
     expect(cooldownUntil(new Headers({ 'retry-after': '1' }), now).getTime()).toBe(now + 60000));
+});
+
+/** Drain queued frames and return a read that is waiting on the upstream. */
+async function pendingClientRead(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  for (;;) {
+    const read = reader.read();
+    const settled = await Promise.race([
+      read.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 10)),
+    ]);
+    // Wrapped so the async function does not adopt the pending promise.
+    if (!settled) return { read };
+  }
+}
+
+describe('gateway body and transport edge cases', () => {
+  it('rejects a missing Authorization header', async () => {
+    const response = await handleGateway(new Request('https://gateway.test/api/llm/v1/models'), [
+      'models',
+    ]);
+    expect(response.status).toBe(401);
+    expect(mocks.key).not.toHaveBeenCalled();
+  });
+
+  it('requires a body and valid JSON', async () => {
+    const empty = new Request('https://gateway.test/api/llm/v1/chat/completions', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${KEY}`, 'content-type': 'application/json' },
+    });
+    const missing = await handleGateway(empty, ['chat', 'completions']);
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toEqual({
+      error: { code: 'INVALID_REQUEST', message: 'Request body required' },
+    });
+    const invalid = await handleGateway(post('{not json'), ['chat', 'completions']);
+    expect(invalid.status).toBe(400);
+    expect((await invalid.json()).error.message).toBe('Invalid JSON body');
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('times out a body read once the deadline signal fires', async () => {
+    const aborted = new AbortController();
+    aborted.abort();
+    await expect(
+      readGatewayBody(post(chatBody('openai/shared')), aborted.signal),
+    ).rejects.toMatchObject({
+      status: 504,
+      code: 'TIMEOUT',
+    });
+
+    const deadline = new AbortController();
+    const slow = new Request('https://gateway.test/api/llm/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: new ReadableStream({ pull() {} }),
+      duplex: 'half',
+    } as RequestInit);
+    const pending = readGatewayBody(slow, deadline.signal);
+    deadline.abort();
+    await expect(pending).rejects.toMatchObject({ status: 504 });
+  });
+
+  it('answers 504 for a request whose client already disconnected', async () => {
+    const client = new AbortController();
+    client.abort();
+    const response = await handleGateway(
+      post(chatBody('openai/shared'), 'chat/completions', {}, client.signal),
+      ['chat', 'completions'],
+    );
+    expect(response.status).toBe(504);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns a sanitized 502 for unexpected internal failures', async () => {
+    mocks.connections.mockRejectedValue(new Error('db password=fake at 10.0.0.1'));
+    const response = await handleGateway(post(chatBody('openai/shared')), ['chat', 'completions']);
+    expect(response.status).toBe(502);
+    const text = await response.text();
+    expect(text).not.toContain('10.0.0.1');
+    expect(JSON.parse(text)).toEqual({
+      error: { code: 'UPSTREAM_ERROR', message: 'Gateway request failed' },
+    });
+  });
+
+  it('stops failing over once the client disconnects between candidates', async () => {
+    const client = new AbortController();
+    mocks.fetch.mockResolvedValueOnce(new Response('busy', { status: 429 }));
+    mocks.updateMany.mockImplementationOnce(async () => {
+      client.abort();
+      return { count: 1 };
+    });
+    const response = await handleGateway(
+      post(chatBody('openai/shared'), 'chat/completions', {}, client.signal),
+      ['chat', 'completions'],
+    );
+    expect(response.status).toBe(504);
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers 504 when credential refresh fails because of the deadline', async () => {
+    const client = new AbortController();
+    mocks.credential.mockImplementationOnce(async () => {
+      client.abort();
+      throw new Error('refresh aborted');
+    });
+    const response = await handleGateway(
+      post(chatBody('openai/shared'), 'chat/completions', {}, client.signal),
+      ['chat', 'completions'],
+    );
+    expect(response.status).toBe(504);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a streaming upstream that does not answer with SSE', async () => {
+    mocks.fetch.mockResolvedValue(Response.json({ ok: true }));
+    const response = await handleGateway(post(chatBody('openai/shared', { stream: true })), [
+      'chat',
+      'completions',
+    ]);
+    expect(response.status).toBe(502);
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a stream that ends before its terminal event as an upstream failure', async () => {
+    mocks.fetch.mockResolvedValue(
+      new Response('', { headers: { 'content-type': 'text/event-stream' } }),
+    );
+    const response = await handleGateway(post(chatBody('openai/shared', { stream: true })), [
+      'chat',
+      'completions',
+    ]);
+    expect(response.status).toBe(502);
+  });
+
+  it('skips SSE frames without data', async () => {
+    mocks.fetch.mockResolvedValue(
+      new Response(
+        `event: ping\n\n: comment\n\ndata: ${JSON.stringify({ id: 'c', choices: [{ delta: { content: 'Z' } }] })}\n\ndata: [DONE]\n\n`,
+        { headers: { 'content-type': 'text/event-stream' } },
+      ),
+    );
+    const response = await handleGateway(post(chatBody('openai/shared', { stream: true })), [
+      'chat',
+      'completions',
+    ]);
+    expect(await response.text()).toContain('"content":"Z"');
+  });
+
+  it('stops emitting when the client cancels while the upstream is pending', async () => {
+    const encoder = new TextEncoder();
+    let upstream!: ReadableStreamDefaultController<Uint8Array>;
+    mocks.fetch.mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            upstream = controller;
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ id: 'c', choices: [{ delta: { content: 'A' } }] })}\n\n`,
+              ),
+            );
+          },
+        }),
+        { headers: { 'content-type': 'text/event-stream' } },
+      ),
+    );
+    const response = await handleGateway(post(chatBody('openai/shared', { stream: true })), [
+      'chat',
+      'completions',
+    ]);
+    const reader = response.body!.getReader();
+    const { read: pendingRead } = await pendingClientRead(reader);
+    const cancelled = reader.cancel();
+    upstream.enqueue(
+      encoder.encode(
+        `data: ${JSON.stringify({ id: 'c', choices: [{ delta: { content: 'late' } }] })}\n\n`,
+      ),
+    );
+    await cancelled;
+    expect((await pendingRead).done).toBe(true);
+    expect(mocks.fetch.mock.calls[0][1].signal.aborted).toBe(true);
+  });
+
+  it('suppresses the error frame when the client already cancelled', async () => {
+    const encoder = new TextEncoder();
+    let upstream!: ReadableStreamDefaultController<Uint8Array>;
+    mocks.fetch.mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            upstream = controller;
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ id: 'c', choices: [{ delta: { content: 'A' } }] })}\n\n`,
+              ),
+            );
+          },
+        }),
+        { headers: { 'content-type': 'text/event-stream' } },
+      ),
+    );
+    const response = await handleGateway(post(chatBody('openai/shared', { stream: true })), [
+      'chat',
+      'completions',
+    ]);
+    const reader = response.body!.getReader();
+    const { read: pendingRead } = await pendingClientRead(reader);
+    const cancelled = reader.cancel();
+    upstream.error(new NetworkError('TRANSPORT', 'reset'));
+    await cancelled;
+    expect((await pendingRead).done).toBe(true);
+  });
+});
+
+describe('cooldownUntil edge cases', () => {
+  const now = Date.UTC(2026, 9, 3);
+  it('accepts millisecond and second epochs and ignores garbage', () => {
+    expect(
+      cooldownUntil(new Headers({ 'x-ratelimit-reset': String(now + 120000) }), now).getTime(),
+    ).toBe(now + 120000);
+    expect(cooldownUntil(new Headers({ 'x-ratelimit-reset': '90' }), now).getTime()).toBe(
+      now + 90000,
+    );
+    expect(cooldownUntil(new Headers({ 'x-ratelimit-reset': '-5' }), now).getTime()).toBe(
+      now + 60000,
+    );
+    expect(cooldownUntil(new Headers({ 'retry-after': 'soon' }), now).getTime()).toBe(now + 60000);
+    expect(cooldownUntil(new Headers({ 'retry-after': '-10' }), now).getTime()).toBe(now + 60000);
+    expect(
+      cooldownUntil(new Headers({ 'x-ratelimit-reset-tokens': 'garbage' }), now).getTime(),
+    ).toBe(now + 60000);
+  });
+
+  it('parses hour and millisecond durations', () => {
+    expect(cooldownUntil(new Headers({ 'x-ratelimit-reset-tokens': '2h' }), now).getTime()).toBe(
+      now + 7200000,
+    );
+    expect(
+      cooldownUntil(new Headers({ 'x-ratelimit-reset-tokens': '90000ms' }), now).getTime(),
+    ).toBe(now + 90000);
+  });
 });
