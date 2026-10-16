@@ -6,6 +6,7 @@ const m = vi.hoisted(() => ({
   getSession: vi.fn(),
   sessionFind: vi.fn(),
   userFind: vi.fn(),
+  customFind: vi.fn(),
   auditFind: vi.fn(),
   auditCount: vi.fn(),
   verifyAccess: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('@/db', () => ({
   db: {
     session: { findFirst: m.sessionFind },
     user: { findUnique: m.userFind },
+    customRole: { findMany: m.customFind },
     auditLog: { findMany: m.auditFind, count: m.auditCount },
   },
 }));
@@ -35,6 +37,7 @@ const { listAudit } = await import('@/lib/admin-service');
 
 beforeEach(() => {
   vi.clearAllMocks();
+  m.customFind.mockResolvedValue([]);
   m.env.NODE_ENV = 'production';
 });
 
@@ -99,7 +102,10 @@ describe('grants and authorize', () => {
   });
 
   it('uses the provided transaction client', async () => {
-    const tx = { user: { findUnique: vi.fn().mockResolvedValue({ role: 'owner' }) } };
+    const tx = {
+      user: { findUnique: vi.fn().mockResolvedValue({ role: 'owner' }) },
+      customRole: { findMany: vi.fn().mockResolvedValue([]) },
+    };
     const g = await rbac.grants('u1', tx as never);
     expect(tx.user.findUnique).toHaveBeenCalled();
     expect(m.userFind).not.toHaveBeenCalled();

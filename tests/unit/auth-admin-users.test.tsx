@@ -57,7 +57,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
-vi.mock('sonner', () => ({ toast: { error: h.toastError } }));
+vi.mock('sonner', () => ({ toast: { error: h.toastError, success: vi.fn() } }));
 
 vi.mock('@tanstack/react-pacer', () => ({
   useDebouncedValue: (value: unknown) => [value],
@@ -171,7 +171,19 @@ function setConfig(options: Parameters<typeof coreAdminPlugin>[0] = {}) {
   h.config = coreAdminPlugin(options) as unknown as Record<string, unknown>;
 }
 
-function renderUsers(props: AdminUsersProps = {}) {
+const defaultProps: AdminUsersProps = {
+  currentUserId: 'actor',
+  canManageAccess: true,
+  roles: [
+    { key: 'user', name: 'user', description: '', permissions: [], system: true },
+    { key: 'viewer', name: 'viewer', description: '', permissions: [], system: true },
+    { key: 'administrator', name: 'administrator', description: '', permissions: [], system: true },
+    { key: 'owner', name: 'owner', description: '', permissions: [], system: true },
+    { key: 'admin', name: 'admin', description: '', permissions: [], system: true },
+  ],
+};
+function renderUsers(props: Partial<AdminUsersProps> = {}) {
+  const merged = { ...defaultProps, ...props };
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
   });
@@ -180,10 +192,11 @@ function renderUsers(props: AdminUsersProps = {}) {
       <AdminPanelHost>{node}</AdminPanelHost>
     </QueryClientProvider>
   );
-  const view = render(wrap(<AdminUsers {...props} />));
+  const view = render(wrap(<AdminUsers {...merged} />));
   return {
     ...view,
-    rerenderUsers: (next: AdminUsersProps = props) => view.rerender(wrap(<AdminUsers {...next} />)),
+    rerenderUsers: (next: Partial<AdminUsersProps> = props) =>
+      view.rerender(wrap(<AdminUsers {...defaultProps} {...next} />)),
     user: userEvent.setup(),
   };
 }
@@ -223,7 +236,7 @@ beforeEach(() => {
 describe('AdminUsers directory', () => {
   it('lists users with role, status and the pagination range', () => {
     renderUsers();
-    expect(screen.getByRole('heading', { level: 1, name: 'Users' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { level: 1, name: 'Users' })).toBeNull();
     const rows = screen.getAllByRole('row');
     expect(rows).toHaveLength(3);
     const adaRow = within(rows[1]);

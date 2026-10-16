@@ -53,8 +53,8 @@ reinstalling the relevant registry item, applying the documented token conversio
 | `/auth/[path]`       | Better Auth UI views; unsupported paths return 404                 |
 | `/settings/[path]`   | Authenticated account/security views; unsupported paths return 404 |
 | `/admin`             | Permission-protected overview                                      |
-| `/admin/users`       | Better Auth administration user table                              |
-| `/admin/roles`       | Read-only code-declared role catalogue                             |
+| `/admin/users`       | Accounts table with an in-place Role dropdown (owners only)        |
+| `/admin/roles`       | Locked system roles plus owner-managed custom roles                |
 | `/admin/permissions` | Application and Better Auth permission catalogues                  |
 | `/admin/audit`       | Administrative audit history                                       |
 | `/setup`             | Public first-owner bootstrap; request-time availability check      |
@@ -102,8 +102,9 @@ again after an uncertain refresh result rather than retrying the old token.
 ## 5. Authorization and RBAC
 
 `src/lib/permissions.ts` is the single source of truth. `app_user.role` stores one or more
-comma-separated role names. Recognized roles are `user`, `viewer`, `administrator`, and `owner`;
-unknown names grant nothing.
+comma-separated role keys. The system roles are `user`, `viewer`, `administrator`, and `owner`;
+owners can add custom roles (`custom_roles` table, `custom_<uuid>` keys) built from the same
+permission catalog, minus owner-only grants. Unknown keys grant nothing.
 
 - `user` has no administration permission.
 - `viewer` can read the dashboard, users, roles, permissions, and audit history.
@@ -160,7 +161,8 @@ returned to clients.
 
 | Model               | Purpose                                                           |
 | ------------------- | ----------------------------------------------------------------- |
-| `User`              | Profile, verification, code-declared roles, and ban state         |
+| `User`              | Profile, verification, assigned role keys, and ban state          |
+| `CustomRole`        | Owner-defined role: unique name, description, permission keys     |
 | `Session`           | Better Auth browser/backing sessions and impersonation actor      |
 | `Account`           | Credential or external-provider account data                      |
 | `Verification`      | Time-limited verification/reset values                            |

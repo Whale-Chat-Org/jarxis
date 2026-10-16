@@ -5,17 +5,19 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { db } from '@/db';
 import { listAudit } from '@/lib/admin-service';
-import { adminPermissionCatalog, permissionKeys, roleNames } from '@/lib/permissions';
+import { listRoles } from '@/lib/custom-roles';
+import { adminPermissionCatalog, permissionKeys } from '@/lib/permissions';
 import { requirePage } from '@/lib/rbac';
 
 export default async function AdminDashboardPage() {
   const { permissions } = await requirePage('dashboard:read');
   const can = (permission: string) => permissions.has(permission);
 
-  const [usersTotal, bannedTotal, audit] = await Promise.all([
+  const [usersTotal, bannedTotal, audit, roleCount] = await Promise.all([
     can('users:read') ? db.user.count() : Promise.resolve(null),
     can('users:read') ? db.user.count({ where: { banned: true } }) : Promise.resolve(null),
     can('audit:read') ? listAudit(1, 5) : Promise.resolve(null),
+    can('roles:read') ? listRoles().then((roles) => roles.length) : Promise.resolve(null),
   ]);
 
   const permissionTotal = permissionKeys.length + Object.keys(adminPermissionCatalog).length;
@@ -37,8 +39,8 @@ export default async function AdminDashboardPage() {
           href: '/admin/roles',
           icon: ShieldCheckIcon,
           title: 'Roles',
-          value: roleNames.length,
-          description: 'Compare available access levels',
+          value: roleCount,
+          description: 'Available access levels',
         }
       : null,
     can('permissions:read')

@@ -34,18 +34,18 @@ export const NAV_GROUPS: NavGroup[] = [
         permission: 'dashboard:read',
         icon: LayoutDashboardIcon,
       },
-    ],
-  },
-  {
-    id: 'access',
-    label: 'Access control',
-    items: [
       {
         title: 'Users & access',
         href: '/admin/users',
         permission: 'users:read',
         icon: UsersIcon,
       },
+    ],
+  },
+  {
+    id: 'access',
+    label: 'Access control',
+    items: [
       {
         title: 'Roles',
         href: '/admin/roles',

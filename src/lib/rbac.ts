@@ -7,6 +7,7 @@ import { getAuth } from './auth';
 import { verifyAccess } from './tokens';
 import { HttpError } from './errors';
 import { flattenStatements, isAllowed, parseRoles, roles, type Permission } from './permissions';
+import { storedPermissions } from './custom-roles';
 export type Identity = { userId: string; sessionId: string; familyId?: string };
 
 /**
@@ -55,10 +56,21 @@ export async function grants(userId: string, connection: typeof db | Transaction
     where: { id: userId },
     select: { role: true },
   });
-  const assigned = parseRoles(user?.role);
+  const raw = (user?.role ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const custom = await connection.customRole.findMany({
+    where: { key: { in: raw } },
+    select: { key: true, permissions: true },
+  });
+  const assigned = [...parseRoles(user?.role), ...custom.map((role) => role.key)];
   return {
     roles: assigned,
-    permissions: new Set(assigned.flatMap((name) => flattenStatements(roles[name]))),
+    permissions: new Set([
+      ...parseRoles(user?.role).flatMap((name) => flattenStatements(roles[name])),
+      ...custom.flatMap((role) => storedPermissions(role.permissions)),
+    ]),
   };
 }
 export async function authorize(

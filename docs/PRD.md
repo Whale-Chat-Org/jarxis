@@ -41,8 +41,9 @@ clear extension points.
 | Product owner      | Perform all administrative operations and assign roles      | `owner`                      |
 | API client         | Authenticate without a browser and maintain a token session | Any active, verified account |
 
-A new account receives the `user` role and no administrative access. Roles are declared in code;
-unknown stored role names grant no permissions.
+A new account receives the `user` role and no administrative access. The four system roles are
+declared in code; owners can add custom roles from the permission catalog. Unknown stored role
+names grant no permissions.
 
 ## 5. Product scope
 
@@ -91,7 +92,8 @@ unknown stored role names grant no permissions.
 - Administrators can create and update ordinary users, ban or unban them, set passwords and email
   addresses, and inspect or revoke their sessions.
 - Owners can additionally assign roles, delete users, and perform owner-level impersonation.
-- The roles screen is read-only because roles are code-declared system roles.
+- Owners can create, edit, duplicate and delete custom roles; system roles stay locked, and a role
+  that users still have cannot be deleted.
 - Administration navigation is responsive and usable on desktop and mobile viewports.
 
 ### 5.5 Owner safety rules

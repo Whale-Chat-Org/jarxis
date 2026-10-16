@@ -80,6 +80,18 @@ model User {
   @@map("app_user")
 }
 
+model CustomRole {
+  key            String   @id
+  name           String
+  normalizedName String   @unique @map("normalized_name")
+  description    String
+  permissions    Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("custom_roles")
+}
+
 model Session {
   id             String   @id
   expiresAt      DateTime @map("expires_at") @db.Timestamptz(6)

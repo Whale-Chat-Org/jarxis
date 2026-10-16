@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   pageGrants: vi.fn(),
   userCount: vi.fn(),
   findSession: vi.fn(),
+  findCustomRoles: vi.fn(),
+  findUsers: vi.fn(),
   listAudit: vi.fn(),
 }));
 
@@ -19,7 +21,11 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('@/lib/rbac', () => ({ requirePage: mocks.requirePage, pageGrants: mocks.pageGrants }));
 vi.mock('@/db', () => ({
-  db: { user: { count: mocks.userCount }, session: { findFirst: mocks.findSession } },
+  db: {
+    user: { count: mocks.userCount, findMany: mocks.findUsers },
+    session: { findFirst: mocks.findSession },
+    customRole: { findMany: mocks.findCustomRoles },
+  },
 }));
 vi.mock('@/lib/admin-service', () => ({ listAudit: mocks.listAudit }));
 vi.mock('@/components/admin/admin-shell', () => ({
@@ -74,6 +80,8 @@ function access(permissions: Iterable<string>, assigned: string[] = ['owner']) {
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
+  mocks.findCustomRoles.mockResolvedValue([]);
+  mocks.findUsers.mockResolvedValue([]);
 });
 
 type El = ReactElement<{ children?: ReactNode; fallback?: ReactNode }>;
@@ -179,23 +187,18 @@ describe('admin overview', () => {
 });
 
 describe('roles page', () => {
-  it('compares every role and links to user access', async () => {
+  it('shows locked system roles and an owner create action', async () => {
     mocks.requirePage.mockResolvedValue(access(ownerPermissions));
     render(await RolesPage());
     expect(mocks.requirePage).toHaveBeenCalledWith('roles:read');
-    expect(screen.getByText(/4 roles define the available access levels/)).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Manage user access' }).getAttribute('href')).toBe(
-      '/admin/users',
-    );
-    const table = screen.getByRole('table');
-    expect(within(table).getAllByRole('columnheader')).toHaveLength(5);
-    expect(within(table).getByText('Assigning roles')).toBeTruthy();
+    expect(screen.getAllByText(/Locked system role/)).toHaveLength(4);
+    expect(screen.getByRole('button', { name: 'Create role' })).toBeTruthy();
   });
 
-  it('hides the users link without users:read', async () => {
-    mocks.requirePage.mockResolvedValue(access(['roles:read']));
+  it('shows roles read only to non-owners', async () => {
+    mocks.requirePage.mockResolvedValue(access(['roles:read'], ['viewer']));
     render(await RolesPage());
-    expect(screen.queryByRole('link', { name: 'Manage user access' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create role' })).toBeNull();
   });
 });
 
@@ -206,7 +209,7 @@ describe('permissions page', () => {
     expect(mocks.requirePage).toHaveBeenCalledWith('permissions:read');
     const total =
       Object.keys(permissionCatalog).length + Object.keys(adminPermissionCatalog).length;
-    expect(screen.getByText(new RegExp(`^${total} permissions across 4 fixed roles`))).toBeTruthy();
+    expect(screen.getByText(new RegExp(`^${total} permissions in the catalog`))).toBeTruthy();
     const [administration, application] = screen.getAllByRole('table');
     const setRole = within(administration).getByText('user:set-role').closest('tr')!;
     expect(within(setRole).getByText('Owner only')).toBeTruthy();
