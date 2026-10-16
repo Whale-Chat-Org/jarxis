@@ -1,10 +1,14 @@
 /**
- * Roles and permissions are declared in `src/lib/permissions.ts` and shipped with the application,
- * so there is nothing to seed. This script keeps the `pnpm db:seed` contract used by the deployment
- * pipeline and turns it into an integrity check: every permission a role can hold must exist in the
- * declared statement map, and every project permission key must be granted by at least one role.
+ * `pnpm db:seed`, run by the deployment pipeline after migrations.
+ *
+ * First an integrity check of `src/lib/permissions.ts`: every permission a role can hold must exist
+ * in the declared statement map, and every project permission key must be granted by at least one
+ * role. Then the `permissions` table and the system rows of `roles` are synced from it (see
+ * `seedRbac`); custom roles and owner edits to Viewer and Administrator are preserved.
  */
 import 'dotenv/config';
+import { db } from '../src/db';
+import { seedRbac } from '../src/lib/rbac-seed';
 import {
   adminPermissionCatalog,
   declaredPermissionKeys,
@@ -46,4 +50,15 @@ for (const name of roleNames) {
   const count = flattenStatements(roles[name]).length;
   console.log(`${roleCatalog[name].name.padEnd(14)} ${count} permission(s)`);
 }
-console.log('Role catalog verified; roles are code-declared and no rows are written.');
+// `--reset-roles` restores Viewer and Administrator to their defaults; refused in production.
+const reset = process.argv.includes('--reset-roles');
+if (reset && process.env.NODE_ENV === 'production')
+  throw new Error('Refusing to reset role grants in production');
+const result = await seedRbac(db, { reset });
+console.log(
+  `Seeded ${result.permissions} permission(s)` +
+    (result.removedPermissions ? `, removed ${result.removedPermissions} stale` : '') +
+    (result.createdRoles.length ? `; created roles: ${result.createdRoles.join(', ')}` : '') +
+    '.',
+);
+await db.$disconnect();

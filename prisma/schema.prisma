@@ -7,22 +7,22 @@ datasource db {
 }
 
 model MlConnection {
-  id                  String       @id @default(uuid())
+  id                  String    @id @default(uuid())
   name                String
   provider            String
-  baseUrl             String       @map("base_url")
-  enabled             Boolean      @default(true)
-  priority            Int          @default(0)
-  encryptedCredential String?      @map("encrypted_credential")
-  status              String       @default("pending")
-  discoveryStatus     String       @default("pending") @map("discovery_status")
-  discoveryError      String?      @map("discovery_error")
-  lastDiscoveredAt    DateTime?    @map("last_discovered_at") @db.Timestamptz(6)
-  nextDiscoveryAt     DateTime     @default(now()) @map("next_discovery_at") @db.Timestamptz(6)
-  cooldownUntil       DateTime?    @map("cooldown_until") @db.Timestamptz(6)
-  createdBy           String       @map("created_by")
-  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  baseUrl             String    @map("base_url")
+  enabled             Boolean   @default(true)
+  priority            Int       @default(0)
+  encryptedCredential String?   @map("encrypted_credential")
+  status              String    @default("pending")
+  discoveryStatus     String    @default("pending") @map("discovery_status")
+  discoveryError      String?   @map("discovery_error")
+  lastDiscoveredAt    DateTime? @map("last_discovered_at") @db.Timestamptz(6)
+  nextDiscoveryAt     DateTime  @default(now()) @map("next_discovery_at") @db.Timestamptz(6)
+  cooldownUntil       DateTime? @map("cooldown_until") @db.Timestamptz(6)
+  createdBy           String    @map("created_by")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   models              MlModel[]
 
   @@index([nextDiscoveryAt])
@@ -57,19 +57,19 @@ model MlGatewayKey {
 }
 
 model User {
-  id            String        @id
+  id            String             @id
   name          String
-  email         String        @unique
-  emailVerified Boolean       @default(false) @map("email_verified")
+  email         String             @unique
+  emailVerified Boolean            @default(false) @map("email_verified")
   image         String?
   // Better Auth admin plugin fields. `role` holds one or more code-declared role names,
   // comma-separated; an unrecognised name grants nothing (fail closed).
   role          String?
-  banned        Boolean       @default(false)
-  banReason     String?       @map("ban_reason")
-  banExpires    DateTime?     @map("ban_expires") @db.Timestamptz(6)
-  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  banned        Boolean            @default(false)
+  banReason     String?            @map("ban_reason")
+  banExpires    DateTime?          @map("ban_expires") @db.Timestamptz(6)
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
   sessions      Session[]
   accounts      Account[]
   tokenFamilies TokenFamily[]
@@ -80,16 +80,41 @@ model User {
   @@map("app_user")
 }
 
-model CustomRole {
-  key            String   @id
+/// Every role a user can hold: the four system roles plus owner-created custom roles.
+model Role {
+  key            String           @id
   name           String
-  normalizedName String   @unique @map("normalized_name")
+  normalizedName String           @unique @map("normalized_name")
   description    String
-  permissions    Json
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// System roles cannot be renamed or deleted; owner and user are also locked to their code grants.
+  system         Boolean          @default(false)
+  permissions    RolePermission[]
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  @@map("custom_roles")
+  @@map("roles")
+}
+
+/// The permission catalog, seeded from `src/lib/permissions.ts`.
+model Permission {
+  key         String           @id
+  description String
+  /// Owner-only: never grantable to an editable role.
+  restricted  Boolean          @default(false)
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleKey       String     @map("role_key")
+  permissionKey String     @map("permission_key")
+  role          Role       @relation(fields: [roleKey], references: [key], onDelete: Cascade)
+  permission    Permission @relation(fields: [permissionKey], references: [key], onDelete: Cascade)
+
+  @@id([roleKey, permissionKey])
+  @@index([permissionKey])
+  @@map("role_permissions")
 }
 
 model Session {
@@ -182,7 +207,6 @@ model AuditLog {
 
 /**
  * Permanent, single-row record that first-owner setup has completed.
- *
  * The row is never deleted: it is the evidence that closes the unauthenticated web setup flow
  * for good. The primary key is pinned to `singleton` by a CHECK constraint in the migration, so
  * a second completion row cannot exist. CLI recovery (`pnpm owner`) is deliberately still
@@ -191,9 +215,13 @@ model AuditLog {
 model InstallationSetup {
   id          String   @id
   completedAt DateTime @default(now()) @map("completed_at") @db.Timestamptz(6)
-  /** User the setup created or detected, when known. */
+  /**
+   * User the setup created or detected, when known.
+   */
   completedBy String?  @map("completed_by")
-  /** How setup closed: `web`, `cli`, `existing-owner` or `migration-backfill`. */
+  /**
+   * How setup closed: `web`, `cli`, `existing-owner` or `migration-backfill`.
+   */
   method      String
 
   @@map("installation_setup")
@@ -201,20 +229,25 @@ model InstallationSetup {
 
 /**
  * Pending email verification for the first-owner setup flow.
- *
  * `POST /api/setup` creates an unverified candidate user plus one of these rows; the emailed
  * six-digit code is only ever stored as an HMAC-SHA256 digest keyed by `BETTER_AUTH_SECRET`, so
  * a database read cannot reveal a usable code. The row is consumed (`consumedAt`) when the code
  * verifies, which is also when the owner role and the permanent setup marker are written.
  */
 model OwnerSetupRequest {
-  /** Opaque UUID handed to the client; the only handle the browser keeps. */
+  /**
+   * Opaque UUID handed to the client; the only handle the browser keeps.
+   */
   id         String    @id
   userId     String    @unique @map("user_id")
-  /** HMAC-SHA256 of the code; the raw code is never stored. */
+  /**
+   * HMAC-SHA256 of the code; the raw code is never stored.
+   */
   codeHash   String    @map("code_hash")
   expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
-  /** Wrong-code attempts; committed even when the request itself is rejected. */
+  /**
+   * Wrong-code attempts; committed even when the request itself is rejected.
+   */
   attempts   Int       @default(0)
   lastSentAt DateTime? @map("last_sent_at") @db.Timestamptz(6)
   consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)

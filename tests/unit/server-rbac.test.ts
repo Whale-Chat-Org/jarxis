@@ -6,7 +6,7 @@ const m = vi.hoisted(() => ({
   getSession: vi.fn(),
   sessionFind: vi.fn(),
   userFind: vi.fn(),
-  customFind: vi.fn(),
+  roleFind: vi.fn(),
   auditFind: vi.fn(),
   auditCount: vi.fn(),
   verifyAccess: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock('@/db', () => ({
   db: {
     session: { findFirst: m.sessionFind },
     user: { findUnique: m.userFind },
-    customRole: { findMany: m.customFind },
+    role: { findMany: m.roleFind },
     auditLog: { findMany: m.auditFind, count: m.auditCount },
   },
 }));
@@ -37,7 +37,7 @@ const { listAudit } = await import('@/lib/admin-service');
 
 beforeEach(() => {
   vi.clearAllMocks();
-  m.customFind.mockResolvedValue([]);
+  m.roleFind.mockResolvedValue([]);
   m.env.NODE_ENV = 'production';
 });
 
@@ -101,10 +101,33 @@ describe('grants and authorize', () => {
     expect(none.permissions.size).toBe(0);
   });
 
+  it('reads editable and custom role grants from role_permissions but pins owner to code', async () => {
+    m.userFind.mockResolvedValue({ role: 'viewer,custom_a,owner' });
+    m.roleFind.mockResolvedValue([
+      { key: 'viewer', system: true, permissions: [{ permissionKey: 'users:read' }] },
+      { key: 'custom_a', system: false, permissions: [{ permissionKey: 'roles:assign' }] },
+      { key: 'owner', system: true, permissions: [] },
+    ]);
+    const g = await rbac.grants('u1');
+    expect(m.roleFind).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { key: { in: ['viewer', 'custom_a', 'owner'] } } }),
+    );
+    expect(g.roles).toEqual(['viewer', 'owner', 'custom_a']);
+    expect(g.permissions.has('users:read')).toBe(true);
+    expect(g.permissions.has('roles:update')).toBe(true);
+
+    m.userFind.mockResolvedValue({ role: 'viewer,custom_a' });
+    const edited = await rbac.grants('u2');
+    expect(edited.permissions.has('users:read')).toBe(true);
+    // Viewer's stored row drops its code default, and owner-only grants never leak via a row.
+    expect(edited.permissions.has('audit:read')).toBe(false);
+    expect(edited.permissions.has('roles:assign')).toBe(false);
+  });
+
   it('uses the provided transaction client', async () => {
     const tx = {
       user: { findUnique: vi.fn().mockResolvedValue({ role: 'owner' }) },
-      customRole: { findMany: vi.fn().mockResolvedValue([]) },
+      role: { findMany: vi.fn().mockResolvedValue([]) },
     };
     const g = await rbac.grants('u1', tx as never);
     expect(tx.user.findUnique).toHaveBeenCalled();

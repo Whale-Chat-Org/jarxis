@@ -103,8 +103,10 @@ again after an uncertain refresh result rather than retrying the old token.
 
 `src/lib/permissions.ts` is the single source of truth. `app_user.role` stores one or more
 comma-separated role keys. The system roles are `user`, `viewer`, `administrator`, and `owner`;
-owners can add custom roles (`custom_roles` table, `custom_<uuid>` keys) built from the same
-permission catalog, minus owner-only grants. Unknown keys grant nothing.
+owners can add custom roles (`roles` table, `custom_<uuid>` keys) built from the same
+permission catalog, minus owner-only grants, and edit Viewer and Administrator. Permissions and
+system roles are seeded into `permissions`/`roles` by `pnpm db:seed`; grants are rows in
+`role_permissions`, except Owner and User, which stay pinned to code. Unknown keys grant nothing.
 
 - `user` has no administration permission.
 - `viewer` can read the dashboard, users, roles, permissions, and audit history.
@@ -162,7 +164,9 @@ returned to clients.
 | Model               | Purpose                                                           |
 | ------------------- | ----------------------------------------------------------------- |
 | `User`              | Profile, verification, assigned role keys, and ban state          |
-| `CustomRole`        | Owner-defined role: unique name, description, permission keys     |
+| `Role`              | System or owner-defined role: unique name, description            |
+| `Permission`        | Seeded permission catalog with its owner-only flag                |
+| `RolePermission`    | Grant of one permission to one role                               |
 | `Session`           | Better Auth browser/backing sessions and impersonation actor      |
 | `Account`           | Credential or external-provider account data                      |
 | `Verification`      | Time-limited verification/reset values                            |

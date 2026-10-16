@@ -88,11 +88,15 @@ for worker setup, supported features, and validation limits.
 User, role and permission management is the Better Auth `admin` plugin; the extra rules this
 project needs are hooks. See [TECH.md](TECH.md#authorization-and-rbac) for the full picture.
 
-- **System roles are code-declared** in `src/lib/permissions.ts`: `user` (default, grants
-  nothing), `viewer`, `administrator` and `owner`. They are locked: they can be viewed and
-  duplicated but not edited or deleted. `app_user.role` stores the assigned keys comma-separated,
-  and an unrecognised key grants nothing — a removed role fails closed.
-- **Custom roles** live in the `custom_roles` table under `custom_<uuid>` keys. Owners create, edit,
+- **System roles** are declared in `src/lib/permissions.ts` and seeded into the `roles` table:
+  `user` (default, grants nothing), `viewer`, `administrator` and `owner`. None can be deleted.
+  Owner and User are locked to their code grants; owners can edit the description and grants of
+  Viewer and Administrator (seeding never overwrites those edits; `pnpm db:seed --reset-roles`
+  restores them outside production). `app_user.role` stores the assigned keys comma-separated, and
+  an unrecognised key grants nothing — a removed role fails closed.
+- **Permissions** live in the `permissions` table, seeded from the code catalog by `pnpm db:seed`;
+  role grants are rows in `role_permissions`.
+- **Custom roles** live in the `roles` table under `custom_<uuid>` keys. Owners create, edit,
   duplicate and delete them on `/admin/roles`; they pick from the code-defined permission catalog
   (no new keys) and can never hold owner-only grants (`roles:update`, `roles:assign`,
   `providers:*`, `user:delete`, `user:set-role`, `user:impersonate-admins`). Names are unique

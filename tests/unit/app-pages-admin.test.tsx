@@ -8,7 +8,9 @@ const mocks = vi.hoisted(() => ({
   pageGrants: vi.fn(),
   userCount: vi.fn(),
   findSession: vi.fn(),
-  findCustomRoles: vi.fn(),
+  findRoles: vi.fn(),
+  findPermissions: vi.fn(),
+  roleCounts: vi.fn(),
   findUsers: vi.fn(),
   listAudit: vi.fn(),
 }));
@@ -24,7 +26,9 @@ vi.mock('@/db', () => ({
   db: {
     user: { count: mocks.userCount, findMany: mocks.findUsers },
     session: { findFirst: mocks.findSession },
-    customRole: { findMany: mocks.findCustomRoles },
+    role: { findMany: mocks.findRoles },
+    permission: { findMany: mocks.findPermissions },
+    $queryRaw: mocks.roleCounts,
   },
 }));
 vi.mock('@/lib/admin-service', () => ({ listAudit: mocks.listAudit }));
@@ -58,6 +62,7 @@ import AdminLoading from '@/app/admin/loading';
 import MlLoading from '@/app/admin/ml-providers/loading';
 import MlProvidersPage from '@/app/admin/ml-providers/page';
 import AdminDashboardPage from '@/app/admin/page';
+import { AdminPanelHost } from '@/components/ui/admin-panel';
 import PermissionsLoading from '@/app/admin/permissions/loading';
 import PermissionsPage from '@/app/admin/permissions/page';
 import RolesLoading from '@/app/admin/roles/loading';
@@ -80,7 +85,9 @@ function access(permissions: Iterable<string>, assigned: string[] = ['owner']) {
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
-  mocks.findCustomRoles.mockResolvedValue([]);
+  mocks.findRoles.mockResolvedValue([]);
+  mocks.findPermissions.mockResolvedValue([]);
+  mocks.roleCounts.mockResolvedValue([]);
   mocks.findUsers.mockResolvedValue([]);
 });
 
@@ -189,20 +196,35 @@ describe('admin overview', () => {
 describe('roles page', () => {
   it('shows locked system roles and an owner create action', async () => {
     mocks.requirePage.mockResolvedValue(access(ownerPermissions));
-    render(await RolesPage());
+    render(<AdminPanelHost>{await RolesPage()}</AdminPanelHost>);
     expect(mocks.requirePage).toHaveBeenCalledWith('roles:read');
-    expect(screen.getAllByText(/Locked system role/)).toHaveLength(4);
+    expect(screen.getAllByText('Locked')).toHaveLength(2);
+    expect(screen.getAllByText('System')).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Create role' })).toBeTruthy();
   });
 
   it('shows roles read only to non-owners', async () => {
     mocks.requirePage.mockResolvedValue(access(['roles:read'], ['viewer']));
-    render(await RolesPage());
+    render(<AdminPanelHost>{await RolesPage()}</AdminPanelHost>);
     expect(screen.queryByRole('button', { name: 'Create role' })).toBeNull();
   });
 });
 
 describe('permissions page', () => {
+  it('reads the catalog from the permissions table', async () => {
+    mocks.requirePage.mockResolvedValue(access(ownerPermissions));
+    mocks.findPermissions.mockResolvedValue([
+      { key: 'user:list', description: 'List users from the database', restricted: false },
+      { key: 'audit:read', description: 'Audit from the database', restricted: true },
+    ]);
+    render(await PermissionsPage());
+    expect(screen.getByText(/^2 permissions in the catalog/)).toBeTruthy();
+    const [administration, application] = screen.getAllByRole('table');
+    expect(within(administration).getByText('List users from the database')).toBeTruthy();
+    const audit = within(application).getByText('audit:read').closest('tr')!;
+    expect(within(audit).getByText('Owner only')).toBeTruthy();
+  });
+
   it('lists both catalogs with their scope', async () => {
     mocks.requirePage.mockResolvedValue(access(ownerPermissions));
     render(await PermissionsPage());

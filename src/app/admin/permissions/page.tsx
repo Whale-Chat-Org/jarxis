@@ -7,13 +7,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  adminPermissionCatalog,
-  ownerOnly,
-  permissionCatalog,
-  type Permission,
-} from '@/lib/permissions';
+import { permissionCatalog } from '@/lib/permissions';
 import { requirePage } from '@/lib/rbac';
+import { listPermissions } from '@/lib/roles';
 
 type Entry = { key: string; description: string; scope: string };
 
@@ -58,21 +54,14 @@ function table(entries: Entry[]) {
 export default async function PermissionsPage() {
   await requirePage('permissions:read');
 
-  const application: Entry[] = Object.entries(permissionCatalog).map(([key, description]) => ({
-    key,
-    description,
-    scope: ownerOnly.has(key as Permission) ? 'owner' : 'standard',
+  const entries: Entry[] = (await listPermissions()).map((entry) => ({
+    key: entry.key,
+    description: entry.description,
+    scope: entry.restricted ? 'owner' : 'standard',
   }));
-  const administration: Entry[] = Object.entries(adminPermissionCatalog).map(
-    ([key, description]) => ({
-      key,
-      description,
-      scope:
-        key === 'user:set-role' || key === 'user:delete' || key === 'user:impersonate-admins'
-          ? 'owner'
-          : 'standard',
-    }),
-  );
+  const isApplication = (key: string) => Object.hasOwn(permissionCatalog, key);
+  const application = entries.filter((entry) => isApplication(entry.key));
+  const administration = entries.filter((entry) => !isApplication(entry.key));
   const total = application.length + administration.length;
 
   return (
@@ -80,8 +69,8 @@ export default async function PermissionsPage() {
       <div className="flex flex-col gap-2xs">
         <h2 className="text-heading font-semibold tracking-tight">Permissions</h2>
         <p className="text-body-sm text-muted-foreground">
-          {total} permission{total === 1 ? '' : 's'} in the catalog. System roles are fixed; owners
-          can grant standard permissions to custom roles.
+          {total} permission{total === 1 ? '' : 's'} in the catalog. Owner and User are fixed;
+          owners can grant standard permissions to any other role.
         </p>
         <p className="text-body-sm text-muted-foreground">
           <span className="font-medium">Standard</span> marks the scope of a permission, not who

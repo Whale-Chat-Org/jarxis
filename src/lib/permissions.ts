@@ -13,7 +13,7 @@ export const permissionCatalog = {
   'users:read': 'List user profiles and assigned roles',
   'users:update': 'Change user names and account status',
   'roles:read': 'View roles and their permissions',
-  'roles:update': 'Create, edit and delete custom roles (owner only)',
+  'roles:update': 'Create, edit and delete roles (owner only)',
   'roles:assign': 'Assign and remove user roles (owner only)',
   'permissions:read': 'View the permission catalog',
   'audit:read': 'View security and administrative audit events',
@@ -52,6 +52,14 @@ export const adminPermissionCatalog = {
 } as const;
 export type AdminPermission = keyof typeof adminPermissionCatalog;
 
+/** Owner-only grants: never assignable to an editable role, whatever the database holds. */
+export const restrictedPermissions: ReadonlySet<string> = new Set<string>([
+  ...ownerOnly,
+  'user:delete',
+  'user:set-role',
+  'user:impersonate-admins',
+]);
+
 /**
  * Full statement map. The admin plugin's own resources come from `defaultStatements`; the rest are
  * this application's. Both are declared in one place so a role's grant and the plugin's
@@ -74,6 +82,13 @@ export type RoleName = (typeof roleNames)[number];
 
 /** Roles a fresh account lands on: no administrative access at all (deny by default). */
 export const defaultRole = 'user' satisfies RoleName;
+
+/**
+ * System roles whose grants stay pinned to {@link roleStatements}: editing `owner` could lock every
+ * operator out, and `user` is the deny-by-default landing role. Viewer and Administrator are stored
+ * in the `role_permissions` table and editable by an owner.
+ */
+export const lockedRoles: readonly RoleName[] = ['owner', 'user'];
 
 /** Roles the admin plugin treats as administrators for the impersonation guard. */
 export const adminRoles: RoleName[] = ['owner', 'administrator'];
@@ -118,7 +133,7 @@ export const roles = {
   owner: ac.newRole(roleStatements.owner),
 };
 
-/** Human-readable metadata for the read-only roles page. */
+/** Names and descriptions of the system roles, seeded into the `roles` table. */
 export const roleCatalog: Record<RoleName, { name: string; description: string }> = {
   user: { name: 'User', description: 'Signed-in account with no administrative access.' },
   viewer: { name: 'Viewer', description: 'Read-only access to administration screens.' },
