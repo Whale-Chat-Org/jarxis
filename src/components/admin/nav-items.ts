@@ -35,7 +35,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: LayoutDashboardIcon,
       },
       {
-        title: 'Users & access',
+        title: 'Users',
         href: '/admin/users',
         permission: 'users:read',
         icon: UsersIcon,

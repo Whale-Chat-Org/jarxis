@@ -1357,24 +1357,26 @@ function UserInspector({
                                     ))}
                                   </FieldGroup>
                                 ) : (
-                                  <RadioGroup
-                                    className="flex-row flex-wrap gap-lg"
+                                  <Select
                                     disabled={isSelf || !canSetRole.data?.success}
                                     onValueChange={(role) => field.handleChange([role])}
                                     value={field.state.value[0] ?? ''}
                                   >
-                                    {roles.map((option) => (
-                                      <Field key={option.key} orientation="horizontal">
-                                        <RadioGroupItem
-                                          id={`admin-user-role-${option.key}`}
-                                          value={option.key}
-                                        />
-                                        <FieldLabel htmlFor={`admin-user-role-${option.key}`}>
+                                    <SelectTrigger
+                                      aria-label={config.localization.role}
+                                      className="w-full"
+                                      id="admin-user-role"
+                                    >
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {roles.map((option) => (
+                                        <SelectItem key={option.key} value={option.key}>
                                           {option.name}
-                                        </FieldLabel>
-                                      </Field>
-                                    ))}
-                                  </RadioGroup>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                                 )
                               }
                             </profileForm.Field>

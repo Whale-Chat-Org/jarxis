@@ -525,7 +525,9 @@ describe('AdminUsers inspector profile', () => {
     const { user } = renderUsers();
     const dialog = await openInspector(user);
     expect((within(dialog).getByLabelText('Email') as HTMLInputElement).disabled).toBe(true);
-    expect(within(dialog).getByRole('radiogroup').getAttribute('data-disabled')).not.toBeNull();
+    expect(
+      (within(dialog).getByRole('combobox', { name: 'Role' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     await user.type(within(dialog).getByLabelText('Name'), '!');
     await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(h.admin.updateUser).toHaveBeenCalledOnce());
@@ -533,13 +535,14 @@ describe('AdminUsers inspector profile', () => {
     expect(h.admin.setRole).not.toHaveBeenCalled();
   });
 
-  it('lets a role-only admin change a role via the radio group', async () => {
+  it('lets a role-only admin change a role via the role dropdown', async () => {
     h.permissions['user:update'] = false;
     setConfig({ allowMultipleRoles: false });
     const { user } = renderUsers();
     const dialog = await openInspector(user);
     expect((within(dialog).getByLabelText('Name') as HTMLInputElement).disabled).toBe(true);
-    await user.click(within(dialog).getByRole('radio', { name: 'admin' }));
+    await user.click(within(dialog).getByRole('combobox', { name: 'Role' }));
+    await user.click(await screen.findByRole('option', { name: 'admin' }));
     await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(h.admin.setRole).toHaveBeenCalledOnce());
     expect(h.admin.setRole.mock.calls[0][0]).toMatchObject({ role: ['admin'] });

@@ -47,8 +47,8 @@ test('owner browses the admin shell, user management and the role catalog', asyn
   await sidebarTrigger.click();
   await expect(sidebar).toHaveAttribute('data-state', 'expanded');
 
-  // The registry table is the sole content of Users & access.
-  await sidebar.getByRole('link', { name: 'Users & access' }).click();
+  // The registry table is the sole content of Users.
+  await sidebar.getByRole('link', { name: 'Users', exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/users(?:\?|$)/);
   await expect(page.getByRole('tab')).toHaveCount(0);
   await expect(page.getByRole('table')).toBeVisible();
@@ -181,7 +181,7 @@ test('the sidebar collapses into a sheet on a narrow viewport', async ({
   await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
   const sheet = page.getByRole('dialog');
   await expect(sheet).toBeVisible();
-  await sheet.getByRole('link', { name: 'Users & access' }).click();
+  await sheet.getByRole('link', { name: 'Users', exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/users(?:\?|$)/);
   // Navigation keeps the mobile sheet open; Escape closes the modal through its keyboard API.
   await page.keyboard.press('Escape');

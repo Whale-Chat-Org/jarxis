@@ -37,7 +37,7 @@ beforeEach(() => {
 describe('SiteHeader', () => {
   it.each([
     ['/admin', 'General', 'Overview'],
-    ['/admin/users', 'General', 'Users & access'],
+    ['/admin/users', 'General', 'Users'],
     ['/admin/roles/extra', 'Access control', 'Roles'],
     ['/admin/ml-providers', 'Proxy', 'Providers'],
     ['/admin/unknown', 'General', 'Overview'],
@@ -71,7 +71,7 @@ describe('AppSidebar', () => {
     expect(screen.getByText('General')).toBeTruthy();
     expect(screen.queryByText('Security')).toBeNull();
     expect(screen.queryByText('Roles')).toBeNull();
-    const users = screen.getByRole('link', { name: 'Users & access' });
+    const users = screen.getByRole('link', { name: 'Users' });
     expect(users.getAttribute('data-active')).toBe('true');
     expect(screen.getByRole('link', { name: 'Overview' }).getAttribute('data-active')).toBe(
       'false',
