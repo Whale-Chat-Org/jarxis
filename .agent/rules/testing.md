@@ -9,7 +9,7 @@
 # Unit tests and coverage
 
 - `pnpm test` runs two Vitest projects: **unit** (`tests/unit/**/*.test.ts`, Node) for server and library code, and **dom** (`tests/unit/**/*.test.tsx`, jsdom with `tests/setup-dom.ts`) for React components, using `@testing-library/react` and `@testing-library/user-event`.
-- Coverage is measured over all of `src/**/*.{ts,tsx}`, including the shadcn and Better Auth UI registry copies, and `pnpm test --coverage` fails below **80%** (lines, statements, functions, branches). CI runs it, so a change that drops coverage below the threshold fails the `test` job.
+- Coverage is measured over all of `src/**/*.{ts,tsx}`, including the shadcn and Better Auth UI registry copies, and `pnpm test --coverage` fails below **80%** (lines, statements, functions, branches). Run it locally before opening a PR, because CI runs only on `main` after merge, where a drop below the threshold fails the `test` job and blocks deploy.
 - New or changed code needs tests in the same change. Mock the database, Redis, auth client, `fetch` and Next.js modules (`next/navigation`, `next/headers`) with `vi.mock`; assert behaviour (calls, text, roles, rejection paths), not snapshots.
 - Never lower the thresholds or add coverage exclusions to make a run pass.
 

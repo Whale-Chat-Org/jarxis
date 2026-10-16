@@ -26,14 +26,15 @@ The pipeline is `.github/workflows/ci-cd.yml`: **test → build (+ image scan) �
 - **Pinned supply chain.** Every third-party action is pinned to a full commit SHA with a `# vX.Y.Z` comment, and every container image (CI services, Semgrep, Dockerfile `FROM`) to a `@sha256:` digest. Update both together; never use a floating tag or branch.
 - **Scans gate the deploy.** `deploy` needs `sonarqube`, `semgrep` and `trivy`. SonarQube's quality gate, Semgrep `ERROR` findings and Trivy `HIGH`/`CRITICAL` (fix available) all fail the run. Do not weaken thresholds, add `continue-on-error` or skip a job to get a release out.
 - **Nothing reaches the registry before the scans pass.** Images are built once and the app image is Trivy-scanned in the build job. Only on a push to `main` are the image tars gzipped and kept as a 1-day artifact; only the deploy job pushes them to ACR, tagged by commit SHA.
-- **Artifact storage.** Pull requests never upload image tars. Docker build-record artifacts are disabled (`DOCKER_BUILD_RECORD_UPLOAD: false`) and reports keep `retention-days: 7`. The final `cleanup` job (`if: always()`) deletes the run's artifacts once every job has finished, keeping only the SARIF reports when the run failed or was cancelled; any new job must be added to its `needs`. When adding a file that tests or the build read, add it to the `paths:` filter.
+- **Main only.** The workflow triggers only on a push to `main` (and manual `workflow_dispatch`, whose `test` job is skipped off `main`). Pull requests and other branches get no CI run, so their checks must be run locally before merging (see `git-rules.md`). Do not add `pull_request`, `pull_request_target` or other-branch triggers without the owner's approval.
+- **Artifact storage.** Image tars are only uploaded on `main`, for deploy. Docker build-record artifacts are disabled (`DOCKER_BUILD_RECORD_UPLOAD: false`) and reports keep `retention-days: 7`. The final `cleanup` job (`if: always()`) deletes the run's artifacts once every job has finished, keeping only the SARIF reports when the run failed or was cancelled; any new job must be added to its `needs`. When adding a file that tests or the build read, add it to the `paths:` filter.
 - **Secrets.** Use GitHub `secrets` for credentials and `vars` for non-secret settings. CI test secrets are generated per run (`openssl rand`); fake values must be obviously fake (`ci-not-a-real-key`). Production secrets come from Key Vault at run time and are written to a `umask 077` env file that is deleted on exit — never `echo` a secret, pass it as a command argument or let it reach a log.
 - **Network.** The Postgres firewall opens only for the runner's IP for the migration and always closes (`if: always()`).
 - **Safe rollout.** Migrations run before the slot swap, so they must stay compatible with the release still in production. Staging must pass health checks before the swap, and a failed production health check swaps back.
 - **Dependencies.** Install with `pnpm install --frozen-lockfile`. Only packages listed in `pnpm-workspace.yaml` `allowBuilds` may run install scripts. Fix vulnerable transitive packages with a commented `overrides` entry. Adding to `minimumReleaseAgeExclude` (bypassing the new-release waiting period) needs a reason.
 - **Containers** run as the unprivileged `node` user. Do not add `USER root` to runtime stages.
 - **Scanner exceptions** are narrow and documented: Trivy secret exceptions live in `trivy-secret.yaml` with a comment saying why (e.g. the public Azurite dev key). Never ignore a whole rule, path or severity to silence an alert.
-- The `.husky/pre-commit` hook (lint-staged) is a convenience, not a control. CI is the gate; never bypass it with `--no-verify` for security-relevant changes.
+- The `.husky/pre-commit` hook (lint-staged) is a convenience, not a control. CI on `main` and the local checks before merging are the gate; never bypass the hook with `--no-verify` for security-relevant changes.
 
 # Responding to a security alert
 
@@ -76,4 +77,4 @@ semgrep scan --metrics=off --config p/default --config p/typescript --config p/r
 
 - In the Jira Bug, record: alert ID, reachability decision, fix or suppression reason, scan output after the fix, and whether production was affected.
 - If secrets or user data may have been exposed, tell the owner. Check the `audit_logs` for misuse in the exposure window.
-- Merge through a reviewed PR with all CI jobs green; do not push security fixes straight to `main`.
+- Merge through a reviewed PR with the local checks and the alert's scanner passing; do not push security fixes straight to `main`. Confirm the CI run on `main` after merge is green and the alert is resolved.
