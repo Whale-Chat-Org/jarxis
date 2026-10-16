@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createHmac, randomUUID } from 'node:crypto';
 import { db } from '@/db';
+import { resetRoles } from './reset-roles';
 import { env } from '@/lib/env';
 import { grants } from '@/lib/rbac';
 import * as rolesRoute from '@/app/api/admin/roles/route';
@@ -70,10 +71,10 @@ async function setRole(actor: Actor, userId: string, role: string) {
 }
 
 beforeEach(async () => {
-  await db.$executeRaw`TRUNCATE custom_roles, app_user, audit_logs CASCADE`;
+  await resetRoles();
 });
 afterAll(async () => {
-  await db.$executeRaw`TRUNCATE custom_roles, app_user, audit_logs CASCADE`;
+  await resetRoles();
   await db.$disconnect();
 });
 
@@ -123,7 +124,7 @@ describe('role API', () => {
       (await rolesRoute.GET(call(await makeUser('user'), 'GET', '/api/admin/roles'))).status,
     ).toBe(403);
     expect((await rolesRoute.GET(call(admin, 'GET', '/api/admin/roles'))).status).toBe(200);
-    expect(await db.customRole.count()).toBe(0);
+    expect(await db.role.count({ where: { system: false } })).toBe(0);
   });
 
   it('locks system roles and owner-only permissions, and validates names', async () => {
@@ -166,7 +167,7 @@ describe('role API', () => {
       ((await short.json()) as { error: { issues: { message: string }[] } }).error.issues[0]
         .message,
     ).toBe('Role name must be at least 2 characters');
-    expect(await db.customRole.count()).toBe(1);
+    expect(await db.role.count({ where: { system: false } })).toBe(1);
   });
 });
 

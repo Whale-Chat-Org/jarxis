@@ -1,6 +1,6 @@
 import { body, handler, json } from '@/lib/http';
-import { listRoles, roleInput } from '@/lib/custom-roles';
-import { createCustomRole, requireRoleOwner, requireRoleReader } from '@/lib/custom-role-service';
+import { listRoles, roleInput } from '@/lib/roles';
+import { createRole, requireRoleOwner, requireRoleReader } from '@/lib/role-service';
 
 export const runtime = 'nodejs';
 export const GET = handler(async (req) => {
@@ -9,6 +9,6 @@ export const GET = handler(async (req) => {
 });
 export const POST = handler(async (req) => {
   const actorId = await requireRoleOwner(req);
-  const role = await createCustomRole(actorId, await body(req, roleInput));
+  const role = await createRole(actorId, await body(req, roleInput));
   return json({ role }, 201);
 });

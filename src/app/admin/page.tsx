@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { db } from '@/db';
 import { listAudit } from '@/lib/admin-service';
-import { listRoles } from '@/lib/custom-roles';
+import { listRoles } from '@/lib/roles';
 import { adminPermissionCatalog, permissionKeys } from '@/lib/permissions';
 import { requirePage } from '@/lib/rbac';
 

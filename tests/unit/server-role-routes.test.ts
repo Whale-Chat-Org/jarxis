@@ -5,22 +5,21 @@ const m = vi.hoisted(() => ({
   listRoles: vi.fn(),
   requireRoleReader: vi.fn(),
   requireRoleOwner: vi.fn(),
-  createCustomRole: vi.fn(),
-  updateCustomRole: vi.fn(),
-  deleteCustomRole: vi.fn(),
+  createRole: vi.fn(),
+  updateRole: vi.fn(),
+  deleteRole: vi.fn(),
 }));
 
-vi.mock('@/lib/custom-roles', async () => ({
-  roleInput: (await vi.importActual<typeof import('@/lib/custom-roles')>('@/lib/custom-roles'))
-    .roleInput,
+vi.mock('@/lib/roles', async () => ({
+  roleInput: (await vi.importActual<typeof import('@/lib/roles')>('@/lib/roles')).roleInput,
   listRoles: m.listRoles,
 }));
-vi.mock('@/lib/custom-role-service', () => ({
+vi.mock('@/lib/role-service', () => ({
   requireRoleReader: m.requireRoleReader,
   requireRoleOwner: m.requireRoleOwner,
-  createCustomRole: m.createCustomRole,
-  updateCustomRole: m.updateCustomRole,
-  deleteCustomRole: m.deleteCustomRole,
+  createRole: m.createRole,
+  updateRole: m.updateRole,
+  deleteRole: m.deleteRole,
 }));
 vi.mock('@/db', () => ({ db: {} }));
 
@@ -51,10 +50,10 @@ describe('/api/admin/roles', () => {
   });
 
   it('creates a role as the owner', async () => {
-    m.createCustomRole.mockResolvedValue({ key: 'custom_a' });
+    m.createRole.mockResolvedValue({ key: 'custom_a' });
     const response = await roles.POST(send('POST', input));
     expect(response.status).toBe(201);
-    expect(m.createCustomRole).toHaveBeenCalledWith('owner-1', input);
+    expect(m.createRole).toHaveBeenCalledWith('owner-1', input);
   });
 
   it('returns readable validation errors', async () => {
@@ -62,7 +61,7 @@ describe('/api/admin/roles', () => {
     expect(response.status).toBe(400);
     const data = await response.json();
     expect(data.error.issues[0].message).toBe('Role name must be at least 2 characters');
-    expect(m.createCustomRole).not.toHaveBeenCalled();
+    expect(m.createRole).not.toHaveBeenCalled();
   });
 
   it('passes guard failures through as errors', async () => {
@@ -70,20 +69,20 @@ describe('/api/admin/roles', () => {
     expect((await roles.POST(send('POST', input))).status).toBe(403);
     expect((await roleByKey.PATCH(send('PATCH', input), context)).status).toBe(403);
     expect((await roleByKey.DELETE(send('DELETE'), context)).status).toBe(403);
-    expect(m.createCustomRole).not.toHaveBeenCalled();
-    expect(m.deleteCustomRole).not.toHaveBeenCalled();
+    expect(m.createRole).not.toHaveBeenCalled();
+    expect(m.deleteRole).not.toHaveBeenCalled();
   });
 });
 
 describe('/api/admin/roles/[key]', () => {
   it('updates and deletes the keyed role', async () => {
-    m.updateCustomRole.mockResolvedValue({ key: 'custom_a', name: 'Auditor' });
+    m.updateRole.mockResolvedValue({ key: 'custom_a', name: 'Auditor' });
     const updated = await roleByKey.PATCH(send('PATCH', input), context);
     expect(updated.status).toBe(200);
-    expect(m.updateCustomRole).toHaveBeenCalledWith('owner-1', 'custom_a', input);
+    expect(m.updateRole).toHaveBeenCalledWith('owner-1', 'custom_a', input);
 
     const deleted = await roleByKey.DELETE(send('DELETE'), context);
     expect(await deleted.json()).toEqual({ deleted: true });
-    expect(m.deleteCustomRole).toHaveBeenCalledWith('owner-1', 'custom_a');
+    expect(m.deleteRole).toHaveBeenCalledWith('owner-1', 'custom_a');
   });
 });

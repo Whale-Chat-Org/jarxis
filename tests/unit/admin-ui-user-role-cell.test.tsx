@@ -14,9 +14,33 @@ vi.mock('@better-auth-ui/core/plugins/admin', () => ({
 import { UserRoleCell } from '@/components/admin/user-role-cell';
 
 const roles = [
-  { key: 'user', name: 'User', description: '', permissions: [], system: true },
-  { key: 'viewer', name: 'Viewer', description: '', permissions: [], system: true },
-  { key: 'custom_a', name: 'Auditor', description: '', permissions: [], system: false },
+  {
+    key: 'user',
+    name: 'User',
+    description: '',
+    permissions: [],
+    system: true,
+    editable: true,
+    userCount: 0,
+  },
+  {
+    key: 'viewer',
+    name: 'Viewer',
+    description: '',
+    permissions: [],
+    system: true,
+    editable: true,
+    userCount: 0,
+  },
+  {
+    key: 'custom_a',
+    name: 'Auditor',
+    description: '',
+    permissions: [],
+    system: false,
+    editable: true,
+    userCount: 0,
+  },
 ];
 const member = { id: 'u-1', name: 'Member', email: 'member@jarxis.test', role: 'user' };
 

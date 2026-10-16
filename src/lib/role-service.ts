@@ -5,13 +5,18 @@ import { db, Prisma } from '@/db';
 import { HttpError } from '@/lib/errors';
 import { authorize, grants, identify } from '@/lib/rbac';
 import { rateLimit } from '@/lib/redis';
-import { newRoleKey, validateRoleInput, type RoleInput } from '@/lib/custom-roles';
-import { roleNames } from '@/lib/permissions';
+import {
+  assertCatalogued,
+  isLockedRole,
+  isSystemRole,
+  newRoleKey,
+  validateRoleInput,
+  validateSystemRoleInput,
+  type RoleInput,
+} from '@/lib/roles';
 
-function assertCustomKey(key: string) {
-  if ((roleNames as readonly string[]).includes(key))
-    throw new HttpError(403, 'SYSTEM_ROLE', 'System roles cannot be changed');
-}
+const grantRows = (roleKey: string, permissions: string[]) =>
+  permissions.map((permissionKey) => ({ roleKey, permissionKey }));
 
 export async function requireRoleReader(req: Request) {
   if (req.headers.has('authorization'))
@@ -44,36 +49,49 @@ function duplicateName(error: unknown): never {
   throw error;
 }
 
-export async function createCustomRole(actorId: string, input: RoleInput) {
-  const data = validateRoleInput(input);
+export async function createRole(actorId: string, input: RoleInput) {
+  const { permissions, ...data } = validateRoleInput(input);
   const key = newRoleKey();
   try {
     return await db.$transaction(async (tx) => {
-      const role = await tx.customRole.create({ data: { key, ...data } });
+      await assertCatalogued(permissions, tx);
+      const role = await tx.role.create({ data: { key, ...data } });
+      await tx.rolePermission.createMany({ data: grantRows(key, permissions) });
       await tx.auditLog.create({
         data: {
           id: randomUUID(),
           actorId,
           action: 'role.create',
           targetId: key,
-          changes: { before: null, after: { name: role.name, permissions: data.permissions } },
+          changes: { before: null, after: { name: role.name, permissions } },
         },
       });
-      return role;
+      return { ...role, permissions };
     });
   } catch (error) {
     duplicateName(error);
   }
 }
 
-export async function updateCustomRole(actorId: string, key: string, input: RoleInput) {
-  assertCustomKey(key);
-  const data = validateRoleInput(input);
+/** Custom roles change name, description and grants; Viewer and Administrator keep their name. */
+export async function updateRole(actorId: string, key: string, input: RoleInput) {
+  if (isLockedRole(key))
+    throw new HttpError(403, 'SYSTEM_ROLE', 'This system role cannot be changed');
+  const system = isSystemRole(key);
+  const { permissions, ...data } = system
+    ? validateSystemRoleInput(input)
+    : validateRoleInput(input);
   try {
     return await db.$transaction(async (tx) => {
-      const before = await tx.customRole.findUnique({ where: { key } });
+      const before = await tx.role.findUnique({
+        where: { key },
+        include: { permissions: { select: { permissionKey: true } } },
+      });
       if (!before) throw new HttpError(404, 'ROLE_NOT_FOUND', 'Role not found');
-      const role = await tx.customRole.update({ where: { key }, data });
+      await assertCatalogued(permissions, tx);
+      const role = await tx.role.update({ where: { key }, data });
+      await tx.rolePermission.deleteMany({ where: { roleKey: key } });
+      await tx.rolePermission.createMany({ data: grantRows(key, permissions) });
       await tx.auditLog.create({
         data: {
           id: randomUUID(),
@@ -81,22 +99,29 @@ export async function updateCustomRole(actorId: string, key: string, input: Role
           action: 'role.update',
           targetId: key,
           changes: {
-            before: { name: before.name, permissions: before.permissions },
-            after: { name: role.name, permissions: data.permissions },
+            before: {
+              name: before.name,
+              description: before.description,
+              permissions: before.permissions.map((grant) => grant.permissionKey),
+            },
+            after: { name: role.name, description: role.description, permissions },
           },
         },
       });
-      return role;
+      return { ...role, permissions };
     });
   } catch (error) {
     duplicateName(error);
   }
 }
 
-export async function deleteCustomRole(actorId: string, key: string) {
-  assertCustomKey(key);
+export async function deleteRole(actorId: string, key: string) {
+  if (isSystemRole(key)) throw new HttpError(403, 'SYSTEM_ROLE', 'System roles cannot be deleted');
   return db.$transaction(async (tx) => {
-    const before = await tx.customRole.findUnique({ where: { key } });
+    const before = await tx.role.findUnique({
+      where: { key },
+      include: { permissions: { select: { permissionKey: true } } },
+    });
     if (!before) throw new HttpError(404, 'ROLE_NOT_FOUND', 'Role not found');
     const users = await tx.$queryRaw<
       [{ count: bigint }]
@@ -108,14 +133,20 @@ export async function deleteCustomRole(actorId: string, key: string) {
         'ROLE_IN_USE',
         `${count} user${count === 1 ? '' : 's'} must change role first`,
       );
-    await tx.customRole.delete({ where: { key } });
+    await tx.role.delete({ where: { key } });
     await tx.auditLog.create({
       data: {
         id: randomUUID(),
         actorId,
         action: 'role.delete',
         targetId: key,
-        changes: { before: { name: before.name, permissions: before.permissions }, after: null },
+        changes: {
+          before: {
+            name: before.name,
+            permissions: before.permissions.map((grant) => grant.permissionKey),
+          },
+          after: null,
+        },
       },
     });
   });

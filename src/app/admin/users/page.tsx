@@ -1,5 +1,5 @@
 import { UsersWorkspace } from '@/components/admin/users-workspace';
-import { listRoles } from '@/lib/custom-roles';
+import { listRoles } from '@/lib/roles';
 import { isAllowed } from '@/lib/permissions';
 import { requirePage } from '@/lib/rbac';
 

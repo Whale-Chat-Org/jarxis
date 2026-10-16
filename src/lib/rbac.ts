@@ -7,7 +7,7 @@ import { getAuth } from './auth';
 import { verifyAccess } from './tokens';
 import { HttpError } from './errors';
 import { flattenStatements, isAllowed, parseRoles, roles, type Permission } from './permissions';
-import { storedPermissions } from './custom-roles';
+import { effectivePermissions, isSystemRole } from './roles';
 export type Identity = { userId: string; sessionId: string; familyId?: string };
 
 /**
@@ -48,8 +48,9 @@ export async function identify(h: Headers): Promise<Identity> {
 /**
  * Resolve a user's role names and the permissions they grant.
  *
- * Roles are code-declared (`src/lib/permissions.ts`), so this is a single column read; a name that
- * is no longer declared resolves to nothing, which fails closed.
+ * Owner and User grants come from code; Viewer, Administrator and custom roles come from the
+ * `role_permissions` table. An editable system role missing from an unseeded database falls back
+ * to its code grant, and an unknown key resolves to nothing, which fails closed.
  */
 export async function grants(userId: string, connection: typeof db | Transaction = db) {
   const user = await connection.user.findUnique({
@@ -60,16 +61,21 @@ export async function grants(userId: string, connection: typeof db | Transaction
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
-  const custom = await connection.customRole.findMany({
+  const stored = await connection.role.findMany({
     where: { key: { in: raw } },
-    select: { key: true, permissions: true },
+    select: { key: true, system: true, permissions: { select: { permissionKey: true } } },
   });
-  const assigned = [...parseRoles(user?.role), ...custom.map((role) => role.key)];
+  const byKey = new Map(stored.map((role) => [role.key, role]));
+  const system = parseRoles(user?.role);
+  const custom = stored.filter((role) => !isSystemRole(role.key));
   return {
-    roles: assigned,
+    roles: [...system, ...custom.map((role) => role.key)],
     permissions: new Set([
-      ...parseRoles(user?.role).flatMap((name) => flattenStatements(roles[name])),
-      ...custom.flatMap((role) => storedPermissions(role.permissions)),
+      ...system.flatMap((name) => {
+        const row = byKey.get(name);
+        return row ? effectivePermissions(row) : flattenStatements(roles[name]);
+      }),
+      ...custom.flatMap((role) => effectivePermissions(role)),
     ]),
   };
 }
