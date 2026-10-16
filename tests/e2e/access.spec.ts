@@ -49,11 +49,14 @@ test('owner manages a custom role and assigns it from the Users table', async ({
   await page.getByRole('option', { name: roleName }).click();
   await expect(page.getByRole('alertdialog')).toContainText('Change role?');
   await page.getByRole('button', { name: 'Cancel' }).click();
-  await expect(row).toContainText('User');
+  // The member's name contains "User", so assert on the role control, not the row text.
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect(roleSelect).toHaveText('User');
   await roleSelect.click();
   await page.getByRole('option', { name: roleName }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Change role' }).click();
-  await expect(row).toContainText(roleName);
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect(roleSelect).toHaveText(roleName);
 
   const memberContext = await browser.newContext({ baseURL });
   try {
@@ -86,10 +89,13 @@ test('owner manages a custom role and assigns it from the Users table', async ({
   await page.getByRole('textbox', { name: 'Search by email' }).fill(member.email);
   const renamedRow = page.getByRole('row').filter({ hasText: member.email });
   await expect(renamedRow).toContainText(renamedRole);
-  await renamedRow.getByRole('combobox', { name: 'Role for Acceptance User' }).click();
+  const renamedSelect = renamedRow.getByRole('combobox', { name: 'Role for Acceptance User' });
+  await renamedSelect.click();
   await page.getByRole('option', { name: 'User', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Change role' }).click();
-  await expect(renamedRow).toContainText('User');
+  // Wait for the save to land before the roles page counts the role's users.
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect(renamedSelect).toHaveText('User');
   await page.goto('/admin/roles');
   await page
     .locator('[data-slot="card"]')
