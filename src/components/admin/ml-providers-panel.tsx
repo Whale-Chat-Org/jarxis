@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { AlertCircleIcon } from 'lucide-react';
+import { AlertCircleIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import Loading from '@/app/admin/ml-providers/loading';
@@ -24,8 +24,15 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@/components/ui/input-group';
 import {
   Select,
   SelectContent,
@@ -66,6 +73,7 @@ type Connection = {
   discoveryStatus: string;
   discoveryError?: string | null;
   lastDiscoveredAt?: string | null;
+  modelStateVersion: string;
   models: Model[];
 };
 type GatewayKey = {
@@ -113,6 +121,18 @@ const failedPreview: PreviewResult = {
 };
 const safeInteger = (value: unknown, max: number) =>
   typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= max ? value : null;
+
+function encodeModelStates(models: Model[]) {
+  const ordered = [...models].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const bytes = new Uint8Array(Math.ceil(ordered.length / 8));
+  ordered.forEach((model, index) => {
+    if (model.enabled) bytes[index >> 3] |= 1 << (index & 7);
+  });
+  return btoa(String.fromCharCode(...bytes))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '');
+}
 
 function validApiKey(value: string) {
   return (
@@ -217,6 +237,12 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [editorModels, setEditorModels] = useState<{ version: string; models: Model[] } | null>(
+    null,
+  );
+  const [modelSearch, setModelSearch] = useState('');
+  const [keyVisible, setKeyVisible] = useState(false);
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [confirmation, setConfirmation] = useState<{
     kind: 'connection' | 'key';
     id: string;
@@ -326,7 +352,40 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
 
   function closeEditor() {
     setEditor(null);
+    setEditorModels(null);
+    setModelSearch('');
+    setKeyVisible(false);
     updatePreview(null);
+  }
+
+  function openEditor(connection: Connection) {
+    setEditor({
+      id: connection.id,
+      name: connection.name,
+      provider: connection.provider,
+      baseUrl: connection.baseUrl,
+      apiKey: '',
+      priority: String(connection.priority),
+      manualModels: '',
+    });
+    setEditorModels({
+      version: connection.modelStateVersion,
+      models: connection.models.map((model) => ({ ...model })),
+    });
+    setModelSearch('');
+    setKeyVisible(false);
+  }
+
+  async function reloadEditorModels(id: string) {
+    const fresh = await request<Data>('');
+    setData(fresh);
+    const connection = fresh.connections.find((item) => item.id === id);
+    if (!connection) throw new MlRequestError(404, 'NOT_FOUND');
+    setEditorModels({
+      version: connection.modelStateVersion,
+      models: connection.models.map((model) => ({ ...model })),
+    });
+    setDialogError(null);
   }
 
   function retryPreview() {
@@ -386,18 +445,31 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
           }
         : {}),
     };
+    const original = editor.id ? data?.connections.find((item) => item.id === editor.id) : null;
+    const editInput = original
+      ? {
+          ...(input.name !== original.name ? { name: input.name } : {}),
+          ...(input.priority !== original.priority ? { priority: input.priority } : {}),
+          ...(input.baseUrl && input.baseUrl !== original.baseUrl
+            ? { baseUrl: input.baseUrl }
+            : {}),
+          ...(input.apiKey ? { apiKey: input.apiKey } : {}),
+        }
+      : null;
     void perform(
       async () => {
-        const result = await request<{ connection?: Connection }>(
-          editor.id ? `/${editor.id}` : '',
-          editor.id ? 'PATCH' : 'POST',
-          input,
-        );
+        const result = editor.id
+          ? await request<{ connection?: Connection }>(`/${editor.id}/models`, 'PATCH', {
+              version: editorModels?.version,
+              states: encodeModelStates(editorModels?.models ?? []),
+              ...(editInput && Object.keys(editInput).length ? { connection: editInput } : {}),
+            })
+          : await request<{ connection?: Connection }>('', 'POST', input);
         closeEditor();
         await reload();
         return editor.id ? undefined : creationNotice(result?.connection);
       },
-      'Connection saved. Model discovery is scheduled automatically.',
+      'Connection saved.',
       'The connection was not saved. Check the details and try again.',
     );
   }
@@ -409,6 +481,13 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
     : preview?.key === draftKey
       ? preview
       : { status: 'loading', models: [] };
+  const visibleEditorModels =
+    editorModels?.models.filter((model) =>
+      `${model.displayName} ${model.upstreamId} ${model.publicId}`
+        .toLocaleLowerCase()
+        .includes(modelSearch.trim().toLocaleLowerCase()),
+    ) ?? [];
+  const enabledEditorCount = editorModels?.models.filter((model) => model.enabled).length ?? 0;
 
   return (
     <div className="flex min-w-none flex-col gap-stack">
@@ -424,7 +503,13 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
             Reload
           </Button>
           {canManage && (
-            <Button disabled={busy} onClick={() => setEditor({ ...emptyEditor })}>
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setKeyVisible(false);
+                setEditor({ ...emptyEditor });
+              }}
+            >
               Add connection
             </Button>
           )}
@@ -517,17 +602,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                         <Button
                           variant="outline"
                           disabled={busy}
-                          onClick={() =>
-                            setEditor({
-                              id: connection.id,
-                              name: connection.name,
-                              provider: connection.provider,
-                              baseUrl: connection.baseUrl,
-                              apiKey: '',
-                              priority: String(connection.priority),
-                              manualModels: '',
-                            })
-                          }
+                          onClick={() => openEditor(connection)}
                         >
                           Edit
                         </Button>
@@ -559,16 +634,23 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                       </>
                     )}
                   </div>
-                  <div className="flex min-w-none flex-col gap-sm">
+                  <Collapsible
+                    open={expandedCards[connection.id] ?? false}
+                    onOpenChange={(open) =>
+                      setExpandedCards((current) => ({ ...current, [connection.id]: open }))
+                    }
+                    className="flex min-w-none flex-col gap-sm"
+                  >
                     <h3 className="text-body-sm font-semibold">
-                      Models ({connection.models.length})
+                      Models ({connection.models.filter((model) => model.enabled).length}/
+                      {connection.models.length})
                     </h3>
                     {connection.models.length === 0 && (
                       <p className="text-body-sm text-muted-foreground">
                         No models yet. Refresh the catalog or add an upstream model ID.
                       </p>
                     )}
-                    {connection.models.map((model) => (
+                    {connection.models.slice(0, 3).map((model) => (
                       <div
                         key={model.id}
                         className="flex min-w-none items-start justify-between gap-md"
@@ -587,7 +669,39 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                         </Badge>
                       </div>
                     ))}
-                  </div>
+                    {connection.models.length > 3 && (
+                      <>
+                        <CollapsibleContent className="flex min-w-none flex-col gap-sm">
+                          {connection.models.slice(3).map((model) => (
+                            <div
+                              key={model.id}
+                              className="flex min-w-none items-start justify-between gap-md"
+                            >
+                              <div className="min-w-none">
+                                <p className="text-body-sm break-words">{model.displayName}</p>
+                                <p className="font-mono text-caption break-all text-muted-foreground">
+                                  {model.publicId}
+                                </p>
+                                <Badge variant="outline">
+                                  {model.discovered ? 'Discovered' : 'Manual'}
+                                </Badge>
+                              </div>
+                              <Badge variant="outline" className="shrink-0">
+                                {model.enabled ? 'Enabled' : 'Disabled'}
+                              </Badge>
+                            </div>
+                          ))}
+                        </CollapsibleContent>
+                        <CollapsibleTrigger asChild>
+                          <Button type="button" variant="ghost" size="sm" className="self-start">
+                            {expandedCards[connection.id]
+                              ? 'Show less'
+                              : `Show all (${connection.models.length})`}
+                          </Button>
+                        </CollapsibleTrigger>
+                      </>
+                    )}
+                  </Collapsible>
                   {canManage && (
                     <form
                       className="flex flex-col gap-sm sm:flex-row sm:items-end"
@@ -759,14 +873,25 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                 <FieldLabel htmlFor="connection-key">
                   {editor.id ? 'Replace API key (optional)' : 'API key'}
                 </FieldLabel>
-                <Input
-                  id="connection-key"
-                  type="password"
-                  autoComplete="off"
-                  required={!editor.id}
-                  value={editor.apiKey}
-                  onChange={(event) => setEditor({ ...editor, apiKey: event.target.value })}
-                />
+                <InputGroup>
+                  <InputGroupInput
+                    id="connection-key"
+                    type={keyVisible ? 'text' : 'password'}
+                    autoComplete="off"
+                    required={!editor.id}
+                    value={editor.apiKey}
+                    onChange={(event) => setEditor({ ...editor, apiKey: event.target.value })}
+                  />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      aria-label={keyVisible ? 'Hide API key' : 'Show API key'}
+                      aria-pressed={keyVisible}
+                      onClick={() => setKeyVisible((visible) => !visible)}
+                    >
+                      {keyVisible ? <EyeOffIcon aria-hidden /> : <EyeIcon aria-hidden />}
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
               </Field>
               <Field>
                 <FieldLabel htmlFor="connection-priority">Priority</FieldLabel>
@@ -781,6 +906,106 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                   onChange={(event) => setEditor({ ...editor, priority: event.target.value })}
                 />
               </Field>
+              {editor.id && editorModels && (
+                <section aria-label="Connection models" className="flex min-w-none flex-col gap-sm">
+                  <h3 className="text-body-sm font-semibold">
+                    Models ({enabledEditorCount}/{editorModels.models.length})
+                  </h3>
+                  <Input
+                    aria-label="Search models"
+                    type="search"
+                    placeholder="Search by name or ID"
+                    value={modelSearch}
+                    onChange={(event) => setModelSearch(event.target.value)}
+                  />
+                  <div className="flex flex-wrap gap-sm">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || visibleEditorModels.length === 0}
+                      onClick={() => {
+                        const ids = new Set(visibleEditorModels.map((model) => model.id));
+                        setEditorModels(
+                          (current) =>
+                            current && {
+                              ...current,
+                              models: current.models.map((model) =>
+                                ids.has(model.id) ? { ...model, enabled: true } : model,
+                              ),
+                            },
+                        );
+                      }}
+                    >
+                      Enable all
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || visibleEditorModels.length === 0}
+                      onClick={() => {
+                        const ids = new Set(visibleEditorModels.map((model) => model.id));
+                        setEditorModels(
+                          (current) =>
+                            current && {
+                              ...current,
+                              models: current.models.map((model) =>
+                                ids.has(model.id) ? { ...model, enabled: false } : model,
+                              ),
+                            },
+                        );
+                      }}
+                    >
+                      Disable all
+                    </Button>
+                  </div>
+                  <div className="flex max-h-list-max min-w-none flex-col gap-sm overflow-y-auto">
+                    {visibleEditorModels.length === 0 && (
+                      <p className="text-body-sm text-muted-foreground">No matching models.</p>
+                    )}
+                    {visibleEditorModels.map((model) => (
+                      <div
+                        key={model.id}
+                        className="flex min-w-none items-center justify-between gap-sm"
+                      >
+                        <div className="min-w-none">
+                          <p className="text-body-sm break-words">{model.displayName}</p>
+                          <p className="font-mono text-caption break-all text-muted-foreground">
+                            {model.publicId}
+                          </p>
+                        </div>
+                        <Switch
+                          aria-label={`Enable ${model.displayName} (${model.publicId})`}
+                          checked={model.enabled}
+                          disabled={busy}
+                          onCheckedChange={(enabled) =>
+                            setEditorModels(
+                              (current) =>
+                                current && {
+                                  ...current,
+                                  models: current.models.map((item) =>
+                                    item.id === model.id ? { ...item, enabled } : item,
+                                  ),
+                                },
+                            )
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {shownDialogError && shownDialogError.includes('Reload models') && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void perform(() => reloadEditorModels(editor.id!))}
+                    >
+                      Reload models
+                    </Button>
+                  )}
+                </section>
+              )}
               {!editor.id && (
                 <section
                   aria-label="Model preview"

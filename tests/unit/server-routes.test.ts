@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   updateConnection: vi.fn(),
   deleteConnection: vi.fn(),
   addManualModel: vi.fn(),
+  updateModelStates: vi.fn(),
   scheduleRefresh: vi.fn(),
   issueGatewayKey: vi.fn(),
   revokeGatewayKey: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock('@/lib/ml/service', () => ({
   updateConnection: m.updateConnection,
   deleteConnection: m.deleteConnection,
   addManualModel: m.addManualModel,
+  updateModelStates: m.updateModelStates,
   scheduleRefresh: m.scheduleRefresh,
   issueGatewayKey: m.issueGatewayKey,
   revokeGatewayKey: m.revokeGatewayKey,
@@ -267,6 +269,31 @@ describe('ML provider administration routes', () => {
     );
     expect(refreshed.status).toBe(200);
     expect(m.scheduleRefresh).toHaveBeenCalledWith('owner-1', 'c1');
+  });
+
+  it('validates and authorizes model state updates', async () => {
+    m.updateModelStates.mockResolvedValue({ id: 'c1', models: [] });
+    const input = { version: 'a'.repeat(64), states: 'AQ', connection: { name: 'Renamed' } };
+    const saved = await providerModels.PATCH(
+      send('/api/admin/ml-providers/c1/models', 'PATCH', input),
+      params({ id: 'c1' }),
+    );
+    expect(saved.status).toBe(200);
+    expect(m.requireMlOwner).toHaveBeenCalledWith(expect.any(Request), 'providers:manage');
+    expect(m.updateModelStates).toHaveBeenCalledWith('owner-1', 'c1', input);
+    const bad = await providerModels.PATCH(
+      send('/api/admin/ml-providers/c1/models', 'PATCH', { ...input, states: 'bad+' }),
+      params({ id: 'c1' }),
+    );
+    expect(bad.status).toBe(400);
+    m.requireMlOwner.mockRejectedValueOnce(
+      new HttpError(403, 'FORBIDDEN', 'Owner access required'),
+    );
+    const denied = await providerModels.PATCH(
+      send('/api/admin/ml-providers/c1/models', 'PATCH', input),
+      params({ id: 'c1' }),
+    );
+    expect(denied.status).toBe(403);
   });
 
   it('issues and revokes gateway keys', async () => {

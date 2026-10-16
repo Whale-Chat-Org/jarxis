@@ -36,6 +36,7 @@ const connections = [
     discoveryStatus: 'failed',
     discoveryError: 'upstream broke',
     lastDiscoveredAt: '2026-01-01T00:00:00.000Z',
+    modelStateVersion: 'a'.repeat(64),
     models: [
       {
         id: 'm1',
@@ -66,6 +67,7 @@ const connections = [
     discoveryStatus: 'unsupported',
     discoveryError: null,
     lastDiscoveredAt: null,
+    modelStateVersion: 'b'.repeat(64),
     models: [],
   },
 ];
@@ -148,7 +150,7 @@ describe('MlProvidersPanel listing', () => {
     expect(screen.getByText('Priority 1')).toBeTruthy();
     expect(screen.getByText('Discovery failed: upstream broke')).toBeTruthy();
     expect(screen.getByText(/Last discovery:/)).toBeTruthy();
-    expect(screen.getByText('Models (2)')).toBeTruthy();
+    expect(screen.getByText('Models (1/2)')).toBeTruthy();
     expect(screen.getByText('Discovered')).toBeTruthy();
     expect(screen.getByText('Manual')).toBeTruthy();
 
@@ -593,15 +595,106 @@ describe('MlProvidersPanel connection editor', () => {
     await user.clear(screen.getByLabelText('Name'));
     await user.type(screen.getByLabelText('Name'), 'Renamed');
     await user.click(screen.getByRole('button', { name: 'Save connection' }));
-    expect(
-      await screen.findByText('Connection saved. Model discovery is scheduled automatically.'),
-    ).toBeTruthy();
+    expect(await screen.findByText('Connection saved.')).toBeTruthy();
     expect(nonGet()).toEqual([
       {
-        path: '/c1',
+        path: '/c1/models',
         method: 'PATCH',
-        body: { name: 'Renamed', priority: 1, baseUrl: 'https://api.openai.com/v1' },
+        body: { version: 'a'.repeat(64), states: 'AQ', connection: { name: 'Renamed' } },
       },
     ]);
+  });
+
+  it('stages model switches and bulk changes only for search results until Save', async () => {
+    const user = renderPanel();
+    await screen.findByText('Primary');
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    const models = screen.getByRole('region', { name: 'Connection models' });
+    expect(within(models).getByText('Models (1/2)')).toBeTruthy();
+    await user.type(within(models).getByRole('searchbox', { name: 'Search models' }), 'manual');
+    expect(within(models).queryByRole('switch', { name: /GPT/ })).toBeNull();
+    await user.click(within(models).getByRole('button', { name: 'Enable all' }));
+    expect(within(models).getByText('Models (2/2)')).toBeTruthy();
+    await user.click(within(models).getByRole('button', { name: 'Disable all' }));
+    expect(within(models).getByText('Models (1/2)')).toBeTruthy();
+    await user.click(within(models).getByRole('switch', { name: /Manual one/ }));
+    expect(within(models).getByText('Models (2/2)')).toBeTruthy();
+    expect(nonGet()).toEqual([]);
+    await user.click(screen.getByRole('button', { name: 'Save connection' }));
+    await screen.findByText('Connection saved.');
+    expect(nonGet()).toEqual([
+      { path: '/c1/models', method: 'PATCH', body: { version: 'a'.repeat(64), states: 'Aw' } },
+    ]);
+  });
+
+  it('discards model changes on Cancel and hides the API key field', async () => {
+    const user = renderPanel();
+    await screen.findByText('Primary');
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    const key = screen.getByLabelText('Replace API key (optional)') as HTMLInputElement;
+    expect(key.type).toBe('password');
+    await user.type(key, 'fake-key');
+    await user.click(screen.getByRole('button', { name: 'Show API key' }));
+    expect(key.type).toBe('text');
+    await user.click(screen.getByRole('switch', { name: /Manual one/ }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(nonGet()).toEqual([]);
+    await waitFor(() => expect(screen.queryByLabelText('Replace API key (optional)')).toBeNull());
+  });
+
+  it('toggles the add form API key by keyboard with accessible labels', async () => {
+    const user = await openCreate();
+    const key = screen.getByLabelText('API key') as HTMLInputElement;
+    expect(key.type).toBe('password');
+    const reveal = screen.getByRole('button', { name: 'Show API key' });
+    reveal.focus();
+    await user.keyboard('[Enter]');
+    expect(key.type).toBe('text');
+    expect(screen.getByRole('button', { name: 'Hide API key' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    await user.keyboard('[Enter]');
+    expect(key.type).toBe('password');
+  });
+
+  it('offers a model reload after a stale catalog response', async () => {
+    setup(({ method }) =>
+      method === 'GET' ? json(fullData) : failure(409, 'MODEL_CATALOG_CHANGED'),
+    );
+    const user = renderPanel();
+    await screen.findByText('Primary');
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    await user.click(screen.getByRole('switch', { name: /Manual one/ }));
+    await user.click(screen.getByRole('button', { name: 'Save connection' }));
+    expect(await screen.findByText(/Models changed since you opened this panel/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Reload models' }));
+    expect(screen.getByRole('region', { name: 'Connection models' }).textContent).toContain(
+      'Models (1/2)',
+    );
+  });
+
+  it('shows three models on a card until expanded', async () => {
+    const extra = Array.from({ length: 3 }, (_, index) => ({
+      id: `extra-${index}`,
+      publicId: `openai/extra-${index}`,
+      upstreamId: `extra-${index}`,
+      displayName: `Extra ${index}`,
+      enabled: true,
+      discovered: true,
+    }));
+    setup(
+      defaultHandler({
+        connections: [{ ...connections[0], models: [...connections[0].models, ...extra] }],
+        keys: [],
+      }),
+    );
+    const user = renderPanel();
+    await screen.findByText('Primary');
+    expect(screen.getByText('Models (4/5)')).toBeTruthy();
+    expect(screen.queryByText('Extra 2')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Show all (5)' }));
+    expect(screen.getByText('Extra 2')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Show less' }));
+    expect(screen.queryByText('Extra 2')).toBeNull();
   });
 });

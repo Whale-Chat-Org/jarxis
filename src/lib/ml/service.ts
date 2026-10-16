@@ -1,5 +1,5 @@
 import 'server-only';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { MlConnection, MlGatewayKey, MlModel } from '@prisma/client';
 import { db, type Transaction } from '@/db';
 import { HttpError } from '@/lib/errors';
@@ -17,14 +17,34 @@ import {
   modelIdSchema,
   gatewayKeySchema,
   discoveryPreviewSchema,
+  updateModelStatesSchema,
   type CreateConnectionInput,
   type DiscoveryPreviewInput,
   type UpdateConnectionInput,
+  type UpdateModelStatesInput,
 } from './validation';
 
 const connectionInclude = {
   models: { orderBy: { upstreamId: 'asc' as const } },
 };
+function orderedModels(models: MlModel[]) {
+  return [...models].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+function modelStateVersion(models: MlModel[]) {
+  return createHash('sha256')
+    .update(JSON.stringify(orderedModels(models).map(({ id, enabled }) => [id, enabled])))
+    .digest('hex');
+}
+function decodeModelStates(states: string, count: number) {
+  const bytes = Buffer.from(states, 'base64url');
+  if (bytes.length !== Math.ceil(count / 8) || bytes.toString('base64url') !== states)
+    throw new HttpError(400, 'VALIDATION_ERROR', 'Invalid model states');
+  if (count % 8 && (bytes.at(-1)! & (0xff << (count % 8))) !== 0)
+    throw new HttpError(400, 'VALIDATION_ERROR', 'Invalid model states');
+  return Array.from({ length: count }, (_, index) =>
+    Boolean(bytes[index >> 3] & (1 << (index & 7))),
+  );
+}
 function missing(): never {
   throw new HttpError(404, 'NOT_FOUND', 'ML resource not found');
 }
@@ -71,6 +91,7 @@ export function connectionDto(connection: MlConnection & { models: MlModel[] }) 
     cooldownUntil: connection.cooldownUntil?.toISOString() ?? null,
     createdAt: connection.createdAt.toISOString(),
     updatedAt: connection.updatedAt.toISOString(),
+    modelStateVersion: modelStateVersion(connection.models),
     models: connection.models.map((model) => ({
       id: model.id,
       connectionId: model.connectionId,
@@ -212,6 +233,81 @@ export async function updateConnection(actorId: string, id: string, input: Updat
       endpointChanged: !!value.baseUrl,
       fields: Object.keys(fields).join(','),
     });
+    return connectionDto(connection);
+  });
+}
+export async function updateModelStates(
+  actorId: string,
+  id: string,
+  input: UpdateModelStatesInput,
+) {
+  const value = updateModelStatesSchema.parse(input);
+  if (value.connection?.baseUrl) await assertPublicEndpoint(value.connection.baseUrl);
+  return db.$transaction(async (transaction) => {
+    await owner(transaction, actorId);
+    await lockConnection(transaction, id);
+    const previous = await transaction.mlConnection.findUnique({
+      where: { id },
+      include: connectionInclude,
+    });
+    if (!previous) missing();
+    if (modelStateVersion(previous.models) !== value.version)
+      throw new HttpError(409, 'MODEL_CATALOG_CHANGED', 'Model catalog changed');
+    const models = orderedModels(previous.models);
+    const states = decodeModelStates(value.states, models.length);
+    const changed = models.filter((model, index) => model.enabled !== states[index]);
+    const enabledIds = changed.filter((model) => !model.enabled).map((model) => model.id);
+    const disabledIds = changed.filter((model) => model.enabled).map((model) => model.id);
+    if (enabledIds.length)
+      await transaction.mlModel.updateMany({
+        where: { id: { in: enabledIds }, connectionId: id },
+        data: { enabled: true },
+      });
+    if (disabledIds.length)
+      await transaction.mlModel.updateMany({
+        where: { id: { in: disabledIds }, connectionId: id },
+        data: { enabled: false },
+      });
+    if (changed.length)
+      await transaction.auditLog.createMany({
+        data: changed.map((model) => ({
+          id: randomUUID(),
+          actorId,
+          action: 'ml:model:update',
+          targetId: model.id,
+          changes: { connectionId: id, upstreamId: model.upstreamId, enabled: !model.enabled },
+        })),
+      });
+    const { apiKey, ...fields } = value.connection ?? {};
+    const reset = !!apiKey || !!fields.baseUrl;
+    if (value.connection) {
+      await transaction.mlConnection.update({
+        where: { id },
+        data: {
+          ...fields,
+          ...(apiKey
+            ? {
+                encryptedCredential: encryptCredential({ apiKey }, id),
+                status: 'ready',
+                cooldownUntil: null,
+              }
+            : {}),
+          ...(reset
+            ? { nextDiscoveryAt: new Date(), discoveryStatus: 'pending', discoveryError: null }
+            : {}),
+        },
+      });
+      await audit(transaction, actorId, 'connection:update', id, {
+        credentialReplaced: !!apiKey,
+        endpointChanged: !!fields.baseUrl,
+        fields: Object.keys(fields).join(','),
+      });
+    }
+    const connection = await transaction.mlConnection.findUnique({
+      where: { id },
+      include: connectionInclude,
+    });
+    if (!connection) missing();
     return connectionDto(connection);
   });
 }
