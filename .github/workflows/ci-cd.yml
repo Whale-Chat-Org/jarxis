@@ -1,12 +1,13 @@
 name: ci-cd
 
-# Only application code, its build/test configuration and this workflow trigger a run. Docs, agent
-# rules and other Markdown do not; use "Run workflow" (workflow_dispatch) to force one, which never
-# deploys because deploy requires a push.
+# CI runs only for the main branch: on a push to main that touches application code, its build/test
+# configuration or this workflow (docs, agent rules and other Markdown do not), or manually with
+# "Run workflow" (workflow_dispatch) on main, which never deploys because deploy requires a push.
+# Pull requests and other branches do not run CI; run the checks locally before merging.
 on:
-  pull_request:
+  push:
     branches: [main]
-    paths: &app-paths
+    paths:
       - 'src/**'
       - 'prisma/**'
       - 'scripts/**'
@@ -34,9 +35,6 @@ on:
       # tests/unit/theme.test.ts reads this rule file.
       - '.agent/rules/design-system.md'
       - '.github/workflows/ci-cd.yml'
-  push:
-    branches: [main]
-    paths: *app-paths
   workflow_dispatch:
 
 permissions:
@@ -44,11 +42,13 @@ permissions:
 
 concurrency:
   group: ci-cd-${{ github.ref }}
-  # Superseded PR runs are cancelled; runs on main always finish so no deploy is cut short.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Runs on main always finish, so no deploy is cut short.
+  cancel-in-progress: false
 
 jobs:
   test:
+    # A manual run started on another branch does nothing; every later job depends on this one.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -137,7 +137,7 @@ jobs:
           tags: jarxis-tools:${{ github.sha }}
           outputs: type=docker,dest=${{ runner.temp }}/jarxis-tools.tar
           cache-from: type=gha,scope=jarxis
-      # The image is scanned here, where it was built, so pull requests never upload image tars.
+      # The image is scanned here, where it was built; image tars are only uploaded when deploy needs them.
       - name: Scan jarxis-app image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
