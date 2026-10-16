@@ -2,11 +2,12 @@
   "version": "0.2.0",
   "configurations": [
     {
-      // Use the existing .env and infrastructure (including Apple native containers).
+      // Apple native containers: the preLaunchTask installs and starts the infrastructure first.
       // Start Next with the debugger attached and open a debug-attached browser.
       "name": "Dev",
       "type": "node-terminal",
       "request": "launch",
+      "preLaunchTask": "setup: apple containers",
       "command": "pnpm dev:next",
       "cwd": "${workspaceFolder}",
       "skipFiles": ["<node_internals>/**"],

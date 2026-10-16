@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:next": "next dev",
+    "dev:apple": "node scripts/setup-apple.mjs && next dev",
+    "setup:apple": "node scripts/setup-apple.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

@@ -1,6 +1,6 @@
 # Jarxis Reference
 
-Operational and integration details. Start with the [README](../README.md); architecture and
+Operational and integration details. Local setup is in [DEVELOPMENT.md](DEVELOPMENT.md); architecture and
 product behaviour are in [TECH.md](TECH.md) and [PRD.md](PRD.md).
 
 ## Containerized development

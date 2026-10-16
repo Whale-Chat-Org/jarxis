@@ -23,6 +23,14 @@
       "group": "test"
     },
     {
+      // Installs Apple container if needed, starts PostgreSQL, Redis and Azurite, and prepares the
+      // database. Idempotent; runs before "Dev".
+      "label": "setup: apple containers",
+      "type": "shell",
+      "command": "pnpm setup:apple",
+      "problemMatcher": []
+    },
+    {
       "label": "db: reset seeded users",
       "type": "shell",
       "command": "pnpm db:seed:users --reset",

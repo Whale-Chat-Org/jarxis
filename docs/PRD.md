@@ -185,7 +185,7 @@ Jarxis is ready for use as a starter when:
 
 ## 10. Success indicators
 
-- A team can start local development from the README without undocumented setup.
+- A team can start local development from [DEVELOPMENT.md](DEVELOPMENT.md) without undocumented setup.
 - No administrative capability is reachable by a role that lacks its declared permission.
 - No critical authentication, authorization, or secret-exposure defects are open.
 - Core user journeys are covered by automated unit, integration, and browser tests.
