@@ -1,6 +1,6 @@
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
-import { login, makeOwner, register, setRole, verify } from './helpers';
+import { login, makeOwner, register, setRole, verify, waitForAdminShell } from './helpers';
 
 test('signed-out administration redirects to sign-in', async ({ page }) => {
   await page.goto('/admin');
@@ -101,6 +101,7 @@ test('the sidebar brand mark keeps its size when the rail collapses', async ({
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/admin');
+  await waitForAdminShell(page);
 
   const sidebar = page.locator('[data-slot="sidebar"]');
   const header = sidebar.locator('[data-slot="sidebar-header"]');
@@ -173,6 +174,7 @@ test('the sidebar collapses into a sheet on a narrow viewport', async ({
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/admin');
+  await waitForAdminShell(page);
 
   // The primitive renders the mobile rail inside a Sheet, which the trigger opens.
   await expect(page.locator('[data-slot="sidebar"]')).toBeHidden();
