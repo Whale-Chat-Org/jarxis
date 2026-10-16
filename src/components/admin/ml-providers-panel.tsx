@@ -102,6 +102,8 @@ const emptyEditor: Editor = {
   priority: '0',
   manualModels: '',
 };
+// `saved` is the server state `version` describes; `models` holds the unsaved toggles.
+type EditorModels = { version: string; saved: Record<string, boolean>; models: Model[] };
 type PreviewModel = { id: string; name: string };
 type PreviewResult = {
   status: 'loading' | 'ok' | 'unsupported' | 'failed';
@@ -133,6 +135,43 @@ function encodeModelStates(models: Model[]) {
     .replaceAll('/', '_')
     .replace(/=+$/, '');
 }
+
+function editorModelsFrom(connection: Connection): EditorModels {
+  return {
+    version: connection.modelStateVersion,
+    saved: Object.fromEntries(connection.models.map((model) => [model.id, model.enabled])),
+    models: connection.models.map((model) => ({ ...model })),
+  };
+}
+
+/**
+ * Adopt a connection returned after adding a model while keeping unsaved toggles. The new
+ * version is taken only when every previously loaded model is unchanged on the server, so a
+ * concurrent edit still surfaces as a conflict on save rather than being overwritten.
+ */
+function mergeEditorModels(current: EditorModels, connection: Connection): EditorModels {
+  const unchanged = Object.entries(current.saved).every(
+    ([id, enabled]) => connection.models.find((model) => model.id === id)?.enabled === enabled,
+  );
+  if (!unchanged) return current;
+  const local = new Map(current.models.map((model) => [model.id, model.enabled]));
+  return {
+    ...editorModelsFrom(connection),
+    models: connection.models.map((model) => ({
+      ...model,
+      enabled: local.get(model.id) ?? model.enabled,
+    })),
+  };
+}
+
+// Ask browsers and password managers not to treat these inputs as credential fields.
+const noAutofill = {
+  autoComplete: 'off',
+  'data-1p-ignore': true,
+  'data-lpignore': 'true',
+  'data-bwignore': true,
+  'data-form-type': 'other',
+} as const;
 
 function validApiKey(value: string) {
   return (
@@ -237,9 +276,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [editorModels, setEditorModels] = useState<{ version: string; models: Model[] } | null>(
-    null,
-  );
+  const [editorModels, setEditorModels] = useState<EditorModels | null>(null);
   const [modelSearch, setModelSearch] = useState('');
   const [keyVisible, setKeyVisible] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
@@ -248,7 +285,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
     id: string;
     name: string;
   } | null>(null);
-  const [manualModels, setManualModels] = useState<Record<string, string>>({});
+  const [manualModel, setManualModel] = useState('');
   const [keyName, setKeyName] = useState('');
   const [issuedKey, setIssuedKey] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -292,7 +329,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
       .then(setData)
       .catch(() => {
         if (!controller.signal.aborted)
-          setLoadError('ML providers could not be loaded. Check your connection and try again.');
+          setLoadError('Providers could not be loaded. Check your connection and try again.');
       });
     return () => controller.abort();
   }, [reload]);
@@ -354,6 +391,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
     setEditor(null);
     setEditorModels(null);
     setModelSearch('');
+    setManualModel('');
     setKeyVisible(false);
     updatePreview(null);
   }
@@ -368,11 +406,9 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
       priority: String(connection.priority),
       manualModels: '',
     });
-    setEditorModels({
-      version: connection.modelStateVersion,
-      models: connection.models.map((model) => ({ ...model })),
-    });
+    setEditorModels(editorModelsFrom(connection));
     setModelSearch('');
+    setManualModel('');
     setKeyVisible(false);
   }
 
@@ -381,11 +417,21 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
     setData(fresh);
     const connection = fresh.connections.find((item) => item.id === id);
     if (!connection) throw new MlRequestError(404, 'NOT_FOUND');
-    setEditorModels({
-      version: connection.modelStateVersion,
-      models: connection.models.map((model) => ({ ...model })),
-    });
+    setEditorModels(editorModelsFrom(connection));
     setDialogError(null);
+  }
+
+  function addManualModel(id: string) {
+    const upstreamId = manualModel.trim();
+    if (!upstreamId) return;
+    void perform(async () => {
+      const result = await request<{ connection: Connection }>(`/${id}/models`, 'POST', {
+        upstreamId,
+      });
+      setManualModel('');
+      setEditorModels((current) => current && mergeEditorModels(current, result.connection));
+      await reload();
+    }, `Model ${upstreamId} added.`);
   }
 
   function retryPreview() {
@@ -493,7 +539,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
     <div className="flex min-w-none flex-col gap-stack">
       <div className="flex flex-col gap-md sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-none">
-          <h2 className="text-heading font-semibold tracking-tight">ML providers</h2>
+          <h2 className="text-heading font-semibold tracking-tight">Providers</h2>
           <p className="text-body-sm text-muted-foreground">
             Manage provider accounts, available models and gateway keys.
           </p>
@@ -529,7 +575,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                 void perform(
                   () => reload(),
                   undefined,
-                  'ML providers could not be loaded. Try again shortly.',
+                  'Providers could not be loaded. Try again shortly.',
                 )
               }
             >
@@ -647,7 +693,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                     </h3>
                     {connection.models.length === 0 && (
                       <p className="text-body-sm text-muted-foreground">
-                        No models yet. Refresh the catalog or add an upstream model ID.
+                        No models yet. Refresh the catalog, or add an upstream model ID from Edit.
                       </p>
                     )}
                     {connection.models.slice(0, 3).map((model) => (
@@ -702,41 +748,6 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                       </>
                     )}
                   </Collapsible>
-                  {canManage && (
-                    <form
-                      className="flex flex-col gap-sm sm:flex-row sm:items-end"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void perform(async () => {
-                          await request(`/${connection.id}/models`, 'POST', {
-                            upstreamId: manualModels[connection.id]?.trim(),
-                          });
-                          setManualModels((current) => ({ ...current, [connection.id]: '' }));
-                          await reload();
-                        });
-                      }}
-                    >
-                      <Field className="min-w-none flex-1">
-                        <FieldLabel htmlFor={`model-${connection.id}`}>
-                          Manual upstream model ID
-                        </FieldLabel>
-                        <Input
-                          id={`model-${connection.id}`}
-                          required
-                          value={manualModels[connection.id] ?? ''}
-                          onChange={(event) =>
-                            setManualModels((current) => ({
-                              ...current,
-                              [connection.id]: event.target.value,
-                            }))
-                          }
-                        />
-                      </Field>
-                      <Button variant="outline" disabled={busy}>
-                        Add model
-                      </Button>
-                    </form>
-                  )}
                 </CardContent>
               </Card>
             ))}
@@ -769,6 +780,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                     <FieldLabel htmlFor="gateway-key-name">Key name</FieldLabel>
                     <Input
                       id="gateway-key-name"
+                      {...noAutofill}
                       required
                       value={keyName}
                       onChange={(event) => setKeyName(event.target.value)}
@@ -818,17 +830,22 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
           if (!open && !busy) closeEditor();
         }}
       >
-        <DialogContent className="max-h-svh overflow-y-auto">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>{editor?.id ? 'Edit connection' : 'Add connection'}</DialogTitle>
             <DialogDescription>Connect a provider using an API key.</DialogDescription>
           </DialogHeader>
           {editor && (
-            <form className="flex min-w-none flex-col gap-stack" onSubmit={saveConnection}>
+            <form
+              className="flex min-w-none flex-col gap-stack"
+              autoComplete="off"
+              onSubmit={saveConnection}
+            >
               <Field>
                 <FieldLabel htmlFor="connection-name">Name</FieldLabel>
                 <Input
                   id="connection-name"
+                  {...noAutofill}
                   maxLength={100}
                   required
                   value={editor.name}
@@ -862,6 +879,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                 </FieldLabel>
                 <Input
                   id="connection-url"
+                  {...noAutofill}
                   type="url"
                   required={editor.provider === 'custom'}
                   placeholder="https://…"
@@ -876,9 +894,12 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                 <InputGroup>
                   <InputGroupInput
                     id="connection-key"
+                    {...noAutofill}
+                    // Chrome ignores "off" on password inputs; "new-password" stops saved logins.
+                    autoComplete="new-password"
                     type={keyVisible ? 'text' : 'password'}
-                    autoComplete="off"
                     required={!editor.id}
+                    placeholder={editor.id ? 'Saved key is kept unless you enter a new one' : ''}
                     value={editor.apiKey}
                     onChange={(event) => setEditor({ ...editor, apiKey: event.target.value })}
                   />
@@ -897,6 +918,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                 <FieldLabel htmlFor="connection-priority">Priority</FieldLabel>
                 <Input
                   id="connection-priority"
+                  {...noAutofill}
                   type="number"
                   min={-10000}
                   max={10000}
@@ -907,12 +929,17 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                 />
               </Field>
               {editor.id && editorModels && (
-                <section aria-label="Connection models" className="flex min-w-none flex-col gap-sm">
+                <section
+                  aria-label="Connection models"
+                  className="flex min-w-none grow basis-none flex-col gap-sm"
+                >
                   <h3 className="text-body-sm font-semibold">
                     Models ({enabledEditorCount}/{editorModels.models.length})
                   </h3>
                   <Input
                     aria-label="Search models"
+                    {...noAutofill}
+                    name="model-search"
                     type="search"
                     placeholder="Search by name or ID"
                     value={modelSearch}
@@ -960,7 +987,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                       Disable all
                     </Button>
                   </div>
-                  <div className="flex max-h-list-max min-w-none flex-col gap-sm overflow-y-auto">
+                  <div className="flex min-h-list-min min-w-none grow basis-none flex-col gap-sm overflow-y-auto">
                     {visibleEditorModels.length === 0 && (
                       <p className="text-body-sm text-muted-foreground">No matching models.</p>
                     )}
@@ -1004,6 +1031,34 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                       Reload models
                     </Button>
                   )}
+                  <Field className="shrink-0">
+                    <FieldLabel htmlFor="connection-manual-model">
+                      Manual upstream model ID
+                    </FieldLabel>
+                    <div className="flex min-w-none gap-sm">
+                      <Input
+                        id="connection-manual-model"
+                        {...noAutofill}
+                        name="manual-model"
+                        value={manualModel}
+                        onChange={(event) => setManualModel(event.target.value)}
+                        onKeyDown={(event) => {
+                          // Enter adds the model instead of saving the whole connection.
+                          if (event.key !== 'Enter') return;
+                          event.preventDefault();
+                          addManualModel(editor.id!);
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={busy || !manualModel.trim()}
+                        onClick={() => addManualModel(editor.id!)}
+                      >
+                        Add model
+                      </Button>
+                    </div>
+                  </Field>
                 </section>
               )}
               {!editor.id && (
@@ -1077,6 +1132,7 @@ export function MlProvidersPanel({ canManage }: { canManage: boolean }) {
                   </FieldLabel>
                   <Textarea
                     id="connection-models"
+                    {...noAutofill}
                     value={editor.manualModels}
                     onChange={(event) => setEditor({ ...editor, manualModels: event.target.value })}
                   />
