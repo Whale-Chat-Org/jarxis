@@ -13,7 +13,7 @@ export const permissionCatalog = {
   'users:read': 'List user profiles and assigned roles',
   'users:update': 'Change user names and account status',
   'roles:read': 'View roles and their permissions',
-  'roles:update': 'Reserved role-management access (owner only; role definitions are fixed)',
+  'roles:update': 'Create, edit and delete custom roles (owner only)',
   'roles:assign': 'Assign and remove user roles (owner only)',
   'permissions:read': 'View the permission catalog',
   'audit:read': 'View security and administrative audit events',

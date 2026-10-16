@@ -5,7 +5,8 @@ import { openAPI } from 'better-auth/plugins';
 import { db } from '@/db';
 import { env } from './env';
 import { sendMail } from './mailer';
-import { ac, adminRoles, defaultRole, roles } from './permissions';
+import { ac, adminRoles, defaultRole } from './permissions';
+import { liveAdminRoles } from './custom-roles';
 import { isActiveUser } from './user-status';
 import { adminAuditHook, adminMutationGuard, userStatusHooks } from './auth/admin-guards';
 let instance: ReturnType<typeof makeAuth> | undefined;
@@ -91,7 +92,7 @@ function makeAuth() {
       openAPI({ disableDefaultReference: true }),
       admin({
         ac,
-        roles,
+        roles: liveAdminRoles,
         defaultRole,
         adminRoles,
         impersonationSessionDuration: 60 * 60,

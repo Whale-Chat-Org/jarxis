@@ -88,11 +88,33 @@ for worker setup, supported features, and validation limits.
 User, role and permission management is the Better Auth `admin` plugin; the extra rules this
 project needs are hooks. See [TECH.md](TECH.md#authorization-and-rbac) for the full picture.
 
-- **Roles are code-declared** in `src/lib/permissions.ts`: `user` (default, grants nothing),
-  `viewer`, `administrator` and `owner`. `app_user.role` stores the assigned names
-  comma-separated, and an unrecognised name grants nothing — a removed role fails closed.
-- Roles ship with the application, so `/admin/roles` is read-only and the system roles cannot be
-  edited or deleted at runtime. There is no custom-role CRUD.
+- **System roles are code-declared** in `src/lib/permissions.ts`: `user` (default, grants
+  nothing), `viewer`, `administrator` and `owner`. They are locked: they can be viewed and
+  duplicated but not edited or deleted. `app_user.role` stores the assigned keys comma-separated,
+  and an unrecognised key grants nothing — a removed role fails closed.
+- **Custom roles** live in the `custom_roles` table under `custom_<uuid>` keys. Owners create, edit,
+  duplicate and delete them on `/admin/roles`; they pick from the code-defined permission catalog
+  (no new keys) and can never hold owner-only grants (`roles:update`, `roles:assign`,
+  `providers:*`, `user:delete`, `user:set-role`, `user:impersonate-admins`). Names are unique
+  case-insensitively and cannot reuse a system role name.
+- Custom grants are read from the database on every request (`grants()` in `src/lib/rbac.ts`, and
+  `withLiveAdminRoles` for Better Auth's `/admin/*` endpoints), so edits apply on the user's next
+  request with no sign-out or deploy. A database trigger refuses assigning an unknown custom key
+  and deleting a role that users still have; the API answers `409 ROLE_IN_USE` with the count.
+- Role API (owner browser session only; bearer tokens get `401`, impersonated sessions and
+  non-owners `403`; rate limited). Every create, edit and delete writes a `role.create`,
+  `role.update` or `role.delete` audit entry with before and after permissions:
+
+  | Method   | Path                    | Purpose                                                       |
+  | -------- | ----------------------- | ------------------------------------------------------------- |
+  | `GET`    | `/api/admin/roles`      | System and custom roles; open to `roles:read` or `users:read` |
+  | `POST`   | `/api/admin/roles`      | Create `{ name, description, permissions[] }`                 |
+  | `PATCH`  | `/api/admin/roles/:key` | Replace a custom role's name, description and permissions     |
+  | `DELETE` | `/api/admin/roles/:key` | Delete an unused custom role                                  |
+
+- Roles are assigned from the Role dropdown on `/admin/users`, which lists system and custom roles
+  and saves through Better Auth's `set-role` after a confirmation (audited as
+  `user.roles.replace`).
 - `roles:assign` and `roles:update` **also require actual owner membership**, not just the key.
 - Only owners can modify owner accounts, and the last active verified owner cannot be demoted,
   banned, deleted or have their sessions revoked.

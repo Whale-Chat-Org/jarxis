@@ -11,7 +11,6 @@ import {
   adminPermissionCatalog,
   ownerOnly,
   permissionCatalog,
-  roleNames,
   type Permission,
 } from '@/lib/permissions';
 import { requirePage } from '@/lib/rbac';
@@ -81,8 +80,8 @@ export default async function PermissionsPage() {
       <div className="flex flex-col gap-2xs">
         <h2 className="text-heading font-semibold tracking-tight">Permissions</h2>
         <p className="text-body-sm text-muted-foreground">
-          {total} permission{total === 1 ? '' : 's'} across {roleNames.length} fixed roles. Each
-          role grants a subset of these; see the roles screen for which role grants what.
+          {total} permission{total === 1 ? '' : 's'} in the catalog. System roles are fixed; owners
+          can grant standard permissions to custom roles.
         </p>
         <p className="text-body-sm text-muted-foreground">
           <span className="font-medium">Standard</span> marks the scope of a permission, not who

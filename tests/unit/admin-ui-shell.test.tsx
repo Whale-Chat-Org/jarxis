@@ -1,5 +1,4 @@
 import { render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const nav = vi.hoisted(() => ({ pathname: '/admin', cookie: undefined as string | undefined }));
@@ -18,19 +17,6 @@ vi.mock('@/components/auth/user/user-button', () => ({
 }));
 vi.mock('@/components/auth/admin/admin-users', () => ({
   AdminUsers: () => <p>Accounts table</p>,
-}));
-vi.mock('@/components/admin/access-manager', () => ({
-  AccessManager: ({
-    currentUserId,
-    canManageAccess,
-  }: {
-    currentUserId: string;
-    canManageAccess: boolean;
-  }) => (
-    <p>
-      Access for {currentUserId} {String(canManageAccess)}
-    </p>
-  ),
 }));
 
 import { AccessFiltersSkeleton, AccessListSkeleton } from '@/components/admin/access-skeleton';
@@ -51,7 +37,7 @@ beforeEach(() => {
 describe('SiteHeader', () => {
   it.each([
     ['/admin', 'General', 'Overview'],
-    ['/admin/users', 'Access control', 'Users & access'],
+    ['/admin/users', 'General', 'Users & access'],
     ['/admin/roles/extra', 'Access control', 'Roles'],
     ['/admin/ml-providers', 'Proxy', 'Providers'],
     ['/admin/unknown', 'General', 'Overview'],
@@ -82,7 +68,7 @@ describe('AppSidebar', () => {
     );
     expect(screen.getByRole('link', { name: 'Jarxis Admin' }).getAttribute('href')).toBe('/admin');
     expect(screen.getByText('General')).toBeTruthy();
-    expect(screen.getByText('Access control')).toBeTruthy();
+    expect(screen.getByText('General')).toBeTruthy();
     expect(screen.queryByText('Security')).toBeNull();
     expect(screen.queryByText('Roles')).toBeNull();
     const users = screen.getByRole('link', { name: 'Users & access' });
@@ -121,13 +107,10 @@ describe('AdminShell', () => {
 });
 
 describe('UsersWorkspace', () => {
-  it('defaults to the access tab and switches to accounts', async () => {
-    const user = userEvent.setup();
-    render(<UsersWorkspace currentUserId="me" canManageAccess />);
-    expect(screen.getByRole('heading', { name: 'Users & access' })).toBeTruthy();
-    expect(screen.getByText('Access for me true')).toBeTruthy();
-    await user.click(screen.getByRole('tab', { name: 'Accounts' }));
+  it('shows the accounts table as its only content', () => {
+    render(<UsersWorkspace currentUserId="me" canManageAccess roles={[]} />);
     expect(screen.getByText('Accounts table')).toBeTruthy();
+    expect(screen.queryByRole('tab')).toBeNull();
   });
 });
 

@@ -71,7 +71,6 @@ async function rotateClientIp(page: Page, baseURL: string) {
 
 /** Narrow the Accounts table to one account and return its row. */
 async function findAccountRow(page: Page, email: string) {
-  await page.getByRole('tab', { name: 'Accounts' }).click();
   await page.getByRole('textbox', { name: L.searchByEmail }).fill(email);
   const row = page.getByRole('row').filter({ hasText: email });
   await expect(row).toHaveCount(1);
@@ -247,7 +246,6 @@ test('right panels animate opening and closing and respect reduced motion', asyn
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/admin/users');
-  await page.getByRole('tab', { name: 'Accounts' }).click();
 
   const createButton = page.getByRole('button', { name: L.createUser, exact: true });
   await createButton.click();
@@ -326,7 +324,6 @@ test('the user panels fit every supported viewport in both themes', async ({
       const shot = `test-results/admin-panels-${theme}-${viewport.label}`;
 
       // Creating an account: the form panel keeps both actions reachable.
-      await page.getByRole('tab', { name: 'Accounts' }).click();
       await page.getByRole('button', { name: L.createUser, exact: true }).click();
       const create = adminPanel(page, L.createUser);
       await expect(create).toBeVisible();

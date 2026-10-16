@@ -52,6 +52,8 @@ import {
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { UserAvatar } from '@/components/auth/user/user-avatar';
+import { UserRoleCell } from '@/components/admin/user-role-cell';
+import type { RoleView } from '@/components/admin/roles-manager';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -122,6 +124,9 @@ type DangerousAction = 'ban' | 'delete' | 'impersonate' | 'revokeAll';
 
 export type AdminUsersProps = {
   className?: string;
+  currentUserId: string;
+  canManageAccess: boolean;
+  roles: RoleView[];
   onSelectedUserIdChange?: (userId: string | undefined) => void;
   selectedUserId?: string;
 };
@@ -188,6 +193,9 @@ const INITIAL_ADMIN_SORTING: SortingState = [{ id: 'createdAt', desc: true }];
 /** Server-paginated user management with optional controlled inspector state. */
 export function AdminUsers({
   className,
+  currentUserId,
+  canManageAccess,
+  roles,
   onSelectedUserIdChange,
   selectedUserId: controlledSelectedUserId,
 }: AdminUsersProps) {
@@ -256,6 +264,7 @@ export function AdminUsers({
   });
   const canCreate = useAdminPermission(auth.authClient, { user: ['create'] });
   const canGet = useAdminPermission(auth.authClient, { user: ['get'] });
+  const canSetRole = useAdminPermission(auth.authClient, { user: ['set-role'] });
 
   const total = users.data?.total ?? 0;
 
@@ -286,10 +295,6 @@ export function AdminUsers({
     <section className={className}>
       <div className="flex flex-col gap-lg">
         <div className="flex flex-col gap-md sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex flex-col gap-2xs">
-            <h1 className="text-title font-semibold tracking-tight">{localization.users}</h1>
-            <p className="text-body-sm text-muted-foreground">{localization.usersDescription}</p>
-          </div>
           {canCreate.isPending ? (
             <Skeleton className="h-control-sm w-bar-lg" />
           ) : canCreate.data?.success ? (
@@ -398,7 +403,7 @@ export function AdminUsers({
                       {localization.name}
                     </SortButton>
                   </TableHead>
-                  <TableHead className="hidden md:table-cell">{localization.role}</TableHead>
+                  <TableHead>{localization.role}</TableHead>
                   <TableHead>{localization.status}</TableHead>
                   <TableHead className="hidden lg:table-cell">
                     <SortButton
@@ -449,8 +454,13 @@ export function AdminUsers({
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <Badge variant="outline">{user.role ?? config.defaultRole}</Badge>
+                        <TableCell>
+                          <UserRoleCell
+                            user={user}
+                            currentUserId={currentUserId}
+                            canManageAccess={canManageAccess && canSetRole.data?.success === true}
+                            roles={roles}
+                          />
                         </TableCell>
                         <TableCell>
                           <Badge variant={user.banned ? 'destructive' : 'secondary'}>
@@ -508,8 +518,9 @@ export function AdminUsers({
         </div>
       </div>
 
-      <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} roles={roles} />
       <UserInspector
+        roles={roles}
         canGetUser={canGet.data?.success === true}
         open={Boolean(selectedUserId) && canGet.data?.success === true}
         onOpenChange={(open) => !open && setSelectedUserId(undefined)}
@@ -606,9 +617,11 @@ function UserTableSkeleton() {
 function CreateUserDialog({
   open,
   onOpenChange,
+  roles,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  roles: RoleView[];
 }) {
   const auth = useAuth<AdminAuthClient>();
   const config = useAuthPlugin(adminPlugin);
@@ -752,19 +765,21 @@ function CreateUserDialog({
                     {(field) =>
                       config.allowMultipleRoles ? (
                         <FieldGroup data-slot="checkbox-group">
-                          {config.roles.map((role) => (
-                            <Field key={role} orientation="horizontal">
+                          {roles.map((option) => (
+                            <Field key={option.key} orientation="horizontal">
                               <Checkbox
-                                checked={field.state.value.includes(role)}
-                                id={`admin-create-role-${role}`}
+                                checked={field.state.value.includes(option.key)}
+                                id={`admin-create-role-${option.key}`}
                                 onCheckedChange={(checked) => {
                                   const next = checked
-                                    ? [...field.state.value, role]
-                                    : field.state.value.filter((item) => item !== role);
+                                    ? [...field.state.value, option.key]
+                                    : field.state.value.filter((item) => item !== option.key);
                                   if (next.length) field.handleChange(next);
                                 }}
                               />
-                              <FieldLabel htmlFor={`admin-create-role-${role}`}>{role}</FieldLabel>
+                              <FieldLabel htmlFor={`admin-create-role-${option.key}`}>
+                                {option.name}
+                              </FieldLabel>
                             </Field>
                           ))}
                         </FieldGroup>
@@ -773,10 +788,15 @@ function CreateUserDialog({
                           onValueChange={(role) => field.handleChange([role])}
                           value={field.state.value[0] ?? ''}
                         >
-                          {config.roles.map((role) => (
-                            <Field key={role} orientation="horizontal">
-                              <RadioGroupItem id={`admin-create-role-${role}`} value={role} />
-                              <FieldLabel htmlFor={`admin-create-role-${role}`}>{role}</FieldLabel>
+                          {roles.map((option) => (
+                            <Field key={option.key} orientation="horizontal">
+                              <RadioGroupItem
+                                id={`admin-create-role-${option.key}`}
+                                value={option.key}
+                              />
+                              <FieldLabel htmlFor={`admin-create-role-${option.key}`}>
+                                {option.name}
+                              </FieldLabel>
                             </Field>
                           ))}
                         </RadioGroup>
@@ -840,11 +860,13 @@ function UserInspector({
   open,
   onOpenChange,
   userId,
+  roles,
 }: {
   canGetUser: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   userId?: string;
+  roles: RoleView[];
 }) {
   const auth = useAuth<AdminAuthClient>();
   const config = useAuthPlugin(adminPlugin);
@@ -1313,21 +1335,23 @@ function UserInspector({
                                     className="flex-row flex-wrap gap-lg"
                                     data-slot="checkbox-group"
                                   >
-                                    {config.roles.map((item) => (
-                                      <Field key={item} orientation="horizontal">
+                                    {roles.map((option) => (
+                                      <Field key={option.key} orientation="horizontal">
                                         <Checkbox
-                                          checked={field.state.value.includes(item)}
+                                          checked={field.state.value.includes(option.key)}
                                           disabled={isSelf || !canSetRole.data?.success}
-                                          id={`admin-user-role-${item}`}
+                                          id={`admin-user-role-${option.key}`}
                                           onCheckedChange={(checked) => {
                                             const next = checked
-                                              ? [...field.state.value, item]
-                                              : field.state.value.filter((role) => role !== item);
+                                              ? [...field.state.value, option.key]
+                                              : field.state.value.filter(
+                                                  (role) => role !== option.key,
+                                                );
                                             if (next.length) field.handleChange(next);
                                           }}
                                         />
-                                        <FieldLabel htmlFor={`admin-user-role-${item}`}>
-                                          {item}
+                                        <FieldLabel htmlFor={`admin-user-role-${option.key}`}>
+                                          {option.name}
                                         </FieldLabel>
                                       </Field>
                                     ))}
@@ -1339,14 +1363,14 @@ function UserInspector({
                                     onValueChange={(role) => field.handleChange([role])}
                                     value={field.state.value[0] ?? ''}
                                   >
-                                    {config.roles.map((item) => (
-                                      <Field key={item} orientation="horizontal">
+                                    {roles.map((option) => (
+                                      <Field key={option.key} orientation="horizontal">
                                         <RadioGroupItem
-                                          id={`admin-user-role-${item}`}
-                                          value={item}
+                                          id={`admin-user-role-${option.key}`}
+                                          value={option.key}
                                         />
-                                        <FieldLabel htmlFor={`admin-user-role-${item}`}>
-                                          {item}
+                                        <FieldLabel htmlFor={`admin-user-role-${option.key}`}>
+                                          {option.name}
                                         </FieldLabel>
                                       </Field>
                                     ))}

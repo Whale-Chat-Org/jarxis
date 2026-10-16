@@ -9,11 +9,7 @@ test('signed-out administration redirects to sign-in', async ({ page }) => {
 
 /**
  * Acceptance coverage for the administration area after the Better Auth admin plugin migration:
- * the shadcn `Sidebar` shell, the registry `AdminUsers` table, and the read-only roles page.
- *
- * Role *editing* no longer exists — roles are declared in `src/lib/permissions.ts` — so the
- * previous `/api/v1/roles` CRUD assertions are gone. Owner/last-owner enforcement lives in
- * `src/lib/auth/admin-guards.ts` and is covered by tests/integration/security.test.ts.
+ * the shadcn `Sidebar` shell, the registry `AdminUsers` table, and the roles page.
  */
 test('owner browses the admin shell, user management and the role catalog', async ({
   page,
@@ -51,10 +47,10 @@ test('owner browses the admin shell, user management and the role catalog', asyn
   await sidebarTrigger.click();
   await expect(sidebar).toHaveAttribute('data-state', 'expanded');
 
-  // The registry table now lives behind the "Accounts" tab of Users & access.
+  // The registry table is the sole content of Users & access.
   await sidebar.getByRole('link', { name: 'Users & access' }).click();
   await expect(page).toHaveURL(/\/admin\/users(?:\?|$)/);
-  await page.getByRole('tab', { name: 'Accounts' }).click();
+  await expect(page.getByRole('tab')).toHaveCount(0);
   await expect(page.getByRole('table')).toBeVisible();
   for (const column of ['Name', 'Role', 'Status', 'Created']) {
     await expect(page.getByRole('columnheader', { name: column })).toBeVisible();
@@ -66,13 +62,13 @@ test('owner browses the admin shell, user management and the role catalog', asyn
   await page.getByRole('textbox', { name: 'Search by email' }).fill(email);
   await expect(page.getByRole('table').getByRole('row').filter({ hasText: email })).toHaveCount(1);
 
-  // Roles are code-declared and the page is read-only.
+  // System roles are locked, while owners can create custom roles.
   await sidebar.getByRole('link', { name: 'Roles' }).click();
   await expect(page).toHaveURL(/\/admin\/roles(?:\?|$)/);
   for (const role of ['Owner', 'Administrator', 'Viewer', 'User']) {
     await expect(page.getByRole('main')).toContainText(role);
   }
-  await expect(page.getByRole('button', { name: /create role/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /create role/i })).toBeVisible();
 
   // Permissions documents both catalogues.
   await sidebar.getByRole('link', { name: 'Permissions' }).click();
@@ -156,7 +152,6 @@ test('a viewer gets a read-only user table', async ({ page, context, request, ba
   await page.getByRole('button', { name: /Acceptance User/ }).click();
   await expect(page.getByRole('menuitem', { name: 'Administration' })).toBeVisible();
   await page.goto('/admin/users');
-  await page.getByRole('tab', { name: 'Accounts' }).click();
 
   await expect(page.getByRole('table')).toBeVisible();
   await expect(page.getByRole('table').getByRole('row').filter({ hasText: email })).toHaveCount(1);

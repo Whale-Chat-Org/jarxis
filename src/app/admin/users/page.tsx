@@ -1,18 +1,21 @@
 import { UsersWorkspace } from '@/components/admin/users-workspace';
+import { listRoles } from '@/lib/custom-roles';
 import { isAllowed } from '@/lib/permissions';
 import { requirePage } from '@/lib/rbac';
 
 /**
  * Users & access.
  *
- * The page guard checks `users:read`; the "Accounts" tab is the Better Auth UI `AdminUsers`, which
- * additionally gates every control on the signed-in role's `user:*` permissions. `canManageAccess`
- * reflects the owner + `roles:assign` rule the admin plugin enforces on the server, so the Access
- * tab offers "Change role" only when the change can succeed.
+ * The page guard checks `users:read`; the Better Auth UI `AdminUsers` table checks its own
+ * `user:*` controls. `canManageAccess` reflects the owner + `roles:assign` rule, and the table
+ * checks `user:set-role` before showing the role picker.
  */
 export default async function UsersPage() {
   const grants = await requirePage('users:read');
   const canManageAccess = isAllowed(grants.permissions, grants.roles, 'roles:assign');
+  const roles = await listRoles();
 
-  return <UsersWorkspace currentUserId={grants.userId} canManageAccess={canManageAccess} />;
+  return (
+    <UsersWorkspace currentUserId={grants.userId} canManageAccess={canManageAccess} roles={roles} />
+  );
 }

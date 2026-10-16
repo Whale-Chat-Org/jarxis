@@ -67,6 +67,28 @@ export async function openapi() {
       security: [{ bearerAuth: [] }],
     },
   };
+  const roleBody = z.object({
+    name: z.string().min(2).max(64),
+    description: z.string().max(500),
+    permissions: z.array(z.string()),
+  });
+  paths['/api/admin/roles'] = {
+    get: { ...op('List system and custom roles'), security: [{ cookieAuth: [] }] },
+    post: {
+      ...op('Create a custom role (owner session required)', roleBody),
+      security: [{ cookieAuth: [] }],
+    },
+  };
+  paths['/api/admin/roles/{key}'] = {
+    patch: {
+      ...op('Update a custom role (owner session required)', roleBody),
+      security: [{ cookieAuth: [] }],
+    },
+    delete: {
+      ...op('Delete an unassigned custom role (owner session required)'),
+      security: [{ cookieAuth: [] }],
+    },
+  };
   const gatewayOperation = (summary: string, input?: z.ZodType) => ({
     ...op(summary, input),
     tags: ['Model gateway'],
