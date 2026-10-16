@@ -55,6 +55,16 @@ export const updateConnectionSchema = z
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, 'At least one field is required');
+export const updateModelStatesSchema = z
+  .object({
+    version: z.string().regex(/^[a-f0-9]{64}$/),
+    states: z
+      .string()
+      .max(2048)
+      .regex(/^[A-Za-z0-9_-]*$/),
+    connection: updateConnectionSchema.optional(),
+  })
+  .strict();
 export const apiKeyProviders = ['openai', 'anthropic', 'openrouter', 'custom'] as const;
 // Preview only checks a catalog; nothing in it is stored.
 export const discoveryPreviewSchema = z
@@ -76,4 +86,5 @@ export const manualModelSchema = z.object({ upstreamId: modelIdSchema }).strict(
 export const gatewayKeySchema = z.object({ name }).strict();
 export type CreateConnectionInput = z.infer<typeof createConnectionSchema>;
 export type UpdateConnectionInput = z.infer<typeof updateConnectionSchema>;
+export type UpdateModelStatesInput = z.infer<typeof updateModelStatesSchema>;
 export type DiscoveryPreviewInput = z.infer<typeof discoveryPreviewSchema>;

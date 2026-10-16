@@ -8,9 +8,9 @@ const m = vi.hoisted(() => ({
     update: vi.fn(),
     deleteMany: vi.fn(),
   },
-  mlModel: { upsert: vi.fn() },
+  mlModel: { upsert: vi.fn(), updateMany: vi.fn() },
   mlGatewayKey: { findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
-  auditLog: { create: vi.fn() },
+  auditLog: { create: vi.fn(), createMany: vi.fn() },
   execute: vi.fn(),
   validateDestination: vi.fn(),
   discoverModels: vi.fn(),
@@ -189,6 +189,62 @@ describe('previewDiscovery', () => {
 });
 
 describe('ML connection mutations', () => {
+  it('saves model states and connection fields together with per-model audit entries', async () => {
+    const current = row({
+      models: [
+        { ...row().models[0], id: 'm1', enabled: true },
+        { ...row().models[0], id: 'm2', upstreamId: 'gpt-y', enabled: false },
+      ],
+    });
+    m.mlConnection.findUnique.mockResolvedValue(current);
+    m.mlConnection.update.mockResolvedValue(current);
+    const version = service.connectionDto(current as never).modelStateVersion;
+    await service.updateModelStates('owner', 'c1', {
+      version,
+      states: 'Ag',
+      connection: { name: 'Renamed' },
+    });
+    expect(m.mlModel.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['m1'] }, connectionId: 'c1' },
+      data: { enabled: false },
+    });
+    expect(m.auditLog.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          action: 'ml:model:update',
+          targetId: 'm1',
+          changes: { connectionId: 'c1', upstreamId: 'gpt-x', enabled: false },
+        }),
+        expect.objectContaining({
+          action: 'ml:model:update',
+          targetId: 'm2',
+          changes: { connectionId: 'c1', upstreamId: 'gpt-y', enabled: true },
+        }),
+      ]),
+    });
+    expect(m.mlConnection.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { name: 'Renamed' } }),
+    );
+    expect(m.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: 'ml:connection:update' }),
+      }),
+    );
+  });
+
+  it('rejects stale, malformed and unknown model snapshots before writing', async () => {
+    m.mlConnection.findUnique.mockResolvedValue(row());
+    await expect(
+      service.updateModelStates('owner', 'c1', { version: 'a'.repeat(64), states: 'AA' }),
+    ).rejects.toMatchObject({ status: 409, code: 'MODEL_CATALOG_CHANGED' });
+    const version = service.connectionDto(row() as never).modelStateVersion;
+    await expect(
+      service.updateModelStates('owner', 'c1', { version, states: 'Ag' }),
+    ).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    expect(m.mlModel.updateMany).not.toHaveBeenCalled();
+    expect(m.auditLog.createMany).not.toHaveBeenCalled();
+  });
+
   it('requires an active owner for every mutation', async () => {
     m.user.findFirst.mockResolvedValue({ role: 'administrator' });
     await expect(service.deleteConnection('a1', 'c1')).rejects.toMatchObject({ status: 403 });

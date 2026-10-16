@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { getAuth } from './auth';
 import { loginInput, refreshInput } from './validation';
-import { discoveryPreviewSchema } from './ml/validation';
+import { discoveryPreviewSchema, updateModelStatesSchema } from './ml/validation';
 import { env } from './env';
 const schema = (v: z.ZodType) => z.toJSONSchema(v, { io: 'input' });
 export async function openapi() {
@@ -145,14 +145,23 @@ export async function openapi() {
     patch: providerOperation('Update a connection, credentials, or priority'),
     delete: providerOperation('Delete a provider connection'),
   };
-  for (const action of ['refresh', 'models']) {
-    paths[`/api/admin/ml-providers/{id}/${action}`] = {
-      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      post: providerOperation(
-        action === 'refresh' ? 'Schedule model discovery' : 'Add an explicit model ID',
-      ),
-    };
-  }
+  paths['/api/admin/ml-providers/{id}/refresh'] = {
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+    post: providerOperation('Schedule model discovery'),
+  };
+  paths['/api/admin/ml-providers/{id}/models'] = {
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+    post: providerOperation('Add an explicit model ID'),
+    patch: {
+      ...providerOperation('Save model availability and connection settings'),
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: schema(updateModelStatesSchema) } },
+      },
+      description:
+        'Requires providers:manage. Send the modelStateVersion from the connection listing as version. Sort models by ID, then pack enabled flags as least-significant-bit-first bytes and encode as unpadded base64url in states. Optional connection fields save in the same transaction. A changed model catalog or concurrent model edit returns 409 MODEL_CATALOG_CHANGED; reload models before retrying. Each changed model is audited. Credentials are never returned.',
+    },
+  };
   paths['/api/admin/ml-providers/keys'] = {
     post: providerOperation('Issue an application key; reveal its value once'),
   };

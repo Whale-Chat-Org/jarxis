@@ -8,6 +8,8 @@ const ML_CODE_MESSAGES: Record<string, string> = {
   INVALID_ENDPOINT:
     'Use a public HTTPS base URL. Private, local and redirecting endpoints are blocked.',
   NOT_FOUND: 'This item no longer exists. Reload to see the latest providers.',
+  MODEL_CATALOG_CHANGED:
+    'Models changed since you opened this panel. Reload models and review your choices before saving.',
   VALIDATION_ERROR: 'Some details are invalid. Check the form and try again.',
   INVALID_JSON: 'That request was invalid. Reload the page and try again.',
   TOO_LARGE: 'That request was too large. Shorten the input and try again.',
