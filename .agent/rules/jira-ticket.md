@@ -1,6 +1,29 @@
-# Jira ticket descriptions
+# Jira tickets
 
 Applies when creating or editing JAR work items (`acli jira workitem ...`). A ticket must be readable by a human in one scan, without losing detail.
+
+## Work types
+
+Hierarchy: **Epic → Story / Task / Feature / Bug → Subtask**. Pick the type before creating a ticket.
+
+| Level | Type        | Use for                                                                                   |
+| ----- | ----------- | ----------------------------------------------------------------------------------------- |
+| 1     | **Epic**    | A module or large area that groups tickets (e.g. JAR-17 User Module). No assignee.        |
+| 0     | **Story**   | Something a user sees or does, from the user's view ("As an owner, I can…").              |
+| 0     | **Task**    | Technical or general work with no direct user-facing change.                              |
+| 0     | **Feature** | A new product capability; prefer an Epic or Story unless the user asks for Feature.       |
+| 0     | **Bug**     | A defect. Description adds steps to reproduce, expected vs actual, environment, evidence. |
+| -1    | **Subtask** | A small piece of a Story, Task, Feature or Bug.                                           |
+
+## Creating a ticket
+
+1. Confirm the type and parent epic with the user if they are not clear from the request; never invent an epic.
+2. Create it: `acli jira workitem create --project JAR --type <Type> --summary "<title>" --parent <EPIC> --assignee @me --json`. Set `--parent` here, because `edit` cannot set it later. Epics are created without `--parent` or `--assignee`.
+3. Draft the description using the sections below and show it to the user.
+4. After approval, write it with `edit --from-json` (see [Editing with acli](#editing-with-acli)) and add any blocker links.
+5. Verify the type, parent, assignee, sections and link directions by re-fetching with `--json`.
+
+Titles start with a verb or name the outcome (e.g. "Simplify Users page to one accounts table with role dropdown"); epic titles end in "Module".
 
 ## Required sections
 

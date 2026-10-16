@@ -17,3 +17,62 @@
 - **First-owner bootstrap (`/setup`, `POST /api/setup`) is public until an owner exists, then closed permanently.** There is no setup secret and no environment switch: control of the submitted inbox is the gate. `POST /api/setup` creates an unverified account with no administrative privileges, records a pending request and emails a six-digit code. Only `POST /api/setup/verify` may verify the account and grant Owner access; no account is created auto-verified. Codes are 6 digits, expire in 10 minutes, allow at most 5 attempts, are stored hashed (never plaintext, never logged, never returned), and a resend (60-second cooldown) invalidates the previous code. Accept the code from the JSON body only (never a query parameter, never a GET), rate-limit all three endpoints per IP and per request, and keep responses sanitized. The first successful verification wins atomically under the installation lock, so concurrent verifications yield exactly one owner; later attempts get the completed response. Ordinary sign-up at `/auth/sign-up` keeps its normal email verification, and `pnpm owner <verified-email>` stays as the CLI recovery path and must not be removed.
 - Production docs/OpenAPI remain owner-only; do not expose alternate unguarded auth documentation routes.
 - Sanitize errors and logs; never expose request secrets, SQL parameters or raw provider errors. The admin audit hook whitelists the fields it records and must never log passwords or tokens.
+
+# CI/CD security
+
+The pipeline is `.github/workflows/ci-cd.yml`: **test → build → SonarQube, Semgrep, Trivy → deploy** (deploy only on `main`). Keep these properties when editing it:
+
+- **Least privilege.** Workflow `permissions` default to `contents: read`. Only the deploy job adds `id-token: write`, for OIDC sign-in to Azure; the federated credential trusts `main` only. Never add long-lived cloud credentials or broaden permissions workflow-wide.
+- **Pinned supply chain.** Every third-party action is pinned to a full commit SHA with a `# vX.Y.Z` comment, and every container image (CI services, Semgrep, Dockerfile `FROM`) to a `@sha256:` digest. Update both together; never use a floating tag or branch.
+- **Scans gate the deploy.** `deploy` needs `sonarqube`, `semgrep` and `trivy`. SonarQube's quality gate, Semgrep `ERROR` findings and Trivy `HIGH`/`CRITICAL` (fix available) all fail the run. Do not weaken thresholds, add `continue-on-error` or skip a job to get a release out.
+- **Nothing reaches the registry before the scans pass.** Images are built once, saved as artifacts, scanned, and only the deploy job pushes them to ACR, tagged by commit SHA.
+- **Secrets.** Use GitHub `secrets` for credentials and `vars` for non-secret settings. CI test secrets are generated per run (`openssl rand`); fake values must be obviously fake (`ci-not-a-real-key`). Production secrets come from Key Vault at run time and are written to a `umask 077` env file that is deleted on exit — never `echo` a secret, pass it as a command argument or let it reach a log.
+- **Network.** The Postgres firewall opens only for the runner's IP for the migration and always closes (`if: always()`).
+- **Safe rollout.** Migrations run before the slot swap, so they must stay compatible with the release still in production. Staging must pass health checks before the swap, and a failed production health check swaps back.
+- **Dependencies.** Install with `pnpm install --frozen-lockfile`. Only packages listed in `pnpm-workspace.yaml` `allowBuilds` may run install scripts. Fix vulnerable transitive packages with a commented `overrides` entry. Adding to `minimumReleaseAgeExclude` (bypassing the new-release waiting period) needs a reason.
+- **Containers** run as the unprivileged `node` user. Do not add `USER root` to runtime stages.
+- **Scanner exceptions** are narrow and documented: Trivy secret exceptions live in `trivy-secret.yaml` with a comment saying why (e.g. the public Azurite dev key). Never ignore a whole rule, path or severity to silence an alert.
+- The `.husky/pre-commit` hook (lint-staged) is a convenience, not a control. CI is the gate; never bypass it with `--no-verify` for security-relevant changes.
+
+# Responding to a security alert
+
+Applies to any alert or report: Trivy, Semgrep, SonarQube, GitHub Dependabot / secret scanning / code scanning, `pnpm audit`, or a person reporting a vulnerability.
+
+## 1. Triage
+
+- Record the source, rule or CVE ID, severity, and the affected package, file or image layer. Do not paste secret values or exploit payloads into tickets, PRs, commits or chat.
+- **Leaked secret:** treat it as compromised. Have the owner **rotate or revoke it first**, then remove it from the code. Removing the commit alone does not help, and history rewrites need explicit approval (see `git-rules.md`).
+- Create a Jira **Bug** with a `fix/JAR-<n>` branch (see `jira-ticket.md` and `git-rules.md`). Mark Critical or High findings that are exploitable in production as top priority.
+
+## 2. Reproduce locally
+
+Use the same settings as CI, so local and CI results match:
+
+```bash
+pnpm audit --prod
+pnpm why <package>
+trivy fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --ignore-unfixed .
+semgrep scan --metrics=off --config p/default --config p/typescript --config p/react --config p/nodejs --severity ERROR
+```
+
+## 3. Review the codebase
+
+- **Reachability.** Find every place the affected package, API or pattern is used (`grep`, `pnpm why`). Decide if it is reachable from untrusted input: HTTP routes, gateway requests, uploads, provider responses, webhooks or env-driven config.
+- **Data flow.** Trace untrusted input from where it enters to where it is used (SQL / Prisma raw queries, HTML rendering, redirects, outbound `fetch`, file paths, shell commands). Check that validation, size limits and output encoding hold along the whole path.
+- **Invariants.** Check the finding against the rules above: server-side authorization, owner-only rules, CSRF / origin checks, rate limits, sanitized errors and logs, and the gateway's public-HTTPS / no-redirect rule for outbound calls.
+- **Variants.** Search for the same pattern elsewhere in the codebase; a finding in one route usually means more like it.
+- **History.** Use `git log -S '<pattern>'` to find when it came in, and whether a release containing it was deployed.
+- Use the `security-review` command in Claude Code for a second pass over the fix branch, but don't treat it as a replacement for the steps above.
+
+## 4. Fix
+
+- Prefer the real fix: upgrade the direct dependency, add a commented `overrides` entry for a transitive one, or change the code.
+- Add a regression test that fails before the fix (e.g. the malicious input is rejected).
+- Suppress only a **confirmed false positive** or a finding that **cannot be reached**. Use the narrowest scope (one rule, one path), with a comment giving the reason and a link to the Jira ticket. Never suppress in order to ship.
+- Run the full CI checks locally (`format:check`, `lint`, `typecheck`, `test`, `test:integration`, `build`) and the scan that raised the alert.
+
+## 5. Close out
+
+- In the Jira Bug, record: alert ID, reachability decision, fix or suppression reason, scan output after the fix, and whether production was affected.
+- If secrets or user data may have been exposed, tell the owner. Check the `audit_logs` for misuse in the exposure window.
+- Merge through a reviewed PR with all CI jobs green; do not push security fixes straight to `main`.
