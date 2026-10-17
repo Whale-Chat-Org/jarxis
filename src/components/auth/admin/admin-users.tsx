@@ -151,6 +151,9 @@ const parseAdminRoles = (
   return allowMultipleRoles ? resolved : resolved.slice(0, 1);
 };
 
+const sameRoles = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((role) => right.includes(role));
+
 const getBanDurationSeconds = (value: string) => {
   if (!value) return undefined;
   const days = Number(value);
@@ -1040,7 +1043,13 @@ function UserInspector({
           }),
         );
       }
-      if (canSetRole.data?.success && !isSelf) {
+      // An untouched role is not re-sent: the single-role control holds only the first stored
+      // role, so re-sending it would drop the others and audit a role change that never happened.
+      const rolesChanged = !sameRoles(
+        value.roles,
+        parseAdminRoles(user.role, config.defaultRole, config.allowMultipleRoles),
+      );
+      if (canSetRole.data?.success && !isSelf && rolesChanged) {
         mutations.push(
           setRoleMutation.mutateAsync({
             userId: user.id,
