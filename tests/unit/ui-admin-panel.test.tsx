@@ -14,7 +14,9 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
+  DialogScrollArea,
   DialogTitle,
 } from '@/components/ui/admin-panel';
 
@@ -320,5 +322,61 @@ describe('admin panel docked on desktop', () => {
     expect(document.activeElement).toBe(region);
     await userEvent.click(screen.getByRole('button', { name: 'Close panel' }));
     await waitFor(() => expect(document.activeElement).toBe(opener));
+  });
+});
+
+describe('inspector form frame', () => {
+  const slot = (name: string) => document.querySelector(`[data-slot="${name}"]`) as HTMLElement;
+
+  it('gives the inspector a bordered header, a scrolling form and a fixed action bar', async () => {
+    const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
+    render(
+      <Harness layout="inspector">
+        <DialogForm onSubmit={onSubmit}>
+          <DialogScrollArea className="p-xl">
+            <input aria-label="Name" />
+          </DialogScrollArea>
+          <DialogFooter>
+            <button type="submit">Save</button>
+          </DialogFooter>
+        </DialogForm>
+      </Harness>,
+    );
+    await screen.findByRole('dialog');
+    expect(slot('admin-panel-header').className).toContain('border-b');
+    expect(slot('admin-panel-form').tagName).toBe('FORM');
+    expect(slot('admin-panel-form').className).toContain('grid-rows-inspector-form');
+    expect(slot('admin-panel-scroll-area').className).toContain('overflow-y-auto');
+    expect(slot('admin-panel-scroll-area').className).toContain('p-xl');
+    const footer = slot('admin-panel-footer');
+    expect(footer.className).toContain('bg-muted/50');
+    expect(footer.className).not.toContain('sticky');
+    fireEvent.submit(slot('admin-panel-form'));
+    expect(onSubmit).toHaveBeenCalledOnce();
+  });
+
+  it('makes an existing form the frame with asChild', async () => {
+    render(
+      <Harness layout="inspector">
+        <DialogForm asChild>
+          <form aria-label="Profile" className="custom-form" />
+        </DialogForm>
+      </Harness>,
+    );
+    const form = await screen.findByRole('form', { name: 'Profile' });
+    expect(form.getAttribute('data-slot')).toBe('admin-panel-form');
+    expect(form.className).toContain('custom-form');
+    expect(form.className).toContain('grid-rows-inspector-form');
+  });
+
+  it('keeps the sticky footer and plain header in the form layout', async () => {
+    render(
+      <Harness>
+        <DialogFooter />
+      </Harness>,
+    );
+    await screen.findByRole('dialog');
+    expect(slot('admin-panel-header').className).not.toContain('border-b');
+    expect(slot('admin-panel-footer').className).toContain('sticky');
   });
 });
