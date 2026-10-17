@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-10-17T07:35:24Z",
-  "updated_at": "2026-10-17T12:19:07Z",
+  "updated_at": "2026-10-17T12:22:38Z",
   "files": {
     ".agent/rules/architecture.md": {
       "role": "index",
@@ -149,9 +149,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "fb7ef6341e393f1fc377f11b77e68639a4f8fd5dbd18ef49c78aba2b568a0d00",
-      "size": 89313,
-      "normalized_sha256": "fb7ef6341e393f1fc377f11b77e68639a4f8fd5dbd18ef49c78aba2b568a0d00"
+      "sha256": "d73ad0bfcc8723e35eb1d3dbf22bdf3e6a9cc1fed59f50f76aebdf9a6c48b166",
+      "size": 89320,
+      "normalized_sha256": "d73ad0bfcc8723e35eb1d3dbf22bdf3e6a9cc1fed59f50f76aebdf9a6c48b166"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -227,9 +227,9 @@
     },
     "docs/unused-code-findings.md": {
       "role": "index",
-      "sha256": "cbec7c8d402425712cb46b4a1131fdb784354c58ac4e447923e32204f32f78c3",
-      "size": 44256,
-      "normalized_sha256": "cbec7c8d402425712cb46b4a1131fdb784354c58ac4e447923e32204f32f78c3"
+      "sha256": "876cfb705cbf002cb943306faa3a69ec95a09a735e3703b0d047caa2e5d1dda1",
+      "size": 44844,
+      "normalized_sha256": "876cfb705cbf002cb943306faa3a69ec95a09a735e3703b0d047caa2e5d1dda1"
     },
     "eslint.config.mjs": {
       "role": "index",
@@ -1521,9 +1521,9 @@
     },
     "src/lib/auth/admin-guards.ts": {
       "role": "index",
-      "sha256": "70c976637a132cb2d6935cbafb21c1b809a125a3684c882d84720e9757cb7272",
-      "size": 10237,
-      "normalized_sha256": "70c976637a132cb2d6935cbafb21c1b809a125a3684c882d84720e9757cb7272"
+      "sha256": "d9ee67bc721c30a27ffe91fc10df7ef4f2566821a6d828b3794e3fdce2933174",
+      "size": 10360,
+      "normalized_sha256": "d9ee67bc721c30a27ffe91fc10df7ef4f2566821a6d828b3794e3fdce2933174"
     },
     "src/lib/auth/admin-plugin.ts": {
       "role": "index",
@@ -2217,9 +2217,9 @@
     },
     "tests/unit/server-admin-guards.test.ts": {
       "role": "observe",
-      "sha256": "71e589e3ce1cdb17b61354c4a3450c08c0bc446078a832ea3d458ad73b1e031f",
-      "size": 12279,
-      "normalized_sha256": "71e589e3ce1cdb17b61354c4a3450c08c0bc446078a832ea3d458ad73b1e031f"
+      "sha256": "7fca0a1c7379f6da9c8c75814505b26ba6d8b1d08bae9f11aceea90ba3a58f8b",
+      "size": 13032,
+      "normalized_sha256": "7fca0a1c7379f6da9c8c75814505b26ba6d8b1d08bae9f11aceea90ba3a58f8b"
     },
     "tests/unit/server-auth-client.test.ts": {
       "role": "observe",
