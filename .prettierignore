@@ -10,3 +10,4 @@ prisma/migrations
 pnpm-lock.yaml
 next-env.d.ts
 *.tsbuildinfo
+.aoci
