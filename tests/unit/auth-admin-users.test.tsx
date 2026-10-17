@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -587,6 +587,19 @@ describe('AdminUsers inspector profile', () => {
     await waitFor(() => expect(h.admin.setRole).toHaveBeenCalledOnce());
     expect(h.admin.setRole.mock.calls[0][0]).toMatchObject({ role: ['admin'] });
     expect(h.admin.updateUser).not.toHaveBeenCalled();
+  });
+
+  it('keeps the stored role when the role dropdown reports an empty value', async () => {
+    h.users = listResult([root, ada]);
+    setConfig({ allowMultipleRoles: false });
+    const { user } = renderUsers();
+    const dialog = await openInspector(user, 'Root Admin');
+    const trigger = within(dialog).getByRole('combobox', { name: 'Role' });
+    expect(trigger.textContent).toBe('admin');
+    // Radix's hidden native select can emit "" while its value is swapped; that must not clear it.
+    const native = dialog.querySelector('select') as HTMLSelectElement;
+    fireEvent.change(native, { target: { value: '' } });
+    expect(trigger.textContent).toBe('admin');
   });
 
   it('disables saving when there is nothing the actor may change', async () => {

@@ -173,6 +173,28 @@ describe('RolesManager', () => {
     });
   });
 
+  it('saves with Enter like the user inspector form', async () => {
+    const user = userEvent.setup();
+    fetchMock
+      .mockReturnValueOnce(reply(201, { role: {} }))
+      .mockReturnValueOnce(reply(200, { roles: [owner, auditor] }));
+    renderManager();
+    await user.click(screen.getByRole('button', { name: 'Create role' }));
+    const panel = await screen.findByRole('dialog', { name: 'Create role' });
+    await user.type(within(panel).getByLabelText('Name'), 'R{Enter}');
+    expect(fetchMock).not.toHaveBeenCalled();
+    await user.type(within(panel).getByLabelText('Name'), 'eader{Enter}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/admin/roles',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(within(panel).getByRole('button', { name: 'Save role' }).getAttribute('type')).toBe(
+      'submit',
+    );
+  });
+
   it('duplicates a system role without its owner-only grants', async () => {
     const user = userEvent.setup();
     renderManager();

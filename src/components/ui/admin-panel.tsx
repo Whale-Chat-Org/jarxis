@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { usePathname } from 'next/navigation';
 import { ArrowLeftIcon, XIcon } from 'lucide-react';
-import { Dialog as DialogPrimitive } from 'radix-ui';
+import { Dialog as DialogPrimitive, Slot } from 'radix-ui';
 
 import { Button } from '@/components/ui/button';
 import { DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -98,6 +98,8 @@ type PanelState = {
   host: HostState;
 };
 const PanelContext = React.createContext<PanelState | null>(null);
+type PanelLayout = 'form' | 'inspector';
+const LayoutContext = React.createContext<PanelLayout>('form');
 
 function Dialog({
   open = false,
@@ -169,7 +171,7 @@ function DialogContent({
   onKeyDown,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  layout?: 'form' | 'inspector';
+  layout?: PanelLayout;
   showCloseButton?: boolean;
 }) {
   const panel = React.useContext(PanelContext);
@@ -282,7 +284,7 @@ function DialogContent({
             className,
           )}
         >
-          {children}
+          <LayoutContext.Provider value={layout}>{children}</LayoutContext.Provider>
         </div>
       </DialogPrimitive.Content>
     </SheetPortal>
@@ -290,10 +292,45 @@ function DialogContent({
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
+  const layout = React.useContext(LayoutContext);
   return (
     <div
       data-slot="admin-panel-header"
-      className={cn('flex shrink-0 flex-col gap-sm text-left', className)}
+      className={cn(
+        'flex shrink-0 flex-col gap-sm text-left',
+        layout === 'inspector' && 'border-b px-xl py-lg-plus',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/**
+ * Inspector frame: a scrolling body above a fixed action bar. Pass `asChild` to make an existing
+ * form element the frame, so its submit button can live in the {@link DialogFooter}.
+ */
+function DialogForm({
+  className,
+  asChild = false,
+  ...props
+}: React.ComponentProps<'form'> & { asChild?: boolean }) {
+  const Comp = asChild ? Slot.Root : 'form';
+  return (
+    <Comp
+      data-slot="admin-panel-form"
+      className={cn('grid h-full min-h-none flex-1 grid-rows-inspector-form', className)}
+      {...props}
+    />
+  );
+}
+
+/** The scrolling part of a {@link DialogForm}. */
+function DialogScrollArea({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="admin-panel-scroll-area"
+      className={cn('min-h-none overflow-y-auto', className)}
       {...props}
     />
   );
@@ -306,11 +343,14 @@ function DialogFooter({
   ...props
 }: React.ComponentProps<'div'> & { showCloseButton?: boolean }) {
   const panel = React.useContext(PanelContext);
+  const layout = React.useContext(LayoutContext);
   return (
     <div
       data-slot="admin-panel-footer"
       className={cn(
-        'sticky bottom-none mt-auto flex shrink-0 flex-wrap items-center justify-end gap-sm border-t bg-background py-lg',
+        layout === 'inspector'
+          ? 'flex flex-col-reverse gap-sm border-t bg-muted/50 px-xl py-lg sm:flex-row sm:justify-end'
+          : 'sticky bottom-none mt-auto flex shrink-0 flex-wrap items-center justify-end gap-sm border-t bg-background py-lg',
         className,
       )}
       {...props}
@@ -348,6 +388,8 @@ export {
   DialogContent,
   DialogHeader,
   DialogFooter,
+  DialogForm,
+  DialogScrollArea,
   DialogTitle,
   DialogDescription,
   Dialog as AlertDialog,

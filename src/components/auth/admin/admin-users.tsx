@@ -67,7 +67,9 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
+  DialogScrollArea,
   DialogTitle,
 } from '@/components/ui/admin-panel';
 import { Badge } from '@/components/ui/badge';
@@ -1178,7 +1180,7 @@ function UserInspector({
           }
           onInteractOutside={(event) => isSavingProfile && event.preventDefault()}
         >
-          <DialogHeader className="border-b px-xl py-lg-plus">
+          <DialogHeader>
             {user ? (
               <div className="flex flex-wrap items-center justify-between gap-md">
                 <div className="flex min-w-none flex-1 items-center gap-md">
@@ -1263,283 +1265,293 @@ function UserInspector({
               </TabsList>
               <TabsContent className="min-h-none overflow-hidden" value="overview">
                 <profileForm.AppForm>
-                  <profileForm.AuthFormRoot className="grid h-full grid-rows-inspector-form">
-                    <div className="overflow-y-auto">
-                      <section className="flex flex-col gap-lg-plus p-xl">
-                        <h3 className="font-medium">{config.localization.profileAndAccess}</h3>
-                        {/* Single column: the shared panel is narrower than the old wide modal. */}
-                        <FieldGroup className="grid gap-lg-plus">
-                          <profileForm.Field name="name">
-                            {(field) => (
-                              <Field>
-                                <FieldLabel htmlFor="admin-user-name">
-                                  {config.localization.name}
-                                </FieldLabel>
-                                <InputGroup>
-                                  <InputGroupInput
-                                    disabled={!canUpdate.data?.success}
-                                    id="admin-user-name"
-                                    name={field.name}
-                                    value={field.state.value}
-                                    onChange={(event) => field.handleChange(event.target.value)}
-                                  />
-                                </InputGroup>
-                              </Field>
-                            )}
-                          </profileForm.Field>
-                          <profileForm.Field name="email">
-                            {(field) => (
-                              <Field>
-                                <FieldLabel htmlFor="admin-user-email">
-                                  {config.localization.email}
-                                </FieldLabel>
-                                <InputGroup>
-                                  <InputGroupInput
+                  <DialogForm asChild>
+                    <profileForm.AuthFormRoot>
+                      <DialogScrollArea>
+                        <section className="flex flex-col gap-lg-plus p-xl">
+                          <h3 className="font-medium">{config.localization.profileAndAccess}</h3>
+                          {/* Single column: the shared panel is narrower than the old wide modal. */}
+                          <FieldGroup className="grid gap-lg-plus">
+                            <profileForm.Field name="name">
+                              {(field) => (
+                                <Field>
+                                  <FieldLabel htmlFor="admin-user-name">
+                                    {config.localization.name}
+                                  </FieldLabel>
+                                  <InputGroup>
+                                    <InputGroupInput
+                                      disabled={!canUpdate.data?.success}
+                                      id="admin-user-name"
+                                      name={field.name}
+                                      value={field.state.value}
+                                      onChange={(event) => field.handleChange(event.target.value)}
+                                    />
+                                  </InputGroup>
+                                </Field>
+                              )}
+                            </profileForm.Field>
+                            <profileForm.Field name="email">
+                              {(field) => (
+                                <Field>
+                                  <FieldLabel htmlFor="admin-user-email">
+                                    {config.localization.email}
+                                  </FieldLabel>
+                                  <InputGroup>
+                                    <InputGroupInput
+                                      disabled={
+                                        !canUpdate.data?.success || !canSetEmail.data?.success
+                                      }
+                                      id="admin-user-email"
+                                      name={field.name}
+                                      onChange={(event) => field.handleChange(event.target.value)}
+                                      required
+                                      type="email"
+                                      value={field.state.value}
+                                    />
+                                  </InputGroup>
+                                </Field>
+                              )}
+                            </profileForm.Field>
+                            <profileForm.Field name="emailVerified">
+                              {(field) => (
+                                <Field orientation="horizontal">
+                                  <Switch
+                                    checked={field.state.value}
                                     disabled={
                                       !canUpdate.data?.success || !canSetEmail.data?.success
                                     }
-                                    id="admin-user-email"
-                                    name={field.name}
-                                    onChange={(event) => field.handleChange(event.target.value)}
-                                    required
-                                    type="email"
-                                    value={field.state.value}
+                                    id="admin-user-email-verified"
+                                    onCheckedChange={field.handleChange}
                                   />
-                                </InputGroup>
-                              </Field>
-                            )}
-                          </profileForm.Field>
-                          <profileForm.Field name="emailVerified">
-                            {(field) => (
-                              <Field orientation="horizontal">
-                                <Switch
-                                  checked={field.state.value}
-                                  disabled={!canUpdate.data?.success || !canSetEmail.data?.success}
-                                  id="admin-user-email-verified"
-                                  onCheckedChange={field.handleChange}
-                                />
-                                <FieldContent>
-                                  <FieldLabel htmlFor="admin-user-email-verified">
-                                    {config.localization.emailVerified}
-                                  </FieldLabel>
-                                </FieldContent>
-                              </Field>
-                            )}
-                          </profileForm.Field>
-                          <FieldSet>
-                            <FieldLegend variant="label">{config.localization.role}</FieldLegend>
-                            <profileForm.Field name="roles">
-                              {(field) =>
-                                config.allowMultipleRoles ? (
-                                  <FieldGroup
-                                    className="flex-row flex-wrap gap-lg"
-                                    data-slot="checkbox-group"
-                                  >
-                                    {roles.map((option) => (
-                                      <Field key={option.key} orientation="horizontal">
-                                        <Checkbox
-                                          checked={field.state.value.includes(option.key)}
-                                          disabled={isSelf || !canSetRole.data?.success}
-                                          id={`admin-user-role-${option.key}`}
-                                          onCheckedChange={(checked) => {
-                                            const next = checked
-                                              ? [...field.state.value, option.key]
-                                              : field.state.value.filter(
-                                                  (role) => role !== option.key,
-                                                );
-                                            if (next.length) field.handleChange(next);
-                                          }}
-                                        />
-                                        <FieldLabel htmlFor={`admin-user-role-${option.key}`}>
-                                          {option.name}
-                                        </FieldLabel>
-                                      </Field>
-                                    ))}
-                                  </FieldGroup>
-                                ) : (
-                                  <Select
-                                    disabled={isSelf || !canSetRole.data?.success}
-                                    onValueChange={(role) => field.handleChange([role])}
-                                    value={field.state.value[0] ?? ''}
-                                  >
-                                    <SelectTrigger
-                                      aria-label={config.localization.role}
-                                      className="w-full"
-                                      id="admin-user-role"
-                                    >
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {roles.map((option) => (
-                                        <SelectItem key={option.key} value={option.key}>
-                                          {option.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                )
-                              }
+                                  <FieldContent>
+                                    <FieldLabel htmlFor="admin-user-email-verified">
+                                      {config.localization.emailVerified}
+                                    </FieldLabel>
+                                  </FieldContent>
+                                </Field>
+                              )}
                             </profileForm.Field>
-                          </FieldSet>
-                          {configuredUserFields.map((configuredField) => (
-                            <profileForm.AppField
-                              key={configuredField.name}
-                              name={`additionalFields.${configuredField.name}`}
-                              validators={getAuthAdditionalFieldValidators(
-                                configuredField,
-                                auth.localization.auth.fieldRequired,
-                              )}
-                            >
-                              {(field) => (
-                                <field.AuthFormAdditionalField
-                                  field={configuredField}
-                                  isPending={updateUser.isPending || !canUpdate.data?.success}
-                                />
-                              )}
-                            </profileForm.AppField>
-                          ))}
-                        </FieldGroup>
-                        <FieldError>
-                          {getAdminErrorMessage(updateUser.error) ??
-                            getAdminErrorMessage(setRoleMutation.error)}
-                        </FieldError>
-                      </section>
-                      <Separator />
-                      <section className="flex flex-col gap-lg p-xl">
-                        <h3 className="font-medium">{config.localization.accountInformation}</h3>
-                        <dl className="grid gap-x-2xl gap-y-lg text-body-sm">
-                          <div className="flex flex-col gap-2xs">
-                            <dt className="text-muted-foreground">{config.localization.userId}</dt>
-                            <dd className="flex min-w-none items-center gap-2xs">
-                              <code className="truncate text-caption">{user.id}</code>
-                              <Button
-                                aria-label={
-                                  userIdCopied
-                                    ? auth.localization.settings.copiedToClipboard
-                                    : config.localization.copyUserId
+                            <FieldSet>
+                              <FieldLegend variant="label">{config.localization.role}</FieldLegend>
+                              <profileForm.Field name="roles">
+                                {(field) =>
+                                  config.allowMultipleRoles ? (
+                                    <FieldGroup
+                                      className="flex-row flex-wrap gap-lg"
+                                      data-slot="checkbox-group"
+                                    >
+                                      {roles.map((option) => (
+                                        <Field key={option.key} orientation="horizontal">
+                                          <Checkbox
+                                            checked={field.state.value.includes(option.key)}
+                                            disabled={isSelf || !canSetRole.data?.success}
+                                            id={`admin-user-role-${option.key}`}
+                                            onCheckedChange={(checked) => {
+                                              const next = checked
+                                                ? [...field.state.value, option.key]
+                                                : field.state.value.filter(
+                                                    (role) => role !== option.key,
+                                                  );
+                                              if (next.length) field.handleChange(next);
+                                            }}
+                                          />
+                                          <FieldLabel htmlFor={`admin-user-role-${option.key}`}>
+                                            {option.name}
+                                          </FieldLabel>
+                                        </Field>
+                                      ))}
+                                    </FieldGroup>
+                                  ) : (
+                                    <Select
+                                      disabled={isSelf || !canSetRole.data?.success}
+                                      onValueChange={(role) => role && field.handleChange([role])}
+                                      value={field.state.value[0] ?? ''}
+                                    >
+                                      <SelectTrigger
+                                        aria-label={config.localization.role}
+                                        className="w-full"
+                                        id="admin-user-role"
+                                      >
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {roles.map((option) => (
+                                          <SelectItem key={option.key} value={option.key}>
+                                            {option.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )
                                 }
-                                onClick={() => copyUserId(user.id)}
-                                size="icon-xs"
-                                type="button"
-                                variant="ghost"
+                              </profileForm.Field>
+                            </FieldSet>
+                            {configuredUserFields.map((configuredField) => (
+                              <profileForm.AppField
+                                key={configuredField.name}
+                                name={`additionalFields.${configuredField.name}`}
+                                validators={getAuthAdditionalFieldValidators(
+                                  configuredField,
+                                  auth.localization.auth.fieldRequired,
+                                )}
                               >
-                                {userIdCopied ? <CheckIcon /> : <CopyIcon />}
-                              </Button>
-                            </dd>
-                          </div>
-                          <div className="flex flex-col gap-2xs">
-                            <dt className="text-muted-foreground">{config.localization.created}</dt>
-                            <dd>{formatDate(user.createdAt)}</dd>
-                          </div>
-                          <div className="flex flex-col gap-2xs">
-                            <dt className="text-muted-foreground">{config.localization.status}</dt>
-                            <dd>
-                              <Badge variant={user.banned ? 'destructive' : 'secondary'}>
-                                {user.banned
-                                  ? config.localization.banned
-                                  : config.localization.active}
-                              </Badge>
-                            </dd>
-                          </div>
-                          {user.banned && user.banReason ? (
+                                {(field) => (
+                                  <field.AuthFormAdditionalField
+                                    field={configuredField}
+                                    isPending={updateUser.isPending || !canUpdate.data?.success}
+                                  />
+                                )}
+                              </profileForm.AppField>
+                            ))}
+                          </FieldGroup>
+                          <FieldError>
+                            {getAdminErrorMessage(updateUser.error) ??
+                              getAdminErrorMessage(setRoleMutation.error)}
+                          </FieldError>
+                        </section>
+                        <Separator />
+                        <section className="flex flex-col gap-lg p-xl">
+                          <h3 className="font-medium">{config.localization.accountInformation}</h3>
+                          <dl className="grid gap-x-2xl gap-y-lg text-body-sm">
                             <div className="flex flex-col gap-2xs">
                               <dt className="text-muted-foreground">
-                                {config.localization.banReason}
+                                {config.localization.userId}
                               </dt>
-                              <dd>{user.banReason}</dd>
+                              <dd className="flex min-w-none items-center gap-2xs">
+                                <code className="truncate text-caption">{user.id}</code>
+                                <Button
+                                  aria-label={
+                                    userIdCopied
+                                      ? auth.localization.settings.copiedToClipboard
+                                      : config.localization.copyUserId
+                                  }
+                                  onClick={() => copyUserId(user.id)}
+                                  size="icon-xs"
+                                  type="button"
+                                  variant="ghost"
+                                >
+                                  {userIdCopied ? <CheckIcon /> : <CopyIcon />}
+                                </Button>
+                              </dd>
                             </div>
-                          ) : null}
-                          {user.banned && user.banExpires ? (
                             <div className="flex flex-col gap-2xs">
                               <dt className="text-muted-foreground">
-                                {config.localization.banExpires}
+                                {config.localization.created}
                               </dt>
-                              <dd>{formatDate(user.banExpires)}</dd>
+                              <dd>{formatDate(user.createdAt)}</dd>
                             </div>
+                            <div className="flex flex-col gap-2xs">
+                              <dt className="text-muted-foreground">
+                                {config.localization.status}
+                              </dt>
+                              <dd>
+                                <Badge variant={user.banned ? 'destructive' : 'secondary'}>
+                                  {user.banned
+                                    ? config.localization.banned
+                                    : config.localization.active}
+                                </Badge>
+                              </dd>
+                            </div>
+                            {user.banned && user.banReason ? (
+                              <div className="flex flex-col gap-2xs">
+                                <dt className="text-muted-foreground">
+                                  {config.localization.banReason}
+                                </dt>
+                                <dd>{user.banReason}</dd>
+                              </div>
+                            ) : null}
+                            {user.banned && user.banExpires ? (
+                              <div className="flex flex-col gap-2xs">
+                                <dt className="text-muted-foreground">
+                                  {config.localization.banExpires}
+                                </dt>
+                                <dd>{formatDate(user.banExpires)}</dd>
+                              </div>
+                            ) : null}
+                          </dl>
+                        </section>
+                        <Separator />
+                        <section className="flex flex-col gap-lg p-xl">
+                          <h3 className="font-medium">{config.localization.security}</h3>
+                          <div>
+                            <Button
+                              disabled={canSetPassword.isPending || !canSetPassword.data?.success}
+                              onClick={() => setPasswordOpen(true)}
+                              type="button"
+                              variant="outline"
+                            >
+                              <KeyRoundIcon />
+                              {config.localization.setPassword}
+                            </Button>
+                          </div>
+                        </section>
+                        <Separator />
+                        <section className="flex flex-col gap-lg p-xl">
+                          <h3 className="font-medium">{config.localization.dangerZone}</h3>
+                          <div className="flex flex-wrap gap-sm">
+                            <Button
+                              disabled={canBan.isPending || !canBan.data?.success || isSelf}
+                              onClick={() =>
+                                user.banned
+                                  ? unban.mutate({ userId: user.id })
+                                  : setDangerousAction('ban')
+                              }
+                              type="button"
+                              variant="outline"
+                            >
+                              <BanIcon />
+                              {user.banned
+                                ? config.localization.unbanUser
+                                : config.localization.banUser}
+                            </Button>
+                            <Button
+                              disabled={canDelete.isPending || !canDelete.data?.success || isSelf}
+                              onClick={() => setDangerousAction('delete')}
+                              type="button"
+                              variant="destructive"
+                            >
+                              <Trash2Icon />
+                              {config.localization.deleteUser}
+                            </Button>
+                          </div>
+                          {unban.error ? (
+                            <FieldError>{getAdminErrorMessage(unban.error)}</FieldError>
                           ) : null}
-                        </dl>
-                      </section>
-                      <Separator />
-                      <section className="flex flex-col gap-lg p-xl">
-                        <h3 className="font-medium">{config.localization.security}</h3>
-                        <div>
-                          <Button
-                            disabled={canSetPassword.isPending || !canSetPassword.data?.success}
-                            onClick={() => setPasswordOpen(true)}
-                            type="button"
-                            variant="outline"
-                          >
-                            <KeyRoundIcon />
-                            {config.localization.setPassword}
-                          </Button>
-                        </div>
-                      </section>
-                      <Separator />
-                      <section className="flex flex-col gap-lg p-xl">
-                        <h3 className="font-medium">{config.localization.dangerZone}</h3>
-                        <div className="flex flex-wrap gap-sm">
-                          <Button
-                            disabled={canBan.isPending || !canBan.data?.success || isSelf}
-                            onClick={() =>
-                              user.banned
-                                ? unban.mutate({ userId: user.id })
-                                : setDangerousAction('ban')
-                            }
-                            type="button"
-                            variant="outline"
-                          >
-                            <BanIcon />
-                            {user.banned
-                              ? config.localization.unbanUser
-                              : config.localization.banUser}
-                          </Button>
-                          <Button
-                            disabled={canDelete.isPending || !canDelete.data?.success || isSelf}
-                            onClick={() => setDangerousAction('delete')}
-                            type="button"
-                            variant="destructive"
-                          >
-                            <Trash2Icon />
-                            {config.localization.deleteUser}
-                          </Button>
-                        </div>
-                        {unban.error ? (
-                          <FieldError>{getAdminErrorMessage(unban.error)}</FieldError>
-                        ) : null}
-                      </section>
-                    </div>
-                    <div className="flex flex-col-reverse gap-sm border-t bg-muted/50 px-xl py-lg sm:flex-row sm:justify-end">
-                      <Button
-                        disabled={isSavingProfile}
-                        onClick={() => {
-                          if (!profileInFlight.current) onOpenChange(false);
-                        }}
-                        type="button"
-                        variant="outline"
-                      >
-                        {config.localization.cancel}
-                      </Button>
-                      <profileForm.Subscribe
-                        selector={(state) => [state.values.name, state.values.email]}
-                      >
-                        {([name, email]) => (
-                          <profileForm.AuthFormSubmitButton
-                            disabled={
-                              !name.trim() ||
-                              !email.trim() ||
-                              updateUser.isPending ||
-                              setRoleMutation.isPending ||
-                              canUpdate.isPending ||
-                              canSetRole.isPending ||
-                              (!canUpdate.data?.success && (!canSetRole.data?.success || isSelf))
-                            }
-                          >
-                            {config.localization.saveChanges}
-                          </profileForm.AuthFormSubmitButton>
-                        )}
-                      </profileForm.Subscribe>
-                    </div>
-                  </profileForm.AuthFormRoot>
+                        </section>
+                      </DialogScrollArea>
+                      <DialogFooter>
+                        <Button
+                          disabled={isSavingProfile}
+                          onClick={() => {
+                            if (!profileInFlight.current) onOpenChange(false);
+                          }}
+                          type="button"
+                          variant="outline"
+                        >
+                          {config.localization.cancel}
+                        </Button>
+                        <profileForm.Subscribe
+                          selector={(state) => [state.values.name, state.values.email]}
+                        >
+                          {([name, email]) => (
+                            <profileForm.AuthFormSubmitButton
+                              disabled={
+                                !name.trim() ||
+                                !email.trim() ||
+                                updateUser.isPending ||
+                                setRoleMutation.isPending ||
+                                canUpdate.isPending ||
+                                canSetRole.isPending ||
+                                (!canUpdate.data?.success && (!canSetRole.data?.success || isSelf))
+                              }
+                            >
+                              {config.localization.saveChanges}
+                            </profileForm.AuthFormSubmitButton>
+                          )}
+                        </profileForm.Subscribe>
+                      </DialogFooter>
+                    </profileForm.AuthFormRoot>
+                  </DialogForm>
                 </profileForm.AppForm>
               </TabsContent>
               <TabsContent className="min-h-none overflow-y-auto p-xl" value="sessions">

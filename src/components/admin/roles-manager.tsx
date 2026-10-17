@@ -7,7 +7,10 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogForm,
   DialogHeader,
+  DialogScrollArea,
   DialogTitle,
 } from '@/components/ui/admin-panel';
 import {
@@ -115,7 +118,7 @@ export function RolesManager({
     });
   };
   const save = async () => {
-    if (!draft || draft.readOnly || saving) return;
+    if (!draft || draft.readOnly || saving || draft.name.trim().length < 2) return;
     setSaving(true);
     setError('');
     try {
@@ -291,7 +294,7 @@ export function RolesManager({
           onEscapeKeyDown={(event) => saving && event.preventDefault()}
           onInteractOutside={(event) => saving && event.preventDefault()}
         >
-          <DialogHeader className="border-b px-xl py-lg-plus">
+          <DialogHeader>
             <DialogTitle>
               {draft?.readOnly ? draft.name : draft?.key ? 'Edit role' : 'Create role'}
             </DialogTitle>
@@ -301,9 +304,13 @@ export function RolesManager({
                 : 'Choose the access granted by this role.'}
             </DialogDescription>
           </DialogHeader>
-          {/* Same frame as the user inspector: only the form scrolls, the actions stay below it. */}
-          <div className="grid min-h-none flex-1 grid-rows-inspector-form">
-            <div className="overflow-y-auto p-xl">
+          <DialogForm
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save();
+            }}
+          >
+            <DialogScrollArea className="p-xl">
               {draft && (
                 <div className="flex flex-col gap-lg">
                   <Field>
@@ -365,27 +372,28 @@ export function RolesManager({
                   )}
                 </div>
               )}
-            </div>
-            <div className="flex flex-col-reverse gap-sm border-t bg-muted/50 px-xl py-lg sm:flex-row sm:justify-end">
-              {draft?.readOnly ? (
-                <Button variant="outline" onClick={() => setDraft(null)}>
-                  Close
-                </Button>
-              ) : (
+            </DialogScrollArea>
+            <DialogFooter showCloseButton={draft?.readOnly}>
+              {!draft?.readOnly && (
                 <>
-                  <Button variant="outline" onClick={() => setDraft(null)} disabled={saving}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setDraft(null)}
+                    disabled={saving}
+                  >
                     Cancel
                   </Button>
                   <Button
-                    onClick={() => void save()}
+                    type="submit"
                     disabled={saving || (draft !== null && draft.name.trim().length < 2)}
                   >
                     {saving ? 'Saving…' : 'Save role'}
                   </Button>
                 </>
               )}
-            </div>
-          </div>
+            </DialogFooter>
+          </DialogForm>
         </DialogContent>
       </Dialog>
       <AlertDialog
