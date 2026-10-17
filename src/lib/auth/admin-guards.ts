@@ -32,6 +32,8 @@ import { isActiveUser } from '@/lib/user-status';
 const GUARDED_PATHS = new Set([
   '/admin/set-role',
   '/admin/update-user',
+  // The plugin checks only the caller's `user:set-password` grant, never the target's role.
+  '/admin/set-user-password',
   '/admin/ban-user',
   '/admin/unban-user',
   '/admin/remove-user',
