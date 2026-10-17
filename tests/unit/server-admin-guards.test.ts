@@ -94,6 +94,24 @@ describe('adminMutationGuard', () => {
     }
   });
 
+  it("lets only an owner set an owner's password", async () => {
+    const path = '/admin/set-user-password';
+    actor(admin('a1'));
+    users(owner('o1'), admin('a2'));
+    const error = await rejection(
+      guard({ path, body: { userId: 'o1', newPassword: 'p'.repeat(16) } }),
+    );
+    expect(error.statusCode).toBe(403);
+    expect(error.body?.code).toBe('OWNER_PROTECTED');
+    await guard({ path, body: { userId: 'a2', newPassword: 'p'.repeat(16) } });
+
+    actor(owner('o2'));
+    users(owner('o1'), owner('o2'));
+    await guard({ path, body: { userId: 'o1', newPassword: 'p'.repeat(16) } });
+    // Setting a password does not remove access, so the last-owner count is never consulted.
+    expect(m.findMany).not.toHaveBeenCalled();
+  });
+
   it('treats an actor with an unknown role as a non-owner (fail closed)', async () => {
     actor({ id: 'x', role: 'superuser' });
     users(owner('o1'), owner('o2'));
