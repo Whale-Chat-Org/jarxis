@@ -575,6 +575,38 @@ describe('AdminUsers inspector profile', () => {
     expect(h.admin.setRole).not.toHaveBeenCalled();
   });
 
+  it('keeps every stored role of a multi-role user when saving a profile change', async () => {
+    const vera = {
+      ...ada,
+      id: 'u-vera',
+      name: 'Vera Viewer',
+      email: 'viewer@jarxis.test',
+      role: 'viewer,administrator',
+    };
+    h.users = listResult([vera]);
+    setConfig({ allowMultipleRoles: false });
+    const { user } = renderUsers();
+    const dialog = await openInspector(user, 'Vera Viewer');
+    await user.type(within(dialog).getByLabelText('Name'), '!');
+    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(h.admin.updateUser).toHaveBeenCalledOnce());
+    expect(h.admin.updateUser.mock.calls[0][0].data).toMatchObject({ name: 'Vera Viewer!' });
+    expect(h.admin.setRole).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])(
+    'does not re-send an unchanged role on save (allowMultipleRoles: %s)',
+    async (allowMultipleRoles) => {
+      setConfig({ allowMultipleRoles });
+      const { user } = renderUsers();
+      const dialog = await openInspector(user);
+      await user.type(within(dialog).getByLabelText('Name'), '!');
+      await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+      await waitFor(() => expect(h.admin.updateUser).toHaveBeenCalledOnce());
+      expect(h.admin.setRole).not.toHaveBeenCalled();
+    },
+  );
+
   it('lets a role-only admin change a role via the role dropdown', async () => {
     h.permissions['user:update'] = false;
     setConfig({ allowMultipleRoles: false });
