@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(new URL('../../src/styles/tokens.css', import.meta.url), 'utf8');
-const rules = readFileSync(new URL('../../.agent/rules/design-system.md', import.meta.url), 'utf8');
+const rules = readFileSync(
+  new URL('../../.agents/rules/design-system.md', import.meta.url),
+  'utf8',
+);
 // Colour tokens are the official shadcn Neutral themes, so they are OKLCH and the dark
 // border/input tokens carry an alpha channel (`oklch(1 0 0 / 10%)`). Parse both forms, convert
 // to sRGB and composite translucent colours over their surface before measuring contrast.
@@ -244,7 +247,7 @@ describe('design scale tokens', () => {
 
 describe('class-merge token lists', () => {
   it('match tokens.css so cn() dedupes token classes', async () => {
-    const { designTokens } = await import('../../src/lib/utils');
+    const { designTokens } = await import('@/lib/utils');
     const theme = css.slice(css.indexOf('@theme {'), css.indexOf('@theme inline'));
     const inline = css.slice(css.indexOf('@theme inline'));
     const names = (prefix: string, source: string) =>
@@ -259,7 +262,7 @@ describe('class-merge token lists', () => {
     expect([...designTokens.ease]).toEqual(names('ease', theme));
   });
   it('merges token classes', async () => {
-    const { cn } = await import('../../src/lib/utils');
+    const { cn } = await import('@/lib/utils');
     expect(cn('text-body-sm text-primary-foreground')).toBe('text-body-sm text-primary-foreground');
     expect(cn('p-lg', 'p-sm')).toBe('p-sm');
     expect(cn('h-control', 'h-control-sm')).toBe('h-control-sm');

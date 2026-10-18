@@ -1,5 +1,12 @@
 'use client';
+import { PasswordInput } from '@/components/auth/password-input';
+import { validatePasswordLength } from '@/components/auth/password-validation';
+import { inlineFormErrors } from '@/lib/api-client';
 
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import {
   authMutationKeys,
   getAdditionalFieldDefaultValues,
@@ -12,18 +19,7 @@ import {
 } from '@better-auth-ui/core';
 import { AuthPrompts, useAuth, useFetchOptions, useSignUpEmail } from '@better-auth-ui/react';
 import { useIsMutating } from '@tanstack/react-query';
-import { Eye, EyeOff } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@/components/ui/input-group';
-import { cn } from '@/lib/utils';
 import { getAuthAdditionalFieldValidators, isAuthFormFieldInvalid, useAuthForm } from './auth-form';
 import { PasswordStrengthMeter } from './password-strength-meter';
 
@@ -67,6 +63,7 @@ export function SignUp({ className, onSignUpSuccess }: SignUpProps) {
   const { fetchOptions, resetFetchOptions } = useFetchOptions();
 
   const { mutateAsync: signUpEmail } = useSignUpEmail(authClient, {
+    ...inlineFormErrors,
     onError: (error) => {
       // The haveIBeenPwned plugin rejects on the password itself,
       // so it belongs against the field rather than in a toast.
@@ -74,8 +71,6 @@ export function SignUp({ className, onSignUpSuccess }: SignUpProps) {
         setIsCompromised(true);
       }
 
-      form.setFieldValue('password', '');
-      form.setFieldValue('confirmPassword', '');
       resetFetchOptions();
     },
     onSuccess: (_data, { email }) => {
@@ -102,9 +97,6 @@ export function SignUp({ className, onSignUpSuccess }: SignUpProps) {
 
   const Captcha = plugins.find((plugin) => plugin.captchaComponent)?.captchaComponent;
 
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
-
   const [isCompromised, setIsCompromised] = useState(false);
   const signUpFields = useMemo(
     () => additionalFields?.filter((field) => field.signUp) ?? [],
@@ -127,8 +119,8 @@ export function SignUp({ className, onSignUpSuccess }: SignUpProps) {
           ...getAdditionalFieldSubmitValues(signUpFields, value.additionalFields),
           fetchOptions,
         });
-      } catch {
-        // The mutation reports the error through its configured handler.
+      } catch (error) {
+        throw error;
       }
     },
   });
@@ -248,19 +240,7 @@ export function SignUp({ className, onSignUpSuccess }: SignUpProps) {
                     name="password"
                     validators={{
                       onChange: ({ value }) =>
-                        validateStringLength(value, {
-                          maxLength: emailAndPassword?.maxPasswordLength,
-                          maxLengthMessage: localization.auth.tooLong.replace(
-                            '{{max}}',
-                            String(emailAndPassword?.maxPasswordLength),
-                          ),
-                          minLength: emailAndPassword?.minPasswordLength,
-                          minLengthMessage: localization.auth.tooShort.replace(
-                            '{{min}}',
-                            String(emailAndPassword?.minPasswordLength),
-                          ),
-                          requiredMessage: localization.auth.fieldRequired,
-                        }),
+                        validatePasswordLength(value, emailAndPassword, localization.auth),
                     }}
                   >
                     {(field) => {
@@ -270,47 +250,23 @@ export function SignUp({ className, onSignUpSuccess }: SignUpProps) {
                         <Field data-invalid={isInvalid}>
                           <FieldLabel htmlFor="password">{localization.auth.password}</FieldLabel>
 
-                          <InputGroup>
-                            <InputGroupInput
-                              id="password"
-                              name={field.name}
-                              type={isPasswordVisible ? 'text' : 'password'}
-                              autoComplete="new-password"
-                              value={field.state.value}
-                              onBlur={field.handleBlur}
-                              onChange={(e) => {
-                                field.handleChange(e.target.value);
-                                setIsCompromised(false);
-                              }}
-                              placeholder={localization.auth.passwordPlaceholder}
-                              required
-                              minLength={emailAndPassword?.minPasswordLength}
-                              maxLength={emailAndPassword?.maxPasswordLength}
-                              disabled={isPending}
-                              aria-invalid={isInvalid}
-                            />
-
-                            <InputGroupAddon align="inline-end">
-                              <InputGroupButton
-                                size="icon-xs"
-                                aria-label={
-                                  isPasswordVisible
-                                    ? localization.auth.hidePassword
-                                    : localization.auth.showPassword
-                                }
-                                title={
-                                  isPasswordVisible
-                                    ? localization.auth.hidePassword
-                                    : localization.auth.showPassword
-                                }
-                                onClick={() => {
-                                  setIsPasswordVisible((visible) => !visible);
-                                }}
-                              >
-                                {isPasswordVisible ? <EyeOff /> : <Eye />}
-                              </InputGroupButton>
-                            </InputGroupAddon>
-                          </InputGroup>
+                          <PasswordInput
+                            id="password"
+                            name={field.name}
+                            autoComplete="new-password"
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) => {
+                              field.handleChange(e.target.value);
+                              setIsCompromised(false);
+                            }}
+                            placeholder={localization.auth.passwordPlaceholder}
+                            required
+                            minLength={emailAndPassword?.minPasswordLength}
+                            maxLength={emailAndPassword?.maxPasswordLength}
+                            disabled={isPending}
+                            aria-invalid={isInvalid}
+                          />
 
                           {isCompromised ? (
                             <FieldError>{localization.auth.passwordCompromised}</FieldError>
@@ -330,19 +286,7 @@ export function SignUp({ className, onSignUpSuccess }: SignUpProps) {
                       validators={{
                         onChangeListenTo: ['password'],
                         onChange: ({ fieldApi, value }) =>
-                          validateStringLength(value, {
-                            maxLength: emailAndPassword?.maxPasswordLength,
-                            maxLengthMessage: localization.auth.tooLong.replace(
-                              '{{max}}',
-                              String(emailAndPassword?.maxPasswordLength),
-                            ),
-                            minLength: emailAndPassword?.minPasswordLength,
-                            minLengthMessage: localization.auth.tooShort.replace(
-                              '{{min}}',
-                              String(emailAndPassword?.minPasswordLength),
-                            ),
-                            requiredMessage: localization.auth.fieldRequired,
-                          }) ??
+                          validatePasswordLength(value, emailAndPassword, localization.auth) ??
                           validateMatchingValue(
                             value,
                             fieldApi.form.getFieldValue('password'),
@@ -359,42 +303,20 @@ export function SignUp({ className, onSignUpSuccess }: SignUpProps) {
                               {localization.auth.confirmPassword}
                             </FieldLabel>
 
-                            <InputGroup>
-                              <InputGroupInput
-                                id="confirmPassword"
-                                name={field.name}
-                                type={isConfirmPasswordVisible ? 'text' : 'password'}
-                                autoComplete="new-password"
-                                value={field.state.value}
-                                onBlur={field.handleBlur}
-                                onChange={(e) => field.handleChange(e.target.value)}
-                                placeholder={localization.auth.confirmPasswordPlaceholder}
-                                required
-                                minLength={emailAndPassword?.minPasswordLength}
-                                maxLength={emailAndPassword?.maxPasswordLength}
-                                disabled={isPending}
-                                aria-invalid={isInvalid}
-                              />
-
-                              <InputGroupAddon align="inline-end">
-                                <InputGroupButton
-                                  size="icon-xs"
-                                  aria-label={
-                                    isConfirmPasswordVisible
-                                      ? localization.auth.hidePassword
-                                      : localization.auth.showPassword
-                                  }
-                                  title={
-                                    isConfirmPasswordVisible
-                                      ? localization.auth.hidePassword
-                                      : localization.auth.showPassword
-                                  }
-                                  onClick={() => setIsConfirmPasswordVisible((visible) => !visible)}
-                                >
-                                  {isConfirmPasswordVisible ? <EyeOff /> : <Eye />}
-                                </InputGroupButton>
-                              </InputGroupAddon>
-                            </InputGroup>
+                            <PasswordInput
+                              id="confirmPassword"
+                              name={field.name}
+                              autoComplete="new-password"
+                              value={field.state.value}
+                              onBlur={field.handleBlur}
+                              onChange={(e) => field.handleChange(e.target.value)}
+                              placeholder={localization.auth.confirmPasswordPlaceholder}
+                              required
+                              minLength={emailAndPassword?.minPasswordLength}
+                              maxLength={emailAndPassword?.maxPasswordLength}
+                              disabled={isPending}
+                              aria-invalid={isInvalid}
+                            />
 
                             <field.AuthFormFieldError />
                           </Field>
@@ -428,6 +350,7 @@ export function SignUp({ className, onSignUpSuccess }: SignUpProps) {
                   {Captcha && <div className="flex justify-center">{Captcha}</div>}
 
                   <div className="flex flex-col gap-md">
+                    <form.AuthFormServerError />
                     <form.AuthFormSubmitButton disabled={isPending}>
                       {localization.auth.signUp}
                     </form.AuthFormSubmitButton>

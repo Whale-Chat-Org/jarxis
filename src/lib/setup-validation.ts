@@ -1,3 +1,4 @@
+import { passwordPolicy } from '@/lib/password-policy';
 import { z } from 'zod';
 
 /**
@@ -13,7 +14,7 @@ export const setupInput = z
     name: z.string().trim().min(1).max(100),
     email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
     // Mirrors Better Auth's `minPasswordLength: 12` and its 128-character ceiling.
-    password: z.string().min(12).max(128),
+    password: z.string().min(passwordPolicy.minLength).max(passwordPolicy.maxLength),
   })
   .strict();
 
@@ -27,8 +28,4 @@ export const setupVerifyInput = z
   })
   .strict();
 
-export type SetupVerifyInput = z.infer<typeof setupVerifyInput>;
-
 export const setupResendInput = z.object({ requestId: z.uuid() }).strict();
-
-export type SetupResendInput = z.infer<typeof setupResendInput>;

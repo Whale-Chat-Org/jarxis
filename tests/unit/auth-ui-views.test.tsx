@@ -2,17 +2,18 @@ import { authMutationKeys, localization } from '@better-auth-ui/core';
 import { oneTapMutationKeys } from '@better-auth-ui/core/plugins/one-tap';
 import { useAuth } from '@better-auth-ui/react';
 import {
+  MutationCache,
   QueryCache,
   QueryClient,
-  MutationCache,
   useMutation,
   useQuery,
 } from '@tanstack/react-query';
 import { render, renderHook, screen, waitFor } from '@testing-library/react';
-import { renderToString } from 'react-dom/server';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient } from '../helpers/query-client';
 
 import { Auth } from '@/components/auth/auth';
 import { AuthProvider } from '@/components/auth/auth-provider';
@@ -78,10 +79,7 @@ function makeClient(overrides: Record<string, unknown> = {}) {
 }
 
 function makeQueryClient(config: ConstructorParameters<typeof QueryClient>[0] = {}) {
-  return new QueryClient({
-    ...config,
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  return createTestQueryClient(config);
 }
 
 function renderWithAuth(

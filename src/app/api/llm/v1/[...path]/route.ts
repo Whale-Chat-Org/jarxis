@@ -1,4 +1,4 @@
-import { handleGateway } from '@/lib/ml/gateway';
+import { handleGateway } from '@/lib/providers/gateway';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

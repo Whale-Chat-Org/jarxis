@@ -33,7 +33,7 @@ on:
       - 'sonar-project.properties'
       - 'trivy-secret.yaml'
       # tests/unit/theme.test.ts reads this rule file.
-      - '.agent/rules/design-system.md'
+      - '.agents/rules/design-system.md'
       - '.github/workflows/ci-cd.yml'
   workflow_dispatch:
 

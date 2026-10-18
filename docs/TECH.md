@@ -55,7 +55,7 @@ reinstalling the relevant registry item, applying the documented token conversio
 | `/admin`             | Permission-protected overview                                      |
 | `/admin/users`       | Accounts table with an in-place Role dropdown (owners only)        |
 | `/admin/roles`       | Locked system roles plus owner-managed custom roles                |
-| `/admin/permissions` | Application and Better Auth permission catalogues                  |
+| `/admin/providers`   | Owner-only provider connections, models and gateway keys           |
 | `/admin/audit`       | Administrative audit history                                       |
 | `/setup`             | Public first-owner bootstrap; request-time availability check      |
 | `/access-denied`     | Authorization failure page                                         |
@@ -161,19 +161,23 @@ returned to clients.
 
 ## 7. Data model
 
-| Model               | Purpose                                                           |
-| ------------------- | ----------------------------------------------------------------- |
-| `User`              | Profile, verification, assigned role keys, and ban state          |
-| `Role`              | System or owner-defined role: unique name, description            |
-| `Permission`        | Seeded permission catalog with its owner-only flag                |
-| `RolePermission`    | Grant of one permission to one role                               |
-| `Session`           | Better Auth browser/backing sessions and impersonation actor      |
-| `Account`           | Credential or external-provider account data                      |
-| `Verification`      | Time-limited verification/reset values                            |
-| `TokenFamily`       | API refresh family, session link, expiry, and revocation state    |
-| `RefreshToken`      | Hashed, single-use refresh tokens with consumption evidence       |
-| `AuditLog`          | Actor, action, target, sanitized changes, and timestamp           |
-| `InstallationSetup` | Permanent singleton marker closing the web first-owner setup flow |
+| Model                | Purpose                                                               |
+| -------------------- | --------------------------------------------------------------------- |
+| `User`               | Profile, verification, assigned role keys, and ban state              |
+| `Role`               | System or owner-defined role: unique name, description                |
+| `Permission`         | Seeded permission catalog with its owner-only flag                    |
+| `RolePermission`     | Grant of one permission to one role                                   |
+| `Session`            | Better Auth browser/backing sessions and impersonation actor          |
+| `Account`            | Email/password credential account data                                |
+| `Verification`       | Time-limited verification/reset values                                |
+| `TokenFamily`        | API refresh family, session link, expiry, and revocation state        |
+| `RefreshToken`       | Hashed, single-use refresh tokens with consumption evidence           |
+| `AuditLog`           | Actor, action, target, sanitized changes, and timestamp               |
+| `InstallationSetup`  | Permanent singleton marker closing the web first-owner setup flow     |
+| `OwnerSetupRequest`  | Expiring hashed email code and attempt/cooldown state                 |
+| `ProviderConnection` | Encrypted provider credentials and discovery state (`ml_connections`) |
+| `ProviderModel`      | Connection model catalog and enabled flags (`ml_models`)              |
+| `ProviderGatewayKey` | Hashed gateway keys and revocation (`ml_gateway_keys`)                |
 
 Prisma is the only ORM. Schema changes require a reviewed, versioned SQL migration. Do not use
 schema push against persistent environments. Token families intentionally outlive deleted sessions
@@ -217,7 +221,7 @@ Required runtime values are validated by `src/lib/env.ts`:
 the acceptance suite's local Brevo stub. First-owner setup has no configuration of its own: `/setup`
 reports `available` until an owner exists and `completed` afterwards, and the emailed owner code uses
 the same Brevo sender as every other message. Avatar storage separately validates `AZURE_STORAGE_CONNECTION_STRING` and `AZURE_STORAGE_CONTAINER`
-when used. The local fixture seeder's fixed development password lives
+when used. Providers separately validate `PROVIDERS_ENCRYPTION_KEY` with `ML_ENCRYPTION_KEY` fallback; conflicting nonempty values are rejected and existing encryption keys must be retained. The local fixture seeder's fixed development password lives
 in `scripts/seed-users.ts`; it is not an application runtime setting.
 
 Never commit a populated `.env` file. Use `.env.example` only to document names and safe placeholders.
@@ -227,10 +231,11 @@ Never commit a populated `.env` file. Use `.env.example` only to document names 
 The multi-stage Dockerfile provides:
 
 - `tools`: migration, seed, owner bootstrap, and development source;
-- `runner`: minimal production Next.js runtime running as `node`.
+- `runner`: minimal production Next.js runtime running as `node`;
+- `worker`: scheduled Providers model discovery running as `node`.
 
 The base Compose topology starts PostgreSQL and Redis, runs the migration/seed job to completion,
-then starts the application. Production must provide a Brevo API key with a verified sender, HTTPS `BETTER_AUTH_URL`, durable
+then starts the application and Providers worker. Production must provide a Brevo API key with a verified sender, HTTPS `BETTER_AUTH_URL`, durable
 volumes, backup procedures, and external monitoring.
 
 Monitor `/api/health`, authentication failures, rate-limit spikes, container health, email delivery,
@@ -239,7 +244,7 @@ major upgrades require a supported PostgreSQL upgrade path and a tested restore/
 
 ## 11. Development and verification
 
-Use Node.js 24+, pnpm 11.19.0, and Docker Compose v2. The normal quality gates are:
+Use Node.js 24+, pnpm 12.8.1, and Docker Compose v2. The normal quality gates are:
 
 ```sh
 pnpm format:check
@@ -249,7 +254,7 @@ pnpm test
 pnpm build
 ```
 
-Run `pnpm db:generate` after dependency installation or Prisma schema changes. Integration and E2E tests require an isolated database whose URL contains `jarxis_test`; follow `.agent/rules/testing.md`
+Run `pnpm db:generate` after dependency installation or Prisma schema changes. Integration and E2E tests require an isolated database whose URL contains `jarxis_test`; follow `.agents/rules/testing.md`
 before running migrations, seeds, integration tests, or browser tests. Never point destructive test
 commands at development or production data.
 

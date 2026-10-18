@@ -33,7 +33,7 @@ vi.mock('react', () => ({ cache: <T>(fn: T) => fn }));
 
 const rbac = await import('@/lib/rbac');
 const { guardDocs } = await import('@/lib/docs-access');
-const { listAudit } = await import('@/lib/admin-service');
+const { listAudit } = await import('@/lib/audit-service');
 
 beforeEach(() => {
   vi.clearAllMocks();

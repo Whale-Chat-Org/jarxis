@@ -14,7 +14,7 @@ export function prepareEnv({ databaseVolumeExists, removeVolumeHint }) {
   const hex = () => randomBytes(32).toString('hex');
   // Independent secrets that are safe to generate whenever they are missing or empty. Existing
   // values are never replaced (ML_ENCRYPTION_KEY must be kept to decrypt stored credentials).
-  const generated = { BETTER_AUTH_SECRET: hex, JWT_SECRET: hex, ML_ENCRYPTION_KEY: hex };
+  const generated = { BETTER_AUTH_SECRET: hex, JWT_SECRET: hex, PROVIDERS_ENCRYPTION_KEY: hex };
   const keyOf = (line) =>
     /^[A-Z][A-Z0-9_]*=/.test(line) ? line.slice(0, line.indexOf('=')) : null;
   const example = readFileSync('.env.example', 'utf8').split('\n');
@@ -23,6 +23,16 @@ export function prepareEnv({ databaseVolumeExists, removeVolumeHint }) {
     // Keep existing developers working when .env.example gains variables: fill empty generated
     // secrets and append missing keys, without touching any value that is already set.
     const lines = readFileSync('.env', 'utf8').replace(/\n+$/, '').split('\n');
+    const existing = Object.fromEntries(
+      lines
+        .filter((line) => keyOf(line))
+        .map((line) => [
+          keyOf(line),
+          line.slice(line.indexOf('=') + 1).replace(/^['\"]|['\"]$/g, ''),
+        ]),
+    );
+    generated.PROVIDERS_ENCRYPTION_KEY = () =>
+      existing.PROVIDERS_ENCRYPTION_KEY || existing.ML_ENCRYPTION_KEY || hex();
     const present = new Set(lines.map(keyOf).filter(Boolean));
     const changed = [];
     const updated = lines.map((line) => {

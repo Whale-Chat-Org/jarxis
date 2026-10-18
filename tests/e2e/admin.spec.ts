@@ -9,7 +9,7 @@ test('signed-out administration redirects to sign-in', async ({ page }) => {
 
 /**
  * Acceptance coverage for the administration area after the Better Auth admin plugin migration:
- * the shadcn `Sidebar` shell, the registry `AdminUsers` table, and the roles page.
+ * the shadcn `Sidebar` shell, the registry `UsersPanel` table, and the roles page.
  */
 test('owner browses the admin shell, user management and the role catalog', async ({
   page,
@@ -69,12 +69,6 @@ test('owner browses the admin shell, user management and the role catalog', asyn
     await expect(page.getByRole('main')).toContainText(role);
   }
   await expect(page.getByRole('button', { name: /create role/i })).toBeVisible();
-
-  // Permissions documents both catalogues.
-  await sidebar.getByRole('link', { name: 'Permissions' }).click();
-  await expect(page).toHaveURL(/\/admin\/permissions(?:\?|$)/);
-  await expect(page.getByRole('heading', { name: 'Administration' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Application' })).toBeVisible();
 
   // No horizontal overflow at a laptop width.
   await expect

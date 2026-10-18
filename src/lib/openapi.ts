@@ -1,26 +1,19 @@
 import { z } from 'zod';
 import { getAuth } from './auth';
-import { loginInput, refreshInput } from './validation';
-import { discoveryPreviewSchema, updateModelStatesSchema } from './ml/validation';
+import { isBlockedAuthPath } from './auth-paths';
 import { env } from './env';
+import {
+  discoveryPreviewSchema,
+  gatewayKeySchema,
+  updateModelStatesSchema,
+} from './providers/validation';
+import { loginInput, refreshInput } from './validation';
 const schema = (v: z.ZodType) => z.toJSONSchema(v, { io: 'input' });
 export async function openapi() {
   const native = await getAuth().api.generateOpenAPISchema();
   const paths: Record<string, unknown> = {};
   for (const [path, value] of Object.entries(native.paths)) {
-    if (
-      [
-        '/sign-in/social',
-        '/link-social',
-        '/unlink-account',
-        '/get-access-token',
-        '/refresh-token',
-        '/account-info',
-      ].includes(path) ||
-      path === '/callback' ||
-      path.startsWith('/callback/')
-    )
-      continue;
+    if (isBlockedAuthPath(path)) continue;
     paths[`/api/auth${path}`] = value;
   }
   const op = (summary: string, input?: z.ZodType, auth = true) => ({
@@ -133,12 +126,12 @@ export async function openapi() {
   };
   const providerOperation = (summary: string) => ({
     ...op(summary),
-    tags: ['ML providers'],
+    tags: ['Providers'],
     security: [{ cookieAuth: [] }],
     description:
       'Active, verified owner session required. Bearer and impersonated sessions are rejected. Mutations require same-origin protection and are limited to 16 KiB. Responses contain redacted connection metadata only.',
   });
-  paths['/api/admin/ml-providers'] = {
+  paths['/api/admin/providers'] = {
     get: providerOperation('List provider connections and application key metadata'),
     post: {
       ...providerOperation('Add a provider connection'),
@@ -151,7 +144,7 @@ export async function openapi() {
       },
     },
   };
-  paths['/api/admin/ml-providers/discover'] = {
+  paths['/api/admin/providers/discover'] = {
     post: {
       ...providerOperation('Preview an API-key provider model catalog without saving it'),
       requestBody: {
@@ -162,16 +155,16 @@ export async function openapi() {
         'Requires providers:manage. Accepts openai, anthropic, openrouter or custom with an API key; custom requires an HTTPS baseUrl. The key is used for one bounded catalog request (15 seconds total, 2 MiB per page, 20 pages, 5000 models) to a public HTTPS destination without redirects, and is never stored or logged. Returns { discovery: { status: ok | unsupported | failed, models: [{ id, name }], error } }. Saving a connection discovers again server-side; preview results are not accepted as input.',
     },
   };
-  paths['/api/admin/ml-providers/{id}'] = {
+  paths['/api/admin/providers/{id}'] = {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
     patch: providerOperation('Update a connection, credentials, or priority'),
     delete: providerOperation('Delete a provider connection'),
   };
-  paths['/api/admin/ml-providers/{id}/refresh'] = {
+  paths['/api/admin/providers/{id}/refresh'] = {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
     post: providerOperation('Schedule model discovery'),
   };
-  paths['/api/admin/ml-providers/{id}/models'] = {
+  paths['/api/admin/providers/{id}/models'] = {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
     post: providerOperation('Add an explicit model ID'),
     patch: {
@@ -184,11 +177,58 @@ export async function openapi() {
         'Requires providers:manage. Send the modelStateVersion from the connection listing as version. Sort models by ID, then pack enabled flags as least-significant-bit-first bytes and encode as unpadded base64url in states. Optional connection fields save in the same transaction. A changed model catalog or concurrent model edit returns 409 MODEL_CATALOG_CHANGED; reload models before retrying. Each changed model is audited. Credentials are never returned.',
     },
   };
-  paths['/api/admin/ml-providers/keys'] = {
+  paths['/api/admin/providers/keys'] = {
+    get: {
+      ...providerOperation('List API key metadata'),
+      description:
+        'Requires providers:read and a direct owner browser session. Returns { keys, total, page, pageSize }. Metadata includes createdAt, lastUsedAt and revokedAt; never returns key hashes or full keys.',
+      parameters: [
+        {
+          name: 'page',
+          in: 'query',
+          schema: { type: 'integer', minimum: 1, maximum: 1000000, default: 1 },
+        },
+        {
+          name: 'pageSize',
+          in: 'query',
+          schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        },
+        { name: 'search', in: 'query', schema: { type: 'string', maxLength: 100 } },
+        {
+          name: 'searchField',
+          in: 'query',
+          schema: { type: 'string', enum: ['name', 'prefix'], default: 'name' },
+        },
+        {
+          name: 'status',
+          in: 'query',
+          schema: { type: 'string', enum: ['all', 'active', 'revoked'], default: 'all' },
+        },
+        {
+          name: 'sortDirection',
+          in: 'query',
+          schema: { type: 'string', enum: ['asc', 'desc'], default: 'desc' },
+        },
+      ],
+    },
     post: providerOperation('Issue an application key; reveal its value once'),
   };
-  paths['/api/admin/ml-providers/keys/{keyId}'] = {
+  paths['/api/admin/providers/keys/{keyId}'] = {
     parameters: [{ name: 'keyId', in: 'path', required: true, schema: { type: 'string' } }],
+    get: {
+      ...providerOperation('Read API key metadata'),
+      description:
+        'Requires providers:read and a direct owner browser session. Returns { record } with metadata only. Missing keys return 404.',
+    },
+    patch: {
+      ...providerOperation('Rename an active API key'),
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: schema(gatewayKeySchema) } },
+      },
+      description:
+        'Requires providers:manage and a direct owner browser session. Changes only the name and writes an atomic providers:key:rename audit event. Returns { record }; revoked keys return 409 API_KEY_REVOKED.',
+    },
     delete: providerOperation('Revoke an application key'),
   };
   return {

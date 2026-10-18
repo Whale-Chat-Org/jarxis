@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { randomUUID } from 'node:crypto';
 import { verifyPassword } from 'better-auth/crypto';
+import { randomUUID } from 'node:crypto';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Database behaviour of the emailed first-owner setup flow.
@@ -18,7 +18,7 @@ vi.mock('@/lib/mailer', () => ({ sendMail }));
 
 const { db } = await import('@/db');
 const {
-  getInitialOwnerSetupStatus,
+  ensureInitialOwnerSetupStatus,
   recordSetupCompletion,
   resendInitialOwnerSetup,
   startInitialOwnerSetup,
@@ -123,7 +123,7 @@ describe('starting setup', () => {
     // Nothing owner-shaped is written before verification.
     expect(await db.installationSetup.count()).toBe(0);
     expect(await db.auditLog.count({ where: { action: 'owner.bootstrap' } })).toBe(0);
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('available');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('available');
   });
 
   it('never promotes an existing email and rolls back completely', async () => {
@@ -135,7 +135,7 @@ describe('starting setup', () => {
     expect(await db.account.count()).toBe(0);
     expect(await db.ownerSetupRequest.count()).toBe(0);
     expect(await db.installationSetup.count()).toBe(0);
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('available');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('available');
   });
 
   it('keeps the pending request when delivery fails so a resend can recover', async () => {
@@ -181,7 +181,7 @@ describe('verifying the code', () => {
 
     const marker = await db.installationSetup.findUniqueOrThrow({ where: { id: SETUP_MARKER_ID } });
     expect(marker.completedBy).toBe(owner.id);
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('completed');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('completed');
   });
 
   it('persists five wrong attempts and then refuses even the correct code', async () => {
@@ -318,7 +318,7 @@ describe('verifying the code', () => {
     expect(candidate.role ?? '').not.toContain('owner');
     expect(candidate.emailVerified).toBe(false);
     expect(await db.installationSetup.count()).toBe(0);
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('available');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('available');
 
     // The same code still verifies once the failure is gone.
     await expect(
@@ -377,7 +377,7 @@ describe('availability and the marker', () => {
     await expect(startInitialOwnerSetup(input())).rejects.toMatchObject({ status: 409 });
     expect(await db.installationSetup.count()).toBe(1);
     await db.user.delete({ where: { id: owner.id } });
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('completed');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('completed');
   });
 
   it('does not reopen after the bootstrap owner is banned and then deleted', async () => {
@@ -385,7 +385,7 @@ describe('availability and the marker', () => {
     await verifyInitialOwnerSetup({ requestId, code });
     const owner = await db.user.findFirstOrThrow();
     await db.user.update({ where: { id: owner.id }, data: { banned: true } });
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('completed');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('completed');
     await db.user.delete({ where: { id: owner.id } });
     await expect(startInitialOwnerSetup(input())).rejects.toMatchObject({ status: 409 });
     // Deleting the candidate's user cascades its pending request away.
@@ -402,7 +402,7 @@ describe('availability and the marker', () => {
         changes: {},
       },
     });
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('completed');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('completed');
     expect(await db.installationSetup.count()).toBe(1);
   });
 
@@ -410,7 +410,7 @@ describe('availability and the marker', () => {
     const owner = await makeUser({ role: 'owner' });
     await db.user.update({ where: { id: owner.id }, data: { banned: true, emailVerified: false } });
 
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('completed');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('completed');
     const marker = await db.installationSetup.findUniqueOrThrow({ where: { id: SETUP_MARKER_ID } });
     expect(marker.method).toBe('existing-owner');
     expect(marker.completedBy).toBe(owner.id);
@@ -420,7 +420,7 @@ describe('availability and the marker', () => {
 
   it('ignores a role that merely contains the word owner', async () => {
     await makeUser({ role: 'co-owner' });
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('available');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('available');
     expect(await db.installationSetup.count()).toBe(0);
   });
 

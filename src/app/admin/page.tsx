@@ -1,13 +1,13 @@
+import { adminTableDefinitions } from '@/components/admin/table/table-definitions';
 import { formatDistanceToNow } from 'date-fns';
-import { KeyRoundIcon, ScrollTextIcon, ShieldCheckIcon, UsersIcon } from 'lucide-react';
+import { ScrollTextIcon, ShieldCheckIcon, UsersIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { db } from '@/db';
-import { listAudit } from '@/lib/admin-service';
-import { listRoles } from '@/lib/roles';
-import { adminPermissionCatalog, permissionKeys } from '@/lib/permissions';
+import { listAudit } from '@/lib/audit-service';
 import { requirePage } from '@/lib/rbac';
+import { listRoles } from '@/lib/roles';
 
 export default async function AdminDashboardPage() {
   const { permissions } = await requirePage('dashboard:read');
@@ -16,11 +16,11 @@ export default async function AdminDashboardPage() {
   const [usersTotal, bannedTotal, audit, roleCount] = await Promise.all([
     can('users:read') ? db.user.count() : Promise.resolve(null),
     can('users:read') ? db.user.count({ where: { banned: true } }) : Promise.resolve(null),
-    can('audit:read') ? listAudit(1, 5) : Promise.resolve(null),
+    can('audit:read')
+      ? listAudit(1, adminTableDefinitions.overview.defaults.pageSize)
+      : Promise.resolve(null),
     can('roles:read') ? listRoles().then((roles) => roles.length) : Promise.resolve(null),
   ]);
-
-  const permissionTotal = permissionKeys.length + Object.keys(adminPermissionCatalog).length;
 
   const cards = [
     can('users:read') && usersTotal !== null && bannedTotal !== null
@@ -43,16 +43,6 @@ export default async function AdminDashboardPage() {
           description: 'Available access levels',
         }
       : null,
-    can('permissions:read')
-      ? {
-          key: 'permissions',
-          href: '/admin/permissions',
-          icon: KeyRoundIcon,
-          title: 'Permissions',
-          value: permissionTotal,
-          description: 'Entries in the permission catalog',
-        }
-      : null,
     can('audit:read') && audit
       ? {
           key: 'audit',
@@ -66,7 +56,10 @@ export default async function AdminDashboardPage() {
   ].filter((c): c is NonNullable<typeof c> => c !== null);
 
   return (
-    <div className="flex flex-col gap-section">
+    <div
+      className="flex flex-col gap-section"
+      data-admin-presentation={adminTableDefinitions.overview.presentation}
+    >
       <div>
         <h2 className="text-heading font-semibold tracking-tight">Overview</h2>
         <p className="text-body-sm text-muted-foreground">

@@ -1,6 +1,6 @@
 import {
-  KeyRoundIcon,
   BotIcon,
+  KeyRoundIcon,
   LayoutDashboardIcon,
   ScrollTextIcon,
   ShieldCheckIcon,
@@ -40,12 +40,6 @@ export const NAV_GROUPS: NavGroup[] = [
         permission: 'users:read',
         icon: UsersIcon,
       },
-    ],
-  },
-  {
-    id: 'access',
-    label: 'Access control',
-    items: [
       {
         title: 'Roles',
         href: '/admin/roles',
@@ -53,29 +47,17 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: ShieldCheckIcon,
       },
       {
-        title: 'Permissions',
-        href: '/admin/permissions',
-        permission: 'permissions:read',
-        icon: KeyRoundIcon,
-      },
-    ],
-  },
-  {
-    id: 'ml',
-    label: 'Proxy',
-    items: [
-      {
         title: 'Providers',
-        href: '/admin/ml-providers',
+        href: '/admin/providers',
         permission: 'providers:read',
         icon: BotIcon,
       },
-    ],
-  },
-  {
-    id: 'security',
-    label: 'Security',
-    items: [
+      {
+        title: 'API Keys',
+        href: '/admin/api-keys',
+        permission: 'providers:read',
+        icon: KeyRoundIcon,
+      },
       {
         title: 'Audit Log',
         href: '/admin/audit',
@@ -85,8 +67,6 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
 ];
-
-export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
 // Groups the user can see; empty groups are dropped so no heading renders alone.
 export function visibleNavGroups(permissions: readonly string[]) {

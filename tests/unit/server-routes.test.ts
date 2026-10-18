@@ -1,10 +1,10 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIError } from 'better-auth';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '@/lib/errors';
 
 const m = vi.hoisted(() => ({
-  requireMlOwner: vi.fn(),
+  requireProviderOwner: vi.fn(),
   refreshConnection: vi.fn(),
   createConnection: vi.fn(),
   getConnection: vi.fn(),
@@ -34,9 +34,9 @@ const m = vi.hoisted(() => ({
   revokeFamily: vi.fn(),
 }));
 
-vi.mock('@/lib/ml/admin-auth', () => ({ requireMlOwner: m.requireMlOwner }));
-vi.mock('@/lib/ml/discovery', () => ({ refreshConnection: m.refreshConnection }));
-vi.mock('@/lib/ml/service', () => ({
+vi.mock('@/lib/providers/admin-auth', () => ({ requireProviderOwner: m.requireProviderOwner }));
+vi.mock('@/lib/providers/discovery', () => ({ refreshConnection: m.refreshConnection }));
+vi.mock('@/lib/providers/service', () => ({
   createConnection: m.createConnection,
   getConnection: m.getConnection,
   listConnections: m.listConnections,
@@ -59,7 +59,7 @@ vi.mock('@/lib/redis', () => ({
   rateLimit: m.rateLimit,
   requestIP: m.requestIP,
 }));
-vi.mock('@/lib/ml/gateway', () => ({ handleGateway: m.handleGateway }));
+vi.mock('@/lib/providers/gateway', () => ({ handleGateway: m.handleGateway }));
 vi.mock('@/lib/auth', () => ({
   getAuth: () => ({ api: { signInEmail: m.signInEmail }, handler: m.authHandler }),
 }));
@@ -70,13 +70,13 @@ vi.mock('@/lib/tokens', () => ({
   revokeFamily: m.revokeFamily,
 }));
 
-const providers = await import('@/app/api/admin/ml-providers/route');
-const providerById = await import('@/app/api/admin/ml-providers/[id]/route');
-const providerModels = await import('@/app/api/admin/ml-providers/[id]/models/route');
-const providerRefresh = await import('@/app/api/admin/ml-providers/[id]/refresh/route');
-const keys = await import('@/app/api/admin/ml-providers/keys/route');
-const keyById = await import('@/app/api/admin/ml-providers/keys/[keyId]/route');
-const discover = await import('@/app/api/admin/ml-providers/discover/route');
+const providers = await import('@/app/api/admin/providers/route');
+const providerById = await import('@/app/api/admin/providers/[id]/route');
+const providerModels = await import('@/app/api/admin/providers/[id]/models/route');
+const providerRefresh = await import('@/app/api/admin/providers/[id]/refresh/route');
+const keys = await import('@/app/api/admin/providers/keys/route');
+const keyById = await import('@/app/api/admin/providers/keys/[keyId]/route');
+const discover = await import('@/app/api/admin/providers/discover/route');
 const docs = await import('@/app/api/docs/route');
 const openapiRoute = await import('@/app/api/openapi/route');
 const health = await import('@/app/api/health/route');
@@ -120,38 +120,36 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  m.requireMlOwner.mockResolvedValue('owner-1');
+  m.requireProviderOwner.mockResolvedValue('owner-1');
   m.rateLimit.mockResolvedValue(undefined);
   m.requestIP.mockReturnValue('shared');
 });
 
-describe('ML provider administration routes', () => {
+describe('Provider administration routes', () => {
   it('lists connections and key metadata after an owner read check', async () => {
     m.listConnections.mockResolvedValue([{ id: 'c1' }]);
     m.listGatewayKeys.mockResolvedValue([{ id: 'k1' }]);
-    const response = await providers.GET(send('/api/admin/ml-providers', 'GET'));
+    const response = await providers.GET(send('/api/admin/providers', 'GET'));
     expect(response.status).toBe(200);
-    expect(m.requireMlOwner).toHaveBeenCalledWith(expect.any(Request), 'providers:read');
+    expect(m.requireProviderOwner).toHaveBeenCalledWith(expect.any(Request), 'providers:read');
     expect(await response.json()).toEqual({ connections: [{ id: 'c1' }], keys: [{ id: 'k1' }] });
   });
 
   it('rejects callers who are not owners before any service call', async () => {
-    m.requireMlOwner.mockRejectedValue(new HttpError(403, 'FORBIDDEN', 'Owner access required'));
-    expect((await providers.GET(send('/api/admin/ml-providers', 'GET'))).status).toBe(403);
+    m.requireProviderOwner.mockRejectedValue(
+      new HttpError(403, 'FORBIDDEN', 'Owner access required'),
+    );
+    expect((await providers.GET(send('/api/admin/providers', 'GET'))).status).toBe(403);
     expect(
       (
         await providers.POST(
-          send('/api/admin/ml-providers', 'POST', { name: 'x', provider: 'openai' }),
+          send('/api/admin/providers', 'POST', { name: 'x', provider: 'openai' }),
         )
       ).status,
     ).toBe(403);
     expect(
-      (
-        await keyById.DELETE(
-          send('/api/admin/ml-providers/keys/k', 'DELETE'),
-          params({ keyId: 'k' }),
-        )
-      ).status,
+      (await keyById.DELETE(send('/api/admin/providers/keys/k', 'DELETE'), params({ keyId: 'k' })))
+        .status,
     ).toBe(403);
     expect(m.listConnections).not.toHaveBeenCalled();
     expect(m.createConnection).not.toHaveBeenCalled();
@@ -161,20 +159,20 @@ describe('ML provider administration routes', () => {
   it('rejects a cross-origin mutation before authorization', async () => {
     const response = await providers.POST(
       send(
-        '/api/admin/ml-providers',
+        '/api/admin/providers',
         'POST',
         { name: 'x', provider: 'openai' },
         { Origin: 'https://evil.test' },
       ),
     );
     expect(response.status).toBe(403);
-    expect(m.requireMlOwner).not.toHaveBeenCalled();
+    expect(m.requireProviderOwner).not.toHaveBeenCalled();
   });
 
   it('creates a keyless connection without discovery', async () => {
     m.createConnection.mockResolvedValue({ id: 'c1', status: 'needs_credentials' });
     const input = { name: 'Main', provider: 'openai' };
-    const response = await providers.POST(send('/api/admin/ml-providers', 'POST', input));
+    const response = await providers.POST(send('/api/admin/providers', 'POST', input));
     expect(response.status).toBe(201);
     expect(m.createConnection).toHaveBeenCalledWith('owner-1', input, true);
     expect(m.refreshConnection).not.toHaveBeenCalled();
@@ -188,7 +186,7 @@ describe('ML provider administration routes', () => {
     m.refreshConnection.mockResolvedValue(undefined);
     m.getConnection.mockResolvedValue({ id: 'c1', status: 'ready', models: 3 });
     const response = await providers.POST(
-      send('/api/admin/ml-providers', 'POST', {
+      send('/api/admin/providers', 'POST', {
         name: 'Main',
         provider: 'openai',
         apiKey: 'sk-fake',
@@ -203,7 +201,7 @@ describe('ML provider administration routes', () => {
     m.createConnection.mockResolvedValue({ id: 'c1', status: 'ready' });
     m.refreshConnection.mockRejectedValue(new Error('upstream down'));
     const response = await providers.POST(
-      send('/api/admin/ml-providers', 'POST', {
+      send('/api/admin/providers', 'POST', {
         name: 'Main',
         provider: 'openai',
         apiKey: 'sk-fake',
@@ -215,7 +213,7 @@ describe('ML provider administration routes', () => {
 
   it('validates create input, including custom endpoints', async () => {
     const response = await providers.POST(
-      send('/api/admin/ml-providers', 'POST', { name: 'Custom', provider: 'custom' }),
+      send('/api/admin/providers', 'POST', { name: 'Custom', provider: 'custom' }),
     );
     expect(response.status).toBe(400);
     expect((await response.json()).error.code).toBe('VALIDATION_ERROR');
@@ -225,7 +223,7 @@ describe('ML provider administration routes', () => {
   it('updates and deletes a connection by id', async () => {
     m.updateConnection.mockResolvedValue({ id: 'c1', enabled: false });
     const patched = await providerById.PATCH(
-      send('/api/admin/ml-providers/c1', 'PATCH', { enabled: false }),
+      send('/api/admin/providers/c1', 'PATCH', { enabled: false }),
       params({ id: 'c1' }),
     );
     expect(patched.status).toBe(200);
@@ -233,13 +231,13 @@ describe('ML provider administration routes', () => {
     expect(await patched.json()).toEqual({ connection: { id: 'c1', enabled: false } });
 
     const empty = await providerById.PATCH(
-      send('/api/admin/ml-providers/c1', 'PATCH', {}),
+      send('/api/admin/providers/c1', 'PATCH', {}),
       params({ id: 'c1' }),
     );
     expect(empty.status).toBe(400);
 
     const deleted = await providerById.DELETE(
-      send('/api/admin/ml-providers/c1', 'DELETE'),
+      send('/api/admin/providers/c1', 'DELETE'),
       params({ id: 'c1' }),
     );
     expect(deleted.status).toBe(200);
@@ -250,21 +248,21 @@ describe('ML provider administration routes', () => {
   it('adds a manual model and schedules a refresh', async () => {
     m.addManualModel.mockResolvedValue({ id: 'c1' });
     const added = await providerModels.POST(
-      send('/api/admin/ml-providers/c1/models', 'POST', { upstreamId: 'gpt-x' }),
+      send('/api/admin/providers/c1/models', 'POST', { upstreamId: 'gpt-x' }),
       params({ id: 'c1' }),
     );
     expect(added.status).toBe(201);
     expect(m.addManualModel).toHaveBeenCalledWith('owner-1', 'c1', 'gpt-x');
 
     const invalid = await providerModels.POST(
-      send('/api/admin/ml-providers/c1/models', 'POST', { upstreamId: '../bad' }),
+      send('/api/admin/providers/c1/models', 'POST', { upstreamId: '../bad' }),
       params({ id: 'c1' }),
     );
     expect(invalid.status).toBe(400);
 
     m.scheduleRefresh.mockResolvedValue({ id: 'c1', status: 'ready' });
     const refreshed = await providerRefresh.POST(
-      send('/api/admin/ml-providers/c1/refresh'),
+      send('/api/admin/providers/c1/refresh'),
       params({ id: 'c1' }),
     );
     expect(refreshed.status).toBe(200);
@@ -275,22 +273,22 @@ describe('ML provider administration routes', () => {
     m.updateModelStates.mockResolvedValue({ id: 'c1', models: [] });
     const input = { version: 'a'.repeat(64), states: 'AQ', connection: { name: 'Renamed' } };
     const saved = await providerModels.PATCH(
-      send('/api/admin/ml-providers/c1/models', 'PATCH', input),
+      send('/api/admin/providers/c1/models', 'PATCH', input),
       params({ id: 'c1' }),
     );
     expect(saved.status).toBe(200);
-    expect(m.requireMlOwner).toHaveBeenCalledWith(expect.any(Request), 'providers:manage');
+    expect(m.requireProviderOwner).toHaveBeenCalledWith(expect.any(Request), 'providers:manage');
     expect(m.updateModelStates).toHaveBeenCalledWith('owner-1', 'c1', input);
     const bad = await providerModels.PATCH(
-      send('/api/admin/ml-providers/c1/models', 'PATCH', { ...input, states: 'bad+' }),
+      send('/api/admin/providers/c1/models', 'PATCH', { ...input, states: 'bad+' }),
       params({ id: 'c1' }),
     );
     expect(bad.status).toBe(400);
-    m.requireMlOwner.mockRejectedValueOnce(
+    m.requireProviderOwner.mockRejectedValueOnce(
       new HttpError(403, 'FORBIDDEN', 'Owner access required'),
     );
     const denied = await providerModels.PATCH(
-      send('/api/admin/ml-providers/c1/models', 'PATCH', input),
+      send('/api/admin/providers/c1/models', 'PATCH', input),
       params({ id: 'c1' }),
     );
     expect(denied.status).toBe(403);
@@ -298,16 +296,16 @@ describe('ML provider administration routes', () => {
 
   it('issues and revokes gateway keys', async () => {
     m.issueGatewayKey.mockResolvedValue({ id: 'k1', key: 'jml_fake' });
-    const issued = await keys.POST(send('/api/admin/ml-providers/keys', 'POST', { name: 'CI' }));
+    const issued = await keys.POST(send('/api/admin/providers/keys', 'POST', { name: 'CI' }));
     expect(issued.status).toBe(201);
     expect(m.issueGatewayKey).toHaveBeenCalledWith('owner-1', 'CI');
     expect(await issued.json()).toEqual({ id: 'k1', key: 'jml_fake' });
 
-    const bad = await keys.POST(send('/api/admin/ml-providers/keys', 'POST', { name: '' }));
+    const bad = await keys.POST(send('/api/admin/providers/keys', 'POST', { name: '' }));
     expect(bad.status).toBe(400);
 
     const revoked = await keyById.DELETE(
-      send('/api/admin/ml-providers/keys/k1', 'DELETE'),
+      send('/api/admin/providers/keys/k1', 'DELETE'),
       params({ keyId: 'k1' }),
     );
     expect(revoked.status).toBe(200);
@@ -317,9 +315,9 @@ describe('ML provider administration routes', () => {
   it('previews discovery with the request signal and requires manage permission', async () => {
     m.previewDiscovery.mockResolvedValue({ status: 'ok', models: [] });
     const input = { provider: 'openai', apiKey: 'sk-fake' };
-    const response = await discover.POST(send('/api/admin/ml-providers/discover', 'POST', input));
+    const response = await discover.POST(send('/api/admin/providers/discover', 'POST', input));
     expect(response.status).toBe(200);
-    expect(m.requireMlOwner).toHaveBeenCalledWith(expect.any(Request), 'providers:manage');
+    expect(m.requireProviderOwner).toHaveBeenCalledWith(expect.any(Request), 'providers:manage');
     expect(m.previewDiscovery).toHaveBeenCalledWith(input, expect.any(AbortSignal));
     expect(await response.json()).toEqual({ discovery: { status: 'ok', models: [] } });
   });

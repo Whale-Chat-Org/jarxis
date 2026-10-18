@@ -1,6 +1,6 @@
 # Bounded acceptance suite
 
-Run from `/Users/lowjungxuan/Desktop/jarxis` after the parent finishes Prisma migrations, normal role/permission seeding, dependency setup and Chromium installation.
+Run from `<repository-root>` after the parent finishes Prisma migrations, normal role/permission seeding, dependency setup and Chromium installation.
 
 ```sh
 DATABASE_URL='postgresql://USER:PASSWORD@localhost:55432/jarxis_test' \

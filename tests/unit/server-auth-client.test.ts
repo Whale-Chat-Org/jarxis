@@ -12,7 +12,7 @@ vi.mock('react', async (importOriginal) => ({
 vi.mock('@better-auth-ui/react', () => ({ useAuth: m.useAuth }));
 vi.mock('better-auth/react', () => ({ createAuthClient: m.createAuthClient }));
 vi.mock('better-auth/client/plugins', () => ({ adminClient: m.adminClient }));
-vi.mock('@/components/auth/admin/stop-impersonating', () => ({
+vi.mock('@/components/admin/users/action-panel/shared/stop-impersonating', () => ({
   StopImpersonating: 'StopImpersonating',
 }));
 vi.mock('@/components/auth/theme/appearance', () => ({ Appearance: 'Appearance' }));

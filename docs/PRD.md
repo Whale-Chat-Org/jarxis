@@ -80,8 +80,6 @@ names grant no permissions.
 - An authenticated account holder can update profile information and avatar.
 - An account holder can change email and password.
 - An account holder can inspect and revoke active sessions.
-- An account holder can inspect linked accounts; the empty state is valid when no social provider
-  is configured.
 - An account holder can change appearance settings.
 
 ### 5.4 Administration
@@ -160,7 +158,7 @@ the permissions required for its action.
 ## 8. Out of scope
 
 - Multi-tenancy, organizations, or per-resource ownership rules.
-- Runtime creation or editing of roles and permissions.
+- Creation of new permission keys at runtime and permissions.
 - Social sign-in providers, MFA, passkeys, or enterprise SSO.
 - Billing, subscriptions, or product-specific business workflows.
 - Automated database rollback or down-migrations.

@@ -8,7 +8,8 @@ x-app-env: &app-env
   BREVO_API_KEY: ${BREVO_API_KEY:?Set BREVO_API_KEY in .env}
   MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM to a Brevo-verified sender in .env}
   TRUST_PROXY: ${TRUST_PROXY:-false}
-  ML_ENCRYPTION_KEY: ${ML_ENCRYPTION_KEY:?Set ML_ENCRYPTION_KEY to an independent 64-character hex key}
+  PROVIDERS_ENCRYPTION_KEY: ${PROVIDERS_ENCRYPTION_KEY:-${ML_ENCRYPTION_KEY:?Set PROVIDERS_ENCRYPTION_KEY or ML_ENCRYPTION_KEY}}
+  ML_ENCRYPTION_KEY: ${ML_ENCRYPTION_KEY:-}
 services:
   postgres:
     image: postgres:latest
@@ -38,7 +39,7 @@ services:
     environment: *app-env
     depends_on:
       postgres: { condition: service_healthy }
-  ml-worker:
+  providers-worker: &providers-worker
     build:
       context: .
       target: worker
@@ -49,6 +50,10 @@ services:
     init: true
     stop_grace_period: 40s
     restart: unless-stopped
+  # Explicit legacy service name; not started by the default profile.
+  ml-worker:
+    <<: *providers-worker
+    profiles: [legacy-worker]
   app:
     build: { context: ., target: runner }
     environment:

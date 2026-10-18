@@ -1,9 +1,9 @@
 import { localization } from '@better-auth-ui/core';
-import { QueryClient } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient } from '../helpers/query-client';
 
 import { AuthProvider } from '@/components/auth/auth-provider';
 import { ActiveSessions } from '@/components/auth/settings/security/active-sessions';
@@ -85,9 +85,7 @@ function renderWithAuth(
   options: Record<string, unknown> = {},
 ) {
   const navigate = vi.fn();
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   const view = render(
     <AuthProvider
       authClient={client as never}
@@ -200,7 +198,7 @@ describe('ChangePassword', () => {
     expect(screen.queryByText(localization.auth.passwordCompromised)).toBeNull();
   });
 
-  it('toasts a wrong current password', async () => {
+  it('shows a wrong current password inline', async () => {
     const user = userEvent.setup();
     const client = makeClient({
       changePassword: vi.fn(async () => {
@@ -214,9 +212,8 @@ describe('ChangePassword', () => {
     await user.type(byLabel(localization.auth.newPassword), 'Mnbvxzlk1pqw!');
     await user.click(updateButton());
 
-    await waitFor(() =>
-      expect(toastMock.error).toHaveBeenCalledWith('The sign-in details are incorrect. Try again.'),
-    );
+    expect(await screen.findByText('The sign-in details are incorrect. Try again.')).toBeTruthy();
+    expect(toastMock.error).not.toHaveBeenCalled();
     expect(screen.queryByText(localization.auth.passwordCompromised)).toBeNull();
   });
 

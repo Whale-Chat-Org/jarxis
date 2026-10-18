@@ -35,7 +35,7 @@ test('owner manages a custom role and assigns it from the Users table', async ({
   await editor
     .getByRole('checkbox', { name: /View security and administrative audit events/ })
     .check();
-  await expect(editor.getByRole('checkbox', { name: /Manage ML providers/ })).toBeDisabled();
+  await expect(editor.getByRole('checkbox', { name: /Manage Providers/ })).toBeDisabled();
   await editor.getByRole('button', { name: 'Save role' }).click();
   await expect(rolePanel(page, 'Create role')).toHaveCount(0);
   const created = await request.get('/api/admin/roles');

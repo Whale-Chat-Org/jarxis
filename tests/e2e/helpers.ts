@@ -1,6 +1,7 @@
-import { randomUUID } from 'node:crypto';
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { assertTestDatabaseUrl } from '../../scripts/lib/test-database.mjs';
 
 export const password = 'Acceptance-Only!58392';
 export const newPassword = 'Acceptance-Reset!69403';
@@ -9,12 +10,7 @@ export const originHeaders = (baseURL: string) => ({ Origin: new URL(baseURL).or
 
 export function testDatabase() {
   const connectionString = process.env.DATABASE_URL;
-  if (
-    !connectionString?.includes('jarxis_test') ||
-    !/^\/jarxis_test(?:_[a-z0-9]+)*$/.test(new URL(connectionString).pathname)
-  ) {
-    throw new Error('Refusing database access outside jarxis_test');
-  }
+  assertTestDatabaseUrl(connectionString);
   return new Pool({
     connectionString,
     max: 1,

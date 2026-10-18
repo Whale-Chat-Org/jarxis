@@ -1,10 +1,8 @@
 import 'server-only';
 
-import { randomUUID } from 'node:crypto';
 import { db, Prisma } from '@/db';
 import { HttpError } from '@/lib/errors';
-import { authorize, grants, identify } from '@/lib/rbac';
-import { rateLimit } from '@/lib/redis';
+import { grants, identify } from '@/lib/rbac';
 import {
   assertCatalogued,
   isLockedRole,
@@ -14,6 +12,8 @@ import {
   validateSystemRoleInput,
   type RoleInput,
 } from '@/lib/roles';
+import { randomUUID } from 'node:crypto';
+import { requireOwnerSession } from './owner-session';
 
 const grantRows = (roleKey: string, permissions: string[]) =>
   permissions.map((permissionKey) => ({ roleKey, permissionKey }));
@@ -27,20 +27,8 @@ export async function requireRoleReader(req: Request) {
     throw new HttpError(403, 'FORBIDDEN', 'Role access required');
 }
 
-export async function requireRoleOwner(req: Request) {
-  if (req.headers.has('authorization'))
-    throw new HttpError(401, 'SESSION_REQUIRED', 'Owner session required');
-  const identity = await identify(req.headers);
-  const session = await db.session.findFirst({
-    where: { id: identity.sessionId, userId: identity.userId, impersonatedBy: null },
-    select: { id: true },
-  });
-  if (!session) throw new HttpError(403, 'FORBIDDEN', 'Owner session required');
-  const current = await authorize(identity, 'roles:update');
-  if (!current.roles.includes('owner'))
-    throw new HttpError(403, 'FORBIDDEN', 'Owner access required');
-  await rateLimit(`role-management:${identity.userId}`, 60, 60);
-  return identity.userId;
+export function requireRoleOwner(req: Request) {
+  return requireOwnerSession(req, 'roles:update', 'role-management');
 }
 
 function duplicateName(error: unknown): never {
@@ -125,7 +113,7 @@ export async function deleteRole(actorId: string, key: string) {
     if (!before) throw new HttpError(404, 'ROLE_NOT_FOUND', 'Role not found');
     const users = await tx.$queryRaw<
       [{ count: bigint }]
-    >`SELECT count(*) AS count FROM app_user WHERE ${key} = ANY(string_to_array(replace(coalesce(role, ''), ' ', ''), ','))`;
+    >`SELECT count(*) AS count FROM app_user WHERE ${key} = ANY(normalized_role_keys(role))`;
     const count = Number(users[0]?.count ?? 0);
     if (count)
       throw new HttpError(

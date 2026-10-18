@@ -1,8 +1,13 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { db } from '../src/db';
+import {
+  activeOwnerIds,
+  recordSetupCompletion,
+  SETUP_ADVISORY_LOCK,
+} from '../src/lib/owner-bootstrap-state';
+import { parseRoleKeys } from '../src/lib/role-keys';
 import { isActiveUser } from '../src/lib/user-status';
-import { recordSetupCompletion, SETUP_ADVISORY_LOCK } from '../src/lib/owner-bootstrap-state';
 
 /**
  * Bootstrap the first owner.
@@ -20,13 +25,7 @@ if (!email) throw new Error('Usage: pnpm owner verified-user@example.com');
 try {
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(${SETUP_ADVISORY_LOCK})::text`;
-    const existing = await tx.user.findMany({
-      where: { emailVerified: true, role: { contains: 'owner' } },
-      select: { id: true, role: true, banned: true, banExpires: true, emailVerified: true },
-    });
-    const activeOwners = existing.filter(
-      (user) => (user.role ?? '').split(',').includes('owner') && isActiveUser(user),
-    );
+    const activeOwners = await activeOwnerIds(tx);
     if (activeOwners.length)
       throw new Error(
         'An active owner already exists. Use the administration UI to assign additional owners.',
@@ -34,10 +33,7 @@ try {
     await tx.$queryRaw`SELECT id FROM app_user WHERE email = ${email} FOR UPDATE`;
     const u = await tx.user.findUnique({ where: { email } });
     if (!u || !isActiveUser(u)) throw new Error('Register and verify an active account first.');
-    const assigned = (u.role ?? '')
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean);
+    const assigned = parseRoleKeys(u.role);
     if (!assigned.includes('owner')) assigned.push('owner');
     await tx.user.update({
       where: { id: u.id },

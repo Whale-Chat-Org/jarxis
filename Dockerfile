@@ -41,7 +41,7 @@ CMD ["sh","-c","pnpm db:migrate && pnpm db:seed"]
 
 FROM tools AS worker
 ENV NODE_OPTIONS=--conditions=react-server
-CMD ["pnpm","ml:worker"]
+CMD ["pnpm","providers:worker"]
 
 FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runner
 # The server only needs node; drop the bundled package managers and their dependency CVEs.

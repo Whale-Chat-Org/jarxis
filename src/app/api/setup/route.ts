@@ -1,5 +1,5 @@
-import { getInitialOwnerSetupStatus, startInitialOwnerSetup } from '@/lib/initial-owner-setup';
 import { body, handler, json } from '@/lib/http';
+import { ensureInitialOwnerSetupStatus, startInitialOwnerSetup } from '@/lib/initial-owner-setup';
 import { rateLimit, requestIP } from '@/lib/redis';
 import { setupInput } from '@/lib/setup-validation';
 
@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 
 export const GET = handler(async (req) => {
   await rateLimit(`setup-status:${requestIP(req.headers)}`, 30, 60);
-  return json({ status: await getInitialOwnerSetupStatus() });
+  return json({ status: await ensureInitialOwnerSetupStatus() });
 });
 
 export const POST = handler(async (req) => {

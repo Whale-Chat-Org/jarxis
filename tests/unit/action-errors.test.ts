@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
 import {
   isActionErrorHandled,
   markActionErrorHandled,
   safeActionErrorMessage,
 } from '@/lib/action-errors';
+import { describe, expect, it } from 'vitest';
 
 const FALLBACK = 'Something went wrong.';
 
@@ -62,7 +62,7 @@ describe('safeActionErrorMessage', () => {
     expect(safeActionErrorMessage({ error: { code: 'SESSION_EXPIRED' } }, FALLBACK)).toBe(
       'Your session has expired. Sign in again to continue.',
     );
-    expect(safeActionErrorMessage({ body: { code: 'ROLE_HAS_MEMBERS' } }, FALLBACK)).toBe(
+    expect(safeActionErrorMessage({ body: { code: 'ROLE_IN_USE' } }, FALLBACK)).toBe(
       'This role still has members assigned to it.',
     );
     expect(safeActionErrorMessage({ cause: { code: 'INVALID_EMAIL' } }, FALLBACK)).toBe(

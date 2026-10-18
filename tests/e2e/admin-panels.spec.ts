@@ -24,7 +24,7 @@ import { login, makeOwner, register, verify } from './helpers';
 const DOCK_WIDTH = 384;
 const DOCK_WIDTH_WIDE = 448;
 const DESKTOP_PANEL_WIDTH = 1024;
-/** `AdminUsers` localization (`@better-auth-ui/core/plugins/admin`), not invented copy. */
+/** `UsersPanel` localization (`@better-auth-ui/core/plugins/admin`), not invented copy. */
 const L = {
   back: 'Back',
   cancel: 'Cancel',
@@ -79,7 +79,7 @@ async function findAccountRow(page: Page, email: string) {
 
 /**
  * Open the inspector from the row. The name is rendered as a link-styled button next to the
- * avatar (`AdminUsers`), and the row itself is clickable; the explicit trigger is used so the
+ * avatar (`UsersPanel`), and the row itself is clickable; the explicit trigger is used so the
  * assertion fails loudly if that affordance disappears.
  */
 async function openInspector(page: Page, email: string, name: string) {

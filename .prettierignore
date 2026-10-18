@@ -5,9 +5,9 @@ coverage
 playwright-report
 test-results
 node_modules
-src/generated
 prisma/migrations
 pnpm-lock.yaml
 next-env.d.ts
 *.tsbuildinfo
 .aoci
+.agents/skills

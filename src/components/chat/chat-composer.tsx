@@ -1,14 +1,5 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import {
-  ArrowUpIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  PaperclipIcon,
-  SquareIcon,
-  XIcon,
-} from 'lucide-react';
 import {
   Attachment,
   AttachmentAction,
@@ -23,13 +14,22 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
 } from '@/components/ui/input-group';
-import { Input } from '@/components/ui/input';
+import {
+  ArrowUpIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  PaperclipIcon,
+  SquareIcon,
+  XIcon,
+} from 'lucide-react';
+import { useRef, useState } from 'react';
 import { data, type ChatAttachment } from './chat-data';
 
 export function ChatComposer({
@@ -81,7 +81,6 @@ export function ChatComposer({
               id: crypto.randomUUID(),
               name: file.name,
               size: file.size,
-              file,
             })),
           ]);
           event.target.value = '';

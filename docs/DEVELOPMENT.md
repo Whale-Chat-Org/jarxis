@@ -54,7 +54,7 @@ starts them again. Stop them with `container stop jarxis-postgres jarxis-redis j
 | `pnpm dev:next`                | Start only the Next dev server                              |
 | `pnpm db:seed:users --reset`   | Reset seeded users' roles and passwords and sign them out   |
 | `pnpm db:migrate`              | Apply pending database migrations                           |
-| `pnpm ml:worker`               | Run the ML provider worker (scheduled model discovery)      |
+| `pnpm providers:worker`        | Run the Provider worker (scheduled model discovery)         |
 | `pnpm owner <email>`           | Recovery: make a verified account owner when none is active |
 | `pnpm lint` / `pnpm typecheck` | Lint and type-check                                         |
 | `pnpm test`                    | Run unit tests                                              |

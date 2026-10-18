@@ -157,7 +157,11 @@ describe('redis', () => {
     const { rateLimit, redis } = await import('@/lib/redis');
     const client = redis() as unknown as { connect: ReturnType<typeof vi.fn> };
     client.connect.mockRejectedValueOnce(new Error('ECONNREFUSED'));
-    await expect(rateLimit('k')).rejects.toThrow('ECONNREFUSED');
+    await expect(rateLimit('k')).rejects.toMatchObject({
+      status: 503,
+      code: 'UNAVAILABLE',
+      message: 'Security service unavailable',
+    });
   });
 
   it('trusts X-Real-IP only behind a configured proxy', async () => {

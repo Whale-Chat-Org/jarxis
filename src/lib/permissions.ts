@@ -1,5 +1,6 @@
 import { createAccessControl } from 'better-auth/plugins/access';
 import { defaultStatements } from 'better-auth/plugins/admin/access';
+import { parseRoleKeys } from './role-keys';
 
 /**
  * Permission vocabulary for the application's own pages and routes.
@@ -17,8 +18,8 @@ export const permissionCatalog = {
   'roles:assign': 'Assign and remove user roles (owner only)',
   'permissions:read': 'View the permission catalog',
   'audit:read': 'View security and administrative audit events',
-  'providers:read': 'View ML providers (owner only)',
-  'providers:manage': 'Manage ML providers (owner only)',
+  'providers:read': 'View Providers (owner only)',
+  'providers:manage': 'Manage Providers (owner only)',
 } as const;
 export type Permission = keyof typeof permissionCatalog;
 export const permissionKeys = Object.keys(permissionCatalog) as Permission[];
@@ -50,7 +51,6 @@ export const adminPermissionCatalog = {
   'session:revoke': 'Revoke a user session',
   'session:delete': 'Delete a user session',
 } as const;
-export type AdminPermission = keyof typeof adminPermissionCatalog;
 
 /** Owner-only grants: never assignable to an editable role, whatever the database holds. */
 export const restrictedPermissions: ReadonlySet<string> = new Set<string>([
@@ -93,7 +93,7 @@ export const lockedRoles: readonly RoleName[] = ['owner', 'user'];
 /** Roles the admin plugin treats as administrators for the impersonation guard. */
 export const adminRoles: RoleName[] = ['owner', 'administrator'];
 
-export const roleStatements = {
+const roleStatements = {
   user: {},
   viewer: {
     user: ['list', 'get'],
@@ -166,10 +166,9 @@ export const declaredPermissionKeys = [
 
 /** Split a stored `user.role` value into recognised role names. Unknown names grant nothing. */
 export function parseRoles(role: string | null | undefined): RoleName[] {
-  return (role ?? '')
-    .split(',')
-    .map((value) => value.trim())
-    .filter((value): value is RoleName => (roleNames as readonly string[]).includes(value));
+  return parseRoleKeys(role).filter((value): value is RoleName =>
+    (roleNames as readonly string[]).includes(value),
+  );
 }
 
 export function isAllowed(
