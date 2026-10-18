@@ -8,7 +8,7 @@ import {
   useUserInspector,
   type UserInspectorProps,
 } from '@/components/admin/users/action-panel/shared/user-inspector-state';
-import { UserAvatar } from '@/components/auth/user/user-avatar';
+import { UserAvatar } from '@/components/header/user/user-avatar';
 import { userProfileActions } from '@/lib/admin-user-panel-actions';
 import { getAdminErrorMessage } from '@/lib/admin-user-utils';
 

@@ -5,15 +5,14 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestQueryClient } from '../helpers/query-client';
 
+import { useAuthForm } from '@/components/auth/form/auth-form';
+import { AuthProvider } from '@/components/auth/provider/auth-provider';
+import { markActionErrorHandled } from '@/lib/action-errors';
 import {
   focusFirstInvalidAuthFormControl,
   getAuthAdditionalFieldValidators,
   isAuthFormFieldInvalid,
-  runAuthFormAction,
-  useAuthForm,
-} from '@/components/auth/auth-form';
-import { AuthProvider } from '@/components/auth/auth-provider';
-import { markActionErrorHandled } from '@/lib/action-errors';
+} from '@/lib/auth/auth-form-utils';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));
@@ -38,8 +37,6 @@ function withAuth(ui: ReactNode) {
 
 type HarnessProps = {
   onSubmit?: (value: { title: string; extra: string | null }) => unknown;
-  action?: () => Promise<unknown>;
-  onActionResult?: (ok: boolean) => void;
   onBeforeSubmit?: () => void;
   onInput?: () => void;
   extraField?: AdditionalField;
@@ -48,8 +45,6 @@ type HarnessProps = {
 
 function Harness({
   onSubmit = () => undefined,
-  action = async () => undefined,
-  onActionResult = () => undefined,
   onBeforeSubmit,
   onInput,
   extraField = { name: 'extra', type: 'string', label: 'Extra' },
@@ -88,14 +83,6 @@ function Harness({
         </select>
         <form.AuthFormServerError />
         <form.AuthFormSubmitButton isPending={isPending}>Save</form.AuthFormSubmitButton>
-        <button
-          type="button"
-          onClick={async () =>
-            onActionResult(await runAuthFormAction(form, action, 'Action failed'))
-          }
-        >
-          Run action
-        </button>
       </form.AuthFormRoot>
     </form.AppForm>
   );
@@ -177,51 +164,41 @@ describe('auth form primitives', () => {
     const user = userEvent.setup();
     const handled = new Error('handled');
     markActionErrorHandled(handled);
-    const results: boolean[] = [];
+    const failures = [
+      handled,
+      Object.assign(new Error('x'), { error: { code: 'EMAIL_NOT_VERIFIED' } }),
+    ];
+    let attempt = 0;
+    const onSubmit = vi.fn(() => {
+      throw failures[attempt++];
+    });
+    withAuth(<Harness onSubmit={onSubmit} />);
+
+    await user.type(screen.getByLabelText('Title'), 'Hello');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('Fallback failure')).toBeNull();
+  });
+
+  it('clears the form-level server error when any control changes', async () => {
+    const user = userEvent.setup();
     withAuth(
       <Harness
         onSubmit={() => {
-          throw handled;
+          throw new Error('boom');
         }}
-        action={async () => {
-          throw Object.assign(new Error('x'), { error: { code: 'EMAIL_NOT_VERIFIED' } });
-        }}
-        onActionResult={(ok) => results.push(ok)}
       />,
     );
 
     await user.type(screen.getByLabelText('Title'), 'Hello');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    await user.click(screen.getByRole('button', { name: 'Run action' }));
-
-    await waitFor(() => expect(results).toEqual([false]));
-    expect(screen.queryByText('Fallback failure')).toBeNull();
-    expect(screen.queryByText('Action failed')).toBeNull();
-  });
-
-  it('runAuthFormAction reports success and failure', async () => {
-    const user = userEvent.setup();
-    const results: boolean[] = [];
-    let shouldFail = false;
-    withAuth(
-      <Harness
-        action={async () => {
-          if (shouldFail) throw new Error('boom');
-        }}
-        onActionResult={(ok) => results.push(ok)}
-      />,
-    );
-
-    await user.click(screen.getByRole('button', { name: 'Run action' }));
-    shouldFail = true;
-    await user.click(screen.getByRole('button', { name: 'Run action' }));
-
-    await waitFor(() => expect(results).toEqual([true, false]));
-    expect(await screen.findByText('Action failed')).toBeTruthy();
+    expect(await screen.findByText('Fallback failure')).toBeTruthy();
 
     // Changing a non-auth control clears the form-level server error too.
     fireEvent.input(screen.getByLabelText('picker'), { target: { value: 'b' } });
-    await waitFor(() => expect(screen.queryByText('Action failed')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Fallback failure')).toBeNull());
   });
 
   it('disables the submit button and shows a spinner while pending', () => {

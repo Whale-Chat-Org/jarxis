@@ -5,10 +5,10 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestQueryClient } from '../helpers/query-client';
 
-import { AuthProvider } from '@/components/auth/auth-provider';
-import { ActiveSessions } from '@/components/auth/settings/security/active-sessions';
-import { ChangePassword } from '@/components/auth/settings/security/change-password';
-import { SecuritySettings } from '@/components/auth/settings/security/security-settings';
+import { AuthProvider } from '@/components/auth/provider/auth-provider';
+import { ActiveSessions } from '@/components/settings/security/active-sessions';
+import { ChangePassword } from '@/components/settings/security/change-password';
+import { SecuritySettings } from '@/components/settings/security/security-settings';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));

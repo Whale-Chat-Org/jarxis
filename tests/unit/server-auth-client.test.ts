@@ -15,8 +15,8 @@ vi.mock('better-auth/client/plugins', () => ({ adminClient: m.adminClient }));
 vi.mock('@/components/admin/users/action-panel/shared/stop-impersonating', () => ({
   StopImpersonating: 'StopImpersonating',
 }));
-vi.mock('@/components/auth/theme/appearance', () => ({ Appearance: 'Appearance' }));
-vi.mock('@/components/auth/theme/theme-toggle-item', () => ({
+vi.mock('@/components/settings/account/appearance', () => ({ Appearance: 'Appearance' }));
+vi.mock('@/components/header/theme-toggle-item', () => ({
   ThemeToggleItem: 'ThemeToggleItem',
 }));
 

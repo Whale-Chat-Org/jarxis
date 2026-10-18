@@ -1,7 +1,7 @@
 /**
  * Registry drift check for the copied shadcn / Better Auth UI components.
  *
- * Every file under `src/components/ui`, `src/components/auth` and `src/lib/auth` that came from a
+ * Every file under `src/components/ui`, `src/components/auth`, `src/components/settings` and `src/lib/auth` that came from a
  * registry is only allowed to differ from upstream by the design-token conversion documented in
  * `.agents/rules/design-system.md` §2. This script re-fetches each item through the shadcn CLI,
  * formats both sides with the project's Prettier config, applies that conversion, and prints any
@@ -66,7 +66,6 @@ const ITEMS = [
   '@better-auth-ui/user-button',
   '@better-auth-ui/theme',
   '@better-auth-ui/settings',
-  '@better-auth-ui/last-login-method',
   '@better-auth-ui/admin',
 ];
 
@@ -80,13 +79,13 @@ const FILE_MAP: Record<string, Record<string, string>> = {
     'size-6': 'size-control-xs',
     'size-8': 'size-control-sm',
   },
-  'src/components/auth/additional-field.tsx': { 'w-32': 'w-select-sm' },
+  'src/components/auth/form/additional-field/additional-field.tsx': { 'w-32': 'w-select-sm' },
   'src/components/ui/input-group.tsx': {
     'h-6': 'h-control-xs',
     'size-6': 'size-control-xs',
     'size-8': 'size-control-sm',
   },
-  'src/components/auth/theme/theme-toggle-item.tsx': {
+  'src/components/header/theme-toggle-item.tsx': {
     'h-6!': 'group-data-[orientation=horizontal]/tabs:h-xl',
   },
 };
@@ -393,14 +392,40 @@ const TOKEN_MAP: Record<string, string> = {
 };
 
 /**
+ * `auth` item modules regrouped from the flat `components/auth/` folder into feature folders
+ * (`form/`, `provider/`, `shared/`, `password/`, `views/`). Keys are upstream module paths under
+ * `components/auth/`, values the local ones; `localPath` and the import normalization use both.
+ */
+const AUTH_MODULE_MOVES: Record<string, string> = {
+  'auth-form': 'form/auth-form',
+  'additional-field': 'form/additional-field/additional-field',
+  'auth-provider': 'provider/auth-provider',
+  'error-toaster': 'provider/error-toaster',
+  'open-email-button': 'shared/open-email-button',
+  reauthentication: 'shared/reauthentication',
+  'password-strength-meter': 'password/password-strength-meter',
+  'auth-redirect': 'views/auth-redirect',
+  'auth-result': 'views/auth-result',
+  'forgot-password': 'views/forgot-password',
+  'reset-link-sent': 'views/reset-link-sent',
+  'reset-password': 'views/reset-password',
+  'sign-in': 'views/sign-in',
+  'sign-out': 'views/sign-out',
+  'sign-up': 'views/sign-up',
+  'verify-email': 'views/verify-email',
+};
+
+/**
  * Registry files this repo deliberately does not install, so a missing local file is not mistaken
  * for drift.
  */
 const OMITTED: Record<string, string> = {
   'src/components/auth/provider-button.tsx': 'OAuth removed; email/password authentication only',
   'src/components/auth/provider-buttons.tsx': 'OAuth removed; email/password authentication only',
-  'src/components/auth/settings/security/linked-account.tsx': 'OAuth account linking removed',
-  'src/components/auth/settings/security/linked-accounts.tsx': 'OAuth account linking removed',
+  'src/components/settings/security/linked-account.tsx': 'OAuth account linking removed',
+  'src/components/settings/security/linked-accounts.tsx': 'OAuth account linking removed',
+  'src/components/auth/last-login-method/last-used-badge.tsx':
+    'email/password is the only login method, so a "last used" indicator has nothing to compare',
   'src/components/auth/admin/admin.tsx':
     "the plugin's own horizontal-tab administration shell; this repo keeps the shadcn Sidebar shell and renders UsersPanel inside it",
 };
@@ -410,7 +435,7 @@ const OMITTED: Record<string, string> = {
  * made on purpose; anything not listed here is unexplained and fails the check.
  */
 const REVIEWED: Record<string, string> = {
-  'src/components/auth/settings/security/active-session.tsx':
+  'src/components/settings/security/active-session.tsx':
     'Shared session device and age presentation helpers preserve current-session sign-out and other-session revoke behavior.',
   'src/components/admin/users/users-panel.tsx':
     'Registry directory split into focused list, filters, table, create form, inspector sections and state hooks; shared AdminDataTable, RolePicker and the unified AdminActionPanel frame and lifecycle preserve grants and unchanged stored roles.',
@@ -418,37 +443,51 @@ const REVIEWED: Record<string, string> = {
     'Promoted to src/components/admin/table/table-state.ts for all admin pages; page-size changes reset pagination.',
   'src/components/admin/table/table.ts':
     'Promoted to src/components/admin/table/table.ts; shared TanStack feature defaults.',
-  'src/components/auth/reset-password.tsx':
-    'Shared PasswordInput; safe inline submit errors retain values; nullable reset tokens are checked before mutation.',
-  'src/components/auth/settings/security/change-password.tsx':
-    'Shared PasswordInput and safe inline submit errors; credentialless SetPassword flow retained.',
-  'src/components/auth/password-strength-meter.tsx':
+  'src/components/auth/views/reset-password.tsx':
+    'Shared AuthCard and NewPasswordFields; safe inline submit errors retain values; nullable reset tokens are checked on mount and before mutation through one getResetToken helper.',
+  'src/components/settings/security/change-password.tsx':
+    'Shared AuthFormPasswordField, NewPasswordFields, AuthCaptcha and safe inline submit errors; credentialless SetPassword flow retained.',
+  'src/components/auth/password/password-strength-meter.tsx':
     'Semantic destructive/warning/primary colour tokens replace cleared palette classes.',
 
-  'src/components/auth/auth.tsx': 'OAuth removed: no social layout props or forwarding',
-  'src/components/auth/sign-in.tsx':
-    'OAuth removed; shared PasswordInput and safe inline failures preserve the entered password without duplicate toasts',
-  'src/components/auth/sign-up.tsx':
-    'OAuth removed; shared PasswordInput, retained values and safe inline failures; optional onSignUpSuccess preserves verification priority',
-  'src/components/auth/settings/security/security-settings.tsx':
+  'src/components/auth/auth.tsx':
+    'OAuth removed: no social layout props or forwarding; views imported from views/ and paths built by useAuthViewPath',
+  'src/components/auth/views/sign-in.tsx':
+    'OAuth and the last-used badge removed; form state in use-sign-in-form.ts and the card, fields, captcha and plugin buttons come from the shared auth pieces; safe inline failures preserve the entered password without duplicate toasts',
+  'src/components/auth/views/sign-up.tsx':
+    'OAuth removed; form state in use-sign-up-form.ts, shared AuthCard, text fields and NewPasswordFields, retained values and safe inline failures; optional onSignUpSuccess preserves verification priority',
+  'src/components/settings/security/security-settings.tsx':
     'OAuth removed: no linked accounts card',
   'src/lib/auth/auth-plugin.ts': 'OAuth removed: no social layout props',
-  'src/components/auth/sign-out.tsx':
-    'a failed sign-out keeps the user on the current view and offers a retry; only a successful sign-out redirects, while Sonner owns failure feedback',
-  'src/components/auth/additional-field.tsx':
-    'raw <input> replaced by the Input primitive (raw inputs are lint-banned in src/components/auth), plus token spacing, and the copy-failure handler no longer logs the raw clipboard error',
-  'src/components/auth/auth-result.tsx':
-    'amber palette replaced by the semantic text-warning token, plus size-qr',
-  'src/components/auth/auth-form.tsx':
-    'server errors are surfaced through the safe allowlist in src/lib/action-errors (never the raw server message or field errors), and inline errors are suppressed when already handled by the toaster, compromised, or email-not-verified',
-  'src/components/auth/error-toaster.tsx':
+  'src/components/auth/views/sign-out.tsx':
+    'a failed sign-out keeps the user on the current view and offers a retry; only a successful sign-out redirects, while Sonner owns failure feedback; sign-in path from useAuthViewPath',
+  'src/components/auth/views/auth-redirect.tsx': 'sign-in path from useAuthViewPath',
+  'src/components/auth/views/forgot-password.tsx':
+    'shared AuthCard, AuthFooterLink, AuthCaptcha and AuthFormTextField; storage key from src/lib/auth/auth-storage.ts',
+  'src/components/auth/views/reset-link-sent.tsx':
+    'shared AuthCard and AuthFooterLink; the stored email is read once through the useStoredEmail hook instead of a hydration flag, state and effect',
+  'src/components/auth/views/verify-email.tsx':
+    'shared AuthCard and AuthFooterLink; the stored email is read once through useStoredEmail; the redundant !email resend guard is gone',
+  'src/components/auth/shared/reauthentication.tsx':
+    'the never-passed showTitle prop removed; shared no-op subscription and useAuthViewPath',
+  'src/hooks/use-is-hydrated.ts':
+    'promoted from components/auth to src/hooks and exports the no-op subscription reused by the other client-only reads',
+  'src/components/settings/account/change-email.tsx':
+    'isAuthFormFieldInvalid imported from src/lib/auth/auth-form-utils.ts',
+  'src/components/auth/form/additional-field/additional-field.tsx':
+    'split into one renderer per input type in form/additional-field/ (value helpers in src/lib/auth/additional-field-values.ts); raw <input> replaced by the Input primitive (raw inputs are lint-banned in src/components/auth), plus token spacing, and the copy-failure handler no longer logs the raw clipboard error',
+  'src/components/auth/views/auth-result.tsx':
+    'amber palette replaced by the semantic text-warning token, plus size-qr; intent and action ternaries replaced by lookup maps',
+  'src/components/auth/form/auth-form.tsx':
+    'split into one component per file in form/ with pure helpers in src/lib/auth/auth-form-utils.ts, adds AuthFormPasswordField, AuthFormCheckboxField and the NewPasswordFields group, drops the unused withAuthForm and runAuthFormAction; server errors are surfaced through the safe allowlist in src/lib/action-errors (never the raw server message or field errors), and inline errors are suppressed when already handled by the toaster, compromised, or email-not-verified',
+  'src/components/auth/provider/error-toaster.tsx':
     'raw console logging of auth errors removed, and surfaced errors are marked handled via src/lib/action-errors so inline catch sites do not duplicate the toast',
-  'src/components/auth/settings/account/change-avatar.tsx':
+  'src/components/settings/account/change-avatar.tsx':
     'raw <input type="file"> replaced by the Input primitive, plus managed-blob cleanup after avatar replacement and failed profile updates; cleanup failures warn instead of logging, and update failures use the safe error helper and skip errors already handled by the toaster',
-  'src/components/auth/settings/security/active-sessions.tsx':
+  'src/components/settings/security/active-sessions.tsx':
     'the session list error renders safe localized copy with role="alert" and a retry button that refetches, instead of the raw error.message',
-  'src/components/auth/settings/account/user-profile.tsx':
-    'profile form initialization is guarded by user id so controlled-field changes are not reset during rerenders',
+  'src/components/settings/account/user-profile.tsx':
+    'profile form initialization is guarded by user id so controlled-field changes are not reset during rerenders; form helpers imported from src/lib/auth/auth-form-utils.ts',
   'src/lib/auth/two-factor-methods.ts':
     'upstream doc comment dropped when the file was first token-converted',
   'src/components/ui/sidebar.tsx':
@@ -492,6 +531,27 @@ function applyTokenMap(text: string, local?: string): string {
     );
     out = out.replace(pattern, TOKEN_MAP[key]);
   }
+  // Settings items live in src/components/settings, so their `../../` imports of auth
+  // siblings become `@/components/auth/` aliases.
+  if (local?.includes('/src/components/settings/')) {
+    out = out.replace(/from (["'])\.\.\/\.\.\//g, 'from $1@/components/auth/');
+  }
+  // The theme item is split by where it renders: the Appearance card with account settings,
+  // the toggle item with the headers.
+  out = out
+    .replaceAll('@/components/auth/theme/appearance', '@/components/settings/account/appearance')
+    .replaceAll(
+      '@/components/auth/theme/theme-toggle-item',
+      '@/components/header/theme-toggle-item',
+    )
+    // The user-button item (button, view, avatar) lives with the header.
+    .replaceAll('@/components/auth/user/', '@/components/header/user/');
+  for (const [from, to] of Object.entries(AUTH_MODULE_MOVES)) {
+    out = out.replace(
+      new RegExp(`@/components/auth/${from}(?=["'])`, 'g'),
+      `@/components/auth/${to}`,
+    );
+  }
   return out
     .replace(/from "cn"/g, 'from "@/lib/utils"')
     .replace(/from 'cn'/g, "from '@/lib/utils'")
@@ -530,8 +590,21 @@ function localPath(item: string, path: string): string | undefined {
     'src/components/auth/admin/admin-users.tsx': 'src/components/admin/users/users-panel.tsx',
     'src/components/auth/admin/stop-impersonating.tsx':
       'src/components/admin/users/action-panel/shared/stop-impersonating.tsx',
+    'src/components/auth/theme/appearance.tsx': 'src/components/settings/account/appearance.tsx',
+    'src/components/auth/theme/theme-toggle-item.tsx':
+      'src/components/header/theme-toggle-item.tsx',
+    'src/components/auth/use-is-hydrated.ts': 'src/hooks/use-is-hydrated.ts',
+    ...Object.fromEntries(
+      Object.entries(AUTH_MODULE_MOVES).map(([from, to]) => [
+        `src/components/auth/${from}.tsx`,
+        `src/components/auth/${to}.tsx`,
+      ]),
+    ),
   };
-  return target.startsWith('src/') ? join(ROOT, promoted[target] ?? target) : undefined;
+  const moved = target
+    .replace(/^src\/components\/auth\/settings\//, 'src/components/settings/')
+    .replace(/^src\/components\/auth\/user\//, 'src/components/header/user/');
+  return target.startsWith('src/') ? join(ROOT, promoted[target] ?? moved) : undefined;
 }
 
 async function format(local: string, code: string): Promise<string> {

@@ -6,7 +6,7 @@ import { SortButton } from '@/components/admin/table/sort-button';
 import { AdminState } from '@/components/admin/admin-state';
 import { adminTableDefinitions } from '@/components/admin/table/table-definitions';
 import { UserRoleCell } from '@/components/admin/users/table/user-role-cell';
-import { UserAvatar } from '@/components/auth/user/user-avatar';
+import { UserAvatar } from '@/components/header/user/user-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDate } from '@/lib/admin-user-utils';

@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 
-import { ThemeToggle } from '@/components/theme-toggle';
+import { ThemeToggle } from '@/components/header/theme-toggle';
 import {
   Breadcrumb,
   BreadcrumbItem,

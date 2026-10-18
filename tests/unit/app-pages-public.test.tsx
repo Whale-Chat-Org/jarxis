@@ -23,16 +23,18 @@ vi.mock('@/lib/initial-owner-setup', () => ({
 }));
 vi.mock('@/lib/rbac', () => ({ pageGrants: mocks.pageGrants }));
 vi.mock('@/components/landing/landing-page', () => ({ LandingPage: () => <p>Landing</p> }));
-vi.mock('@/components/auth/owner-setup', () => ({ OwnerSetup: () => <p>Owner setup form</p> }));
+vi.mock('@/components/setup/owner-setup', () => ({ OwnerSetup: () => <p>Owner setup form</p> }));
 vi.mock('@/components/auth/auth', () => ({
   Auth: ({ path }: { path: string }) => <p>Auth view {path}</p>,
 }));
-vi.mock('@/components/auth/settings/settings', () => ({
+vi.mock('@/components/settings/settings', () => ({
   Settings: ({ path }: { path: string }) => <p>Settings view {path}</p>,
 }));
-vi.mock('@/components/public-chrome', () => ({
-  PublicHeader: () => <header>Public header</header>,
-  PublicFooter: () => <footer>Public footer</footer>,
+vi.mock('@/components/header/header', () => ({
+  Header: () => <header>Public header</header>,
+}));
+vi.mock('@/components/footer/footer', () => ({
+  Footer: () => <footer>Public footer</footer>,
 }));
 vi.mock('@/components/providers', () => ({
   Providers: ({ children }: { children: React.ReactNode }) => (
@@ -42,20 +44,21 @@ vi.mock('@/components/providers', () => ({
 vi.mock('@/components/chat/chat-page', () => ({ ChatPage: () => <p>Chat workspace</p> }));
 
 import AccessDeniedPage from '@/app/access-denied/page';
-import AuthLoading from '@/app/auth/[path]/loading';
-import AuthPage, { generateStaticParams } from '@/app/auth/[path]/page';
-import AuthLayout from '@/app/auth/layout';
+import AuthLoading from '@/app/(public)/auth/[path]/loading';
+import AuthPage, { generateStaticParams } from '@/app/(public)/auth/[path]/page';
+import AuthLayout from '@/app/(public)/auth/layout';
+import PublicLayout from '@/app/(public)/layout';
 import ChatLoading from '@/app/chat/loading';
 import ChatRoute, { metadata as chatMetadata } from '@/app/chat/page';
 import RootLayout, { metadata as rootMetadata } from '@/app/layout';
-import RootLoading from '@/app/loading';
-import HomePage from '@/app/page';
-import SettingsLoading from '@/app/settings/[path]/loading';
-import SettingsPage from '@/app/settings/[path]/page';
-import SettingsLayout from '@/app/settings/layout';
-import SetupLayout from '@/app/setup/layout';
-import SetupLoading from '@/app/setup/loading';
-import SetupPage, { metadata as setupMetadata } from '@/app/setup/page';
+import RootLoading from '@/app/(public)/loading';
+import HomePage from '@/app/(public)/page';
+import SettingsLoading from '@/app/(public)/settings/[path]/loading';
+import SettingsPage from '@/app/(public)/settings/[path]/page';
+import SettingsLayout from '@/app/(public)/settings/layout';
+import SetupLayout from '@/app/(public)/setup/layout';
+import SetupLoading from '@/app/(public)/setup/loading';
+import SetupPage, { metadata as setupMetadata } from '@/app/(public)/setup/page';
 import { HttpError } from '@/lib/errors';
 
 beforeEach(() => {
@@ -148,11 +151,29 @@ describe('auth pages', () => {
     expect(mocks.setupStatus).not.toHaveBeenCalled();
   });
 
-  it('frames views with the public chrome', () => {
+  it('frames views in the centred main only; the chrome comes from the public layout', () => {
     render(<AuthLayout>inner</AuthLayout>);
-    expect(screen.getByText('Public header')).toBeTruthy();
     expect(screen.getByRole('main').textContent).toBe('inner');
-    expect(screen.getByText('Public footer')).toBeTruthy();
+    expect(screen.queryByText('Public header')).toBeNull();
+    expect(screen.queryByText('Public footer')).toBeNull();
+  });
+});
+
+describe('public layout', () => {
+  it('renders the header and footer once around the page', () => {
+    render(
+      <PublicLayout>
+        <p>page body</p>
+      </PublicLayout>,
+    );
+    const header = screen.getByText('Public header');
+    const footer = screen.getByText('Public footer');
+    expect(header.compareDocumentPosition(screen.getByText('page body'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(screen.getByText('page body').compareDocumentPosition(footer)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 });
 
@@ -174,10 +195,10 @@ describe('setup pages', () => {
     expect(setupMetadata.robots).toEqual({ index: false, follow: false });
   });
 
-  it('frames setup with the public chrome', () => {
+  it('frames setup in the centred main only', () => {
     render(<SetupLayout>setup body</SetupLayout>);
-    expect(screen.getByText('Public header')).toBeTruthy();
     expect(screen.getByRole('main').textContent).toBe('setup body');
+    expect(screen.queryByText('Public header')).toBeNull();
   });
 });
 
@@ -194,8 +215,8 @@ describe('settings pages', () => {
   it('renders the layout for a signed-in account', async () => {
     mocks.pageGrants.mockResolvedValue({ userId: 'u1' });
     render(await SettingsLayout({ children: <p>panel</p> }));
-    expect(screen.getByText('panel')).toBeTruthy();
-    expect(screen.getByText('Public footer')).toBeTruthy();
+    expect(screen.getByRole('main').textContent).toBe('panel');
+    expect(screen.queryByText('Public footer')).toBeNull();
   });
 
   it.each([

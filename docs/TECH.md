@@ -66,8 +66,10 @@ reinstalling the relevant registry item, applying the documented token conversio
 | `/api/openapi`       | OpenAPI JSON                                                       |
 | `/api/docs`          | Scalar API reference                                               |
 
-The auth layout and landing page share `PublicHeader` and `PublicFooter`. The settings layout uses the
-same chrome but requires a valid page grant before rendering. Administration uses the shadcn
+The public surfaces (`/`, `/auth/*`, `/setup`, `/settings`) sit in the `src/app/(public)` route
+group, whose layout renders `Header` (`src/components/header/`) and `Footer` once. Nested
+layouts and pages render only their own `<main>`; the settings layout also requires a valid page
+grant before rendering. Administration uses the shadcn
 `SidebarProvider`/`Sidebar`/`SidebarInset` composition. Layouts own page landmarks and viewport
 sizing; nested page and loading components must not introduce duplicate full-height containers.
 

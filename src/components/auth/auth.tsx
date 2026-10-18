@@ -4,15 +4,16 @@ import type { AuthView } from '@better-auth-ui/core';
 import { useAuth } from '@better-auth-ui/react';
 import { type ComponentType, useEffect } from 'react';
 
-import { AuthRedirect } from './auth-redirect';
-import { AuthCallback, AuthError } from './auth-result';
-import { ForgotPassword } from './forgot-password';
-import { ResetLinkSent } from './reset-link-sent';
-import { ResetPassword } from './reset-password';
-import { SignIn } from './sign-in';
-import { SignOut } from './sign-out';
-import { SignUp } from './sign-up';
-import { VerifyEmail } from './verify-email';
+import { useAuthViewPath } from '@/hooks/use-auth-view-path';
+import { AuthRedirect } from './views/auth-redirect';
+import { AuthCallback, AuthError } from './views/auth-result';
+import { ForgotPassword } from './views/forgot-password';
+import { ResetLinkSent } from './views/reset-link-sent';
+import { ResetPassword } from './views/reset-password';
+import { SignIn } from './views/sign-in';
+import { SignOut } from './views/sign-out';
+import { SignUp } from './views/sign-up';
+import { VerifyEmail } from './views/verify-email';
 
 export type AuthProps = {
   className?: string;
@@ -54,7 +55,8 @@ const AUTH_VIEWS: Partial<Record<AuthView, ComponentType<AuthProps>>> = {
  * @returns The React element for the resolved authentication view
  */
 export function Auth({ className, path, view }: AuthProps) {
-  const { basePaths, emailAndPassword, plugins, viewPaths, navigate } = useAuth();
+  const { emailAndPassword, plugins, viewPaths, navigate } = useAuth();
+  const authViewPath = useAuthViewPath();
 
   if (!view && !path) {
     throw new Error('[Better Auth UI] Either `view` or `path` must be provided');
@@ -72,26 +74,22 @@ export function Auth({ className, path, view }: AuthProps) {
 
   useEffect(() => {
     if (shouldRedirectToSignIn) {
-      navigate({
-        to: `${basePaths.auth}/${viewPaths.auth.signIn}`,
-        replace: true,
-      });
+      navigate({ to: authViewPath('signIn'), replace: true });
     }
-  }, [shouldRedirectToSignIn, navigate, basePaths.auth, viewPaths.auth.signIn]);
+  }, [shouldRedirectToSignIn, navigate, authViewPath]);
 
   if (shouldRedirectToSignIn) {
     return null;
   }
 
   // 1. Plugin overrides (`views.auth[currentView]`) — first plugin wins,
-  //    including over built-in views. Resolves the view key from `view`,
-  //    then `authView` (built-in path match), then plugin-introduced paths
+  //    including over built-in views. Resolves the view key from `authView`
+  //    (explicit `view` or built-in path match), then plugin-introduced paths
   //    (e.g. `magicLink` → `/auth/magic-link`).
   for (const plugin of plugins) {
     const pluginAuthPaths = plugin.viewPaths?.auth;
 
     const pluginView =
-      view ??
       authView ??
       (pluginAuthPaths &&
         Object.keys(pluginAuthPaths).find((key) => pluginAuthPaths[key] === path));

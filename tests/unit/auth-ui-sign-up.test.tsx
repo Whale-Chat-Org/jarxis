@@ -5,9 +5,9 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestQueryClient } from '../helpers/query-client';
 
-import { AuthProvider } from '@/components/auth/auth-provider';
-import { PasswordStrengthMeter } from '@/components/auth/password-strength-meter';
-import { SignUp } from '@/components/auth/sign-up';
+import { AuthProvider } from '@/components/auth/provider/auth-provider';
+import { PasswordStrengthMeter } from '@/components/auth/password/password-strength-meter';
+import { SignUp } from '@/components/auth/views/sign-up';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GET } from '@/app/auth/post-login/route';
+import { GET } from '@/app/(public)/auth/post-login/route';
 import { HttpError } from '@/lib/errors';
 import { flattenStatements, roles } from '@/lib/permissions';
 import { grants, identify } from '@/lib/rbac';

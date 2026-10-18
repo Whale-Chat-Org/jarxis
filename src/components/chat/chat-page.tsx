@@ -14,7 +14,7 @@ import {
   TrashIcon,
 } from 'lucide-react';
 import { BrandMark } from '@/components/brand';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { ThemeToggle } from '@/components/header/theme-toggle';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {

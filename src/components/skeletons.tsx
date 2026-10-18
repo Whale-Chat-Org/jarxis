@@ -239,33 +239,16 @@ export function AdminShellSkeleton() {
   );
 }
 
-// Mirrors LandingPage: header bar, centred title, footer bar.
+// Mirrors LandingPage's <main>: centred title. The real header and footer come from the
+// `(public)` layout, so this skeleton never draws its own.
 export function LandingSkeleton() {
   return (
-    <LoadingRegion label="Loading…" className="flex min-h-svh flex-col bg-background">
-      <div className="border-b">
-        <div className="mx-auto flex h-header max-w-content items-center justify-between gap-lg px-page">
-          <div className="flex items-center gap-sm">
-            <Skeleton className="size-avatar" />
-            <Skeleton className="h-lg w-bar-2xs" />
-          </div>
-          <div className="flex items-center gap-sm">
-            <Skeleton className="size-control" />
-            <Skeleton className="h-control w-bar-sm" />
-            <Skeleton className="h-control w-bar-sm" />
-          </div>
-        </div>
-      </div>
-      <div className="flex flex-1 flex-col items-center justify-center gap-md px-page">
-        <Skeleton className="h-control-sm w-bar-xl" />
-        <Skeleton className="h-lg w-bar-3xl" />
-      </div>
-      <div className="border-t">
-        <div className="mx-auto flex h-header max-w-content items-center justify-between gap-lg px-page">
-          <Skeleton className="h-lg w-bar-lg" />
-          <Skeleton className="h-lg w-bar-xl" />
-        </div>
-      </div>
+    <LoadingRegion
+      label="Loading…"
+      className="flex flex-1 flex-col items-center justify-center gap-md px-page"
+    >
+      <Skeleton className="h-control-sm w-bar-xl" />
+      <Skeleton className="h-lg w-bar-3xl" />
     </LoadingRegion>
   );
 }
