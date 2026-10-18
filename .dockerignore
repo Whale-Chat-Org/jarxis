@@ -15,6 +15,7 @@
 !prisma/schema.prisma
 !prisma/migrations/
 !prisma/migrations/**
+!scripts/setup-minio.mjs
 !scripts/migrate.ts
 !scripts/seed.ts
 !scripts/owner.ts

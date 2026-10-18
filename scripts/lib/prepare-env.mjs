@@ -14,7 +14,12 @@ export function prepareEnv({ databaseVolumeExists, removeVolumeHint }) {
   const hex = () => randomBytes(32).toString('hex');
   // Independent secrets that are safe to generate whenever they are missing or empty. Existing
   // values are never replaced (ML_ENCRYPTION_KEY must be kept to decrypt stored credentials).
-  const generated = { BETTER_AUTH_SECRET: hex, JWT_SECRET: hex, PROVIDERS_ENCRYPTION_KEY: hex };
+  const generated = {
+    BETTER_AUTH_SECRET: hex,
+    JWT_SECRET: hex,
+    PROVIDERS_ENCRYPTION_KEY: hex,
+    AWS_SECRET_ACCESS_KEY: hex,
+  };
   const keyOf = (line) =>
     /^[A-Z][A-Z0-9_]*=/.test(line) ? line.slice(0, line.indexOf('=')) : null;
   const example = readFileSync('.env.example', 'utf8').split('\n');

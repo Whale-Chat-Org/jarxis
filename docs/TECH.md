@@ -204,7 +204,7 @@ until expiry so replay evidence remains available.
   yield exactly one owner. Ordinary sign-up keeps its normal email verification, and `pnpm owner`
   remains available as recovery without being required for bootstrap.
 - The base Compose file does not expose PostgreSQL or Redis ports. The development override binds
-  them to loopback and adds Azurite.
+  them to loopback and supports local MinIO or Azurite.
 - Production containers run as a non-root user and use pinned base image digests.
 
 ## 9. Configuration
@@ -222,8 +222,12 @@ Required runtime values are validated by `src/lib/env.ts`:
 `TRUST_PROXY` has a validated default. `BREVO_API_URL` is a test-only override that points the SDK at
 the acceptance suite's local Brevo stub. First-owner setup has no configuration of its own: `/setup`
 reports `available` until an owner exists and `completed` afterwards, and the emailed owner code uses
-the same Brevo sender as every other message. Avatar storage separately validates `AZURE_STORAGE_CONNECTION_STRING` and `AZURE_STORAGE_CONTAINER`
-when used. Providers separately validate `PROVIDERS_ENCRYPTION_KEY` with `ML_ENCRYPTION_KEY` fallback; conflicting nonempty values are rejected and existing encryption keys must be retained. The local fixture seeder's fixed development password lives
+the same Brevo sender as every other message. The shared storage manager in `src/lib/storage.ts` detects configured Azure Blob and S3-compatible backends.
+Uploads replicate to every configured backend and succeed with at least one copy; reads fall back
+between backends and deletes attempt every copy. Its common interface centralizes upload options,
+streamed download metadata and deletion. `storageEnv()` validates only the selected backend on
+first storage use; see [development configuration](DEVELOPMENT.md#object-storage).
+Providers separately validate `PROVIDERS_ENCRYPTION_KEY` with `ML_ENCRYPTION_KEY` fallback; conflicting nonempty values are rejected and existing encryption keys must be retained. The local fixture seeder's fixed development password lives
 in `scripts/seed-users.ts`; it is not an application runtime setting.
 
 Never commit a populated `.env` file. Use `.env.example` only to document names and safe placeholders.

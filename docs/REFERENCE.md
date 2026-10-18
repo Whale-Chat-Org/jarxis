@@ -139,15 +139,22 @@ project needs are hooks. See [TECH.md](TECH.md#authorization-and-rbac) for the f
 docker compose up --build -d
 ```
 
-Use the base Compose file for production with a `BREVO_API_KEY` and a `MAIL_FROM` on a Brevo-verified domain, a private Azure Blob Storage connection string, and an **HTTPS** `BETTER_AUTH_URL`. Place an HTTPS reverse proxy in front of the loopback app port. The production image runs as a non-root user. The migration/seed job must complete successfully before the app starts. Database/Redis ports are not published by the base file; never use the development override on an untrusted host. Azurite is development-only.
+Use the base Compose file for production with a `BREVO_API_KEY` and a `MAIL_FROM` on a Brevo-verified domain, private Azure Blob Storage or S3 bucket settings, and an **HTTPS** `BETTER_AUTH_URL`. Place an HTTPS reverse proxy in front of the loopback app port. The production image runs as a non-root user. The migration/seed job must complete successfully before the app starts. Database/Redis ports are not published by the base file; never use the development override on an untrusted host. MinIO and Azurite are development-only.
 
-Profile photos are stored in the private container named by `AZURE_STORAGE_CONTAINER` and are served only through authenticated application routes. Keep `AZURE_STORAGE_CONNECTION_STRING` secret in production; the `UseDevelopmentStorage=true` value in `.env.example` is only for the loopback Azurite emulator.
+Profile photos use the shared storage manager, which detects configured Azure Blob and S3 backends.
+With both configured, uploads go to both and succeed if at least one copy is stored. Reads fall back
+between backends; deletion attempts every configured copy. Partial upload failures are reported for retry.
+Azure uses `AZURE_STORAGE_CONNECTION_STRING` and `AZURE_STORAGE_CONTAINER`; S3 uses an existing
+private bucket, region and standard AWS SDK credentials. Optional endpoint and path-style settings
+support MinIO and other S3-compatible services. Photos are served only through authenticated app
+routes. Local setup defaults to MinIO; Azurite remains available. See [storage configuration](DEVELOPMENT.md#object-storage).
+Switching backends does not migrate existing objects.
 
 Set `TRUST_PROXY=true` **only** when a trusted proxy overwrites `X-Real-IP` and clients cannot reach the app directly. Without it, limits intentionally use a shared bucket rather than trust spoofable forwarded headers. Redis rate limits use atomic Lua increments; unavailable Redis fails authentication closed. PostgreSQL is the source of truth and failures fail authorization closed. Cookie-authenticated mutations require the configured Origin, and foreign Origins are rejected. Native Better Auth adds its own origin/CSRF checks.
 
 Use distinct cryptographically random auth/JWT secrets. Changing JWT_SECRET invalidates all API access JWTs; changing auth secrets invalidates cookie sessions. Coordinate secret rotation and client reauthentication. The starter uses a shared symmetric signing key; introducing independently trusted resource servers should replace this with managed asymmetric signing/JWKS.
 
-Compose uses the `latest` tags for PostgreSQL, Redis and Azurite. The Dockerfile and CI service images remain pinned to verified registry digests. Review image releases before pulling updates. Before a database major upgrade, take and test a backup, follow PostgreSQL's supported upgrade procedure, migrate on staging, and test rollback. Do not point a new major at an old data volume without a supported upgrade.
+Compose uses the `latest` tags for PostgreSQL, Redis and optional Azurite. MinIO is built locally from pinned upstream source. The Dockerfile and CI service images remain pinned to verified registry digests. Review image releases before pulling updates. Before a database major upgrade, take and test a backup, follow PostgreSQL's supported upgrade procedure, migrate on staging, and test rollback. Do not point a new major at an old data volume without a supported upgrade.
 
 Backup/restore examples (protect backups: they contain account data):
 

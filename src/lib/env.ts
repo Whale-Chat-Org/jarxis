@@ -29,16 +29,37 @@ export function env() {
   return cached;
 }
 
-const avatarSchema = z.object({
+const azureStorageSchema = z.object({
+  STORAGE_PROVIDER: z.literal('azure').default('azure'),
   AZURE_STORAGE_CONNECTION_STRING: z.string().min(1),
   AZURE_STORAGE_CONTAINER: z
     .string()
     .regex(/^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/)
-    .default('profile-photos'),
+    .default('jarxis-storage'),
 });
-let avatarCached: z.infer<typeof avatarSchema> | undefined;
+const s3StorageSchema = z.object({
+  STORAGE_PROVIDER: z.literal('s3'),
+  S3_BUCKET: z.string().min(1),
+  S3_REGION: z.string().min(1),
+  S3_ENDPOINT: z.preprocess((value) => value || undefined, z.url().optional()),
+  S3_FORCE_PATH_STYLE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+});
+type StorageProviderConfig = z.infer<typeof azureStorageSchema> | z.infer<typeof s3StorageSchema>;
+let storageCached: StorageProviderConfig[] | undefined;
 
-/** Parse blob credentials only when avatar storage is used, keeping unrelated auth routes usable. */
-export function avatarEnv() {
-  return (avatarCached ??= avatarSchema.parse(process.env));
+/** Detect configured backends lazily so unrelated routes work without storage credentials. */
+export function storageEnv(): StorageProviderConfig[] {
+  if (storageCached) return storageCached;
+  const providers: StorageProviderConfig[] = [];
+  if (process.env.AZURE_STORAGE_CONNECTION_STRING) {
+    providers.push(azureStorageSchema.parse({ ...process.env, STORAGE_PROVIDER: 'azure' }));
+  }
+  if (process.env.S3_BUCKET) {
+    providers.push(s3StorageSchema.parse({ ...process.env, STORAGE_PROVIDER: 's3' }));
+  }
+  if (!providers.length) throw new Error('Configure Azure Blob Storage or S3 storage');
+  return (storageCached = providers);
 }

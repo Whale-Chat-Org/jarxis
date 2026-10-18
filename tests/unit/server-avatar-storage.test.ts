@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
@@ -13,10 +14,13 @@ vi.mock('@azure/storage-blob', () => ({
   BlobServiceClient: { fromConnectionString: m.fromConnectionString },
 }));
 vi.mock('@/lib/env', () => ({
-  avatarEnv: () => ({
-    AZURE_STORAGE_CONNECTION_STRING: 'UseDevelopmentStorage=true',
-    AZURE_STORAGE_CONTAINER: 'profile-photos',
-  }),
+  storageEnv: () => [
+    {
+      STORAGE_PROVIDER: 'azure',
+      AZURE_STORAGE_CONNECTION_STRING: 'UseDevelopmentStorage=true',
+      AZURE_STORAGE_CONTAINER: 'profile-photos',
+    },
+  ],
 }));
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -58,8 +62,13 @@ describe('avatar storage', () => {
 
   it('initialises the container once across operations', async () => {
     const storage = await import('@/lib/avatar-storage');
-    m.download.mockResolvedValue({ contentType: 'image/png' });
-    await expect(storage.downloadAvatar('u1', 'b1')).resolves.toEqual({ contentType: 'image/png' });
+    const body = Readable.from(['png']);
+    m.download.mockResolvedValue({ contentType: 'image/png', readableStreamBody: body });
+    await expect(storage.downloadAvatar('u1', 'b1')).resolves.toEqual({
+      contentType: 'image/png',
+      readableStreamBody: body,
+    });
+    body.destroy();
     await storage.deleteAvatar('u1', 'b1');
     expect(m.getBlockBlobClient).toHaveBeenCalledWith('u1/b1.png');
     expect(m.deleteIfExists).toHaveBeenCalled();

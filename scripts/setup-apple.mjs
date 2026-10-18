@@ -7,7 +7,7 @@
  * so it is safe on every start:
  * - The `container` CLI is installed with Homebrew when missing, and its services are started.
  * - `.env` is prepared exactly as `pnpm dev` does (see scripts/lib/prepare-env.mjs).
- * - PostgreSQL, Redis and Azurite run as `jarxis-*` containers on the host ports that
+ * - PostgreSQL, Redis and configured object storage run as `jarxis-*` containers on the host ports that
  *   compose.dev.yaml uses. Existing containers are started again, never recreated, and data
  *   lives in named volumes. Keep images, commands and volumes in sync with compose*.yaml.
  * - Migrations, the role check and fixture users are applied like `pnpm dev`.
@@ -99,12 +99,14 @@ prepareEnv({
   removeVolumeHint: 'container volume delete jarxis_postgres-data',
 });
 const env = { ...parseEnv(readFileSync('.env', 'utf8')), ...process.env };
+env.MINIO_ROOT_USER = env.AWS_ACCESS_KEY_ID;
+env.MINIO_ROOT_PASSWORD = env.AWS_SECRET_ACCESS_KEY;
 
 step('Installing dependencies');
 run('pnpm', ['install', '--frozen-lockfile']);
 run('pnpm', ['db:generate']);
 
-step('Starting PostgreSQL, Redis and Azurite');
+step('Starting PostgreSQL, Redis and configured object storage');
 const port = (key, fallback) => Number(env[key] || fallback);
 const services = [
   {
@@ -139,6 +141,15 @@ const services = [
     ],
   },
   {
+    name: 'jarxis-storage',
+    image: 'jarxis-minio:local',
+    port: port('MINIO_PORT', 9000),
+    target: 9000,
+    volume: 'jarxis_minio-data:/data',
+    env: ['MINIO_ROOT_USER', 'MINIO_ROOT_PASSWORD'],
+    command: [],
+  },
+  {
     name: 'jarxis-azurite',
     image: 'mcr.microsoft.com/azure-storage/azurite:latest',
     port: port('AZURITE_BLOB_PORT', 10000),
@@ -154,7 +165,11 @@ const services = [
       '--skipApiVersionCheck',
     ],
   },
-];
+].filter((service) => {
+  if (service.name === 'jarxis-storage') return Boolean(env.S3_BUCKET);
+  if (service.name === 'jarxis-azurite') return Boolean(env.AZURE_STORAGE_CONNECTION_STRING);
+  return true;
+});
 
 const existing = new Map(
   JSON.parse(output('container', ['list', '--all', '--format', 'json']) ?? '[]').map((item) => [
@@ -178,8 +193,35 @@ for (const service of services) {
     run('container', ['start', service.name]);
     continue;
   }
+  if (service.name === 'jarxis-storage') {
+    const trust = process.env.NODE_EXTRA_CA_CERTS;
+    run('container', [
+      'build',
+      '-f',
+      'Dockerfile.minio',
+      '-t',
+      service.image,
+      ...(trust ? ['--secret', `id=corporate_ca,src=${trust}`] : []),
+      '.',
+    ]);
+  }
   const volumeName = service.volume.split(':')[0];
   if (!volumes.has(volumeName)) run('container', ['volume', 'create', volumeName]);
+  if (service.name === 'jarxis-storage') {
+    // Apple volumes do not inherit the image directory's unprivileged ownership.
+    run('container', [
+      'run',
+      '--rm',
+      '--user',
+      '0',
+      '--volume',
+      service.volume,
+      service.image,
+      'chown',
+      'node:node',
+      '/data',
+    ]);
+  }
   console.log(`Creating ${service.name}.`);
   const result = spawnSync(
     'container',
@@ -207,7 +249,23 @@ for (const service of services) {
 await waitFor('jarxis-postgres', () =>
   run('container', ['exec', 'jarxis-postgres', 'pg_isready', '-U', 'jarxis'], { optional: true }),
 );
-console.log('PostgreSQL, Redis and Azurite are ready.');
+console.log('PostgreSQL, Redis and configured object storage are ready.');
+
+if (env.S3_BUCKET) {
+  await waitFor('jarxis-storage', async () => {
+    try {
+      return (
+        await fetch(`http://127.0.0.1:${port('MINIO_PORT', 9000)}/minio/health/ready`, {
+          signal: AbortSignal.timeout(1000),
+        })
+      ).ok;
+    } catch {
+      return false;
+    }
+  });
+}
+step('Preparing local MinIO bucket');
+run('node', ['scripts/setup-minio.mjs']);
 
 step('Applying migrations');
 run('pnpm', ['db:migrate']);

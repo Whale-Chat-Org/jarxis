@@ -1,7 +1,7 @@
 # Local environment on a new machine
 
 Use this when setting up a fresh Mac, or when the app fails with `ECONNREFUSED` on
-`localhost:55432` (PostgreSQL), `56379` (Redis) or `10000` (Azurite). That error means the local
+`localhost:55432` (PostgreSQL), `56379` (Redis) or `9000` (MinIO) / `10000` (Azurite). That error means the local
 infrastructure is not running; it is not an application bug. Human-facing setup lives in
 [docs/DEVELOPMENT.md](../../docs/DEVELOPMENT.md); keep the README free of development content.
 
@@ -15,8 +15,8 @@ Do not set up infrastructure by hand. One idempotent command prepares everything
 
 `setup:apple` installs the `container` CLI with Homebrew when missing, starts its services
 (downloading the kernel on first start), prepares `.env` through scripts/lib/prepare-env.mjs,
-installs dependencies, runs the `jarxis-postgres`, `jarxis-redis` and `jarxis-azurite`
-containers, then applies migrations and seeds fixture users. After a reboot, running it again
+installs dependencies, runs the `jarxis-postgres`, `jarxis-redis` and the configured `jarxis-storage` (MinIO) and/or `jarxis-azurite`
+containers, provisions the local MinIO bucket when S3 is configured, then applies migrations and seeds fixture users. After a reboot, running it again
 starts the stopped containers.
 
 ## Rules

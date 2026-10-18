@@ -6,12 +6,12 @@ Run from `<repository-root>` after the parent finishes Prisma migrations, normal
 DATABASE_URL='postgresql://USER:PASSWORD@localhost:55432/jarxis_test' \
 BETTER_AUTH_URL='http://localhost:3000' \
 TRUST_PROXY=true REDIS_URL='redis://localhost:56379/1' \
-AZURE_STORAGE_CONNECTION_STRING='UseDevelopmentStorage=true' \
-AZURE_STORAGE_CONTAINER='profile-photos-e2e' \
+S3_BUCKET=profile-photos-e2e \
+S3_REGION=us-east-1 S3_ENDPOINT=http://localhost:9000 S3_FORCE_PATH_STYLE=true \
 pnpm exec playwright test
 ```
 
-Also provide the application's normal environment: `REDIS_URL`, distinct 32+ character `BETTER_AUTH_SECRET` and `JWT_SECRET`, and the rest of `.env`. Playwright starts `tests/e2e/brevo-stub.ts`, a local stand-in for Brevo's transactional API, and runs the app with `BREVO_API_URL` pointing at it plus a fake `BREVO_API_KEY` and `MAIL_FROM`, so no real email is sent. A reused dev server does not get these overrides and would send through real Brevo; stop it first. Azurite must expose its blob service at localhost:10000. `PLAYWRIGHT_BASE_URL` overrides the default application origin; ensure the server binds there. `BREVO_STUB_URL` overrides the stub origin (default `http://127.0.0.1:4010`).
+Also provide the application's normal environment: `REDIS_URL`, distinct 32+ character `BETTER_AUTH_SECRET` and `JWT_SECRET`, and the rest of `.env`. Playwright starts `tests/e2e/brevo-stub.ts`, a local stand-in for Brevo's transactional API, and runs the app with `BREVO_API_URL` pointing at it plus a fake `BREVO_API_KEY` and `MAIL_FROM`, so no real email is sent. A reused dev server does not get these overrides and would send through real Brevo; stop it first. MinIO must be running on localhost:9000. Supply its local AWS credentials, then create the isolated bucket with `S3_BUCKET=profile-photos-e2e node scripts/setup-minio.mjs` before running. To exercise Azure alone, clear `S3_BUCKET` and set `AZURE_STORAGE_CONNECTION_STRING=UseDevelopmentStorage=true` and `AZURE_STORAGE_CONTAINER=profile-photos-e2e`, with Azurite running on localhost:10000. Configure both to exercise replication and fallback. `PLAYWRIGHT_BASE_URL` overrides the default application origin; ensure the server binds there. `BREVO_STUB_URL` overrides the stub origin (default `http://127.0.0.1:4010`).
 
 Set `PLAYWRIGHT_WEB_SERVER_COMMAND='pnpm build && pnpm start'` to test an optimized build instead of the default development server.
 

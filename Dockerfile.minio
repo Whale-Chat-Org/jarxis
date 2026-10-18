@@ -1,0 +1,13 @@
+# Local development only; upstream no longer publishes community container images.
+FROM golang:1.25-alpine@sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59 AS build
+# Optional enterprise CA is a build secret, never part of the runtime image.
+RUN --mount=type=secret,id=corporate_ca \
+    if [ -f /run/secrets/corporate_ca ]; then cat /run/secrets/corporate_ca >> /etc/ssl/certs/ca-certificates.crt; fi; \
+    CGO_ENABLED=0 go install github.com/minio/minio@9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
+
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
+COPY --from=build /go/bin/minio /usr/local/bin/minio
+RUN mkdir /data && chown node:node /data
+USER node
+EXPOSE 9000
+CMD ["minio", "server", "/data", "--address", ":9000"]
