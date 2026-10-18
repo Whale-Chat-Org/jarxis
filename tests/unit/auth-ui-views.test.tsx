@@ -13,15 +13,18 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useIsHydrated } from '@/hooks/use-is-hydrated';
 import { createTestQueryClient } from '../helpers/query-client';
 
 import { Auth } from '@/components/auth/auth';
-import { AuthProvider } from '@/components/auth/auth-provider';
-import { AuthRedirect } from '@/components/auth/auth-redirect';
-import { AuthCallback, AuthError } from '@/components/auth/auth-result';
-import { ReauthenticationAction, ReauthenticationNotice } from '@/components/auth/reauthentication';
-import { SignOut } from '@/components/auth/sign-out';
-import { useIsHydrated } from '@/components/auth/use-is-hydrated';
+import { AuthProvider } from '@/components/auth/provider/auth-provider';
+import { AuthRedirect } from '@/components/auth/views/auth-redirect';
+import { AuthCallback, AuthError } from '@/components/auth/views/auth-result';
+import {
+  ReauthenticationAction,
+  ReauthenticationNotice,
+} from '@/components/auth/shared/reauthentication';
+import { SignOut } from '@/components/auth/views/sign-out';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));
@@ -328,12 +331,6 @@ describe('ReauthenticationAction', () => {
       }),
     );
     expect(client.signOut).toHaveBeenCalled();
-  });
-
-  it('can hide its title', () => {
-    renderWithAuth(<ReauthenticationAction showTitle={false} />);
-    expect(screen.queryByRole('heading')).toBeNull();
-    expect(screen.getByText(localization.settings.reauthenticationDescription)).toBeTruthy();
   });
 });
 

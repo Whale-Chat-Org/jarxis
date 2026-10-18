@@ -15,7 +15,7 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/setup',
 }));
 
-import { OwnerSetup } from '@/components/auth/owner-setup';
+import { OwnerSetup } from '@/components/setup/owner-setup';
 
 const STORAGE_KEY = 'jarxis.owner-setup.request';
 const PASSWORD = 'correct-horse-battery';

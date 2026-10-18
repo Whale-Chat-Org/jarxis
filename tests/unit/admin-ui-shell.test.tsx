@@ -22,9 +22,9 @@ vi.mock('next/headers', () => ({
   }),
 }));
 
-vi.mock('@/components/theme-toggle', () => ({ ThemeToggle: () => <button>Theme</button> }));
+vi.mock('@/components/header/theme-toggle', () => ({ ThemeToggle: () => <button>Theme</button> }));
 
-vi.mock('@/components/auth/user/user-button', () => ({
+vi.mock('@/components/header/user/user-button', () => ({
   UserButton: ({ size, side }: { size: string; side: string }) => (
     <span data-testid="user-button" data-size={size} data-side={side} />
   ),

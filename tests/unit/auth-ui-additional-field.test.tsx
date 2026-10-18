@@ -9,8 +9,11 @@ import userEvent from '@testing-library/user-event';
 import { type ReactNode, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AdditionalField, type AdditionalFieldProps } from '@/components/auth/additional-field';
-import { AuthProvider } from '@/components/auth/auth-provider';
+import {
+  AdditionalField,
+  type AdditionalFieldProps,
+} from '@/components/auth/form/additional-field/additional-field';
+import { AuthProvider } from '@/components/auth/provider/auth-provider';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));

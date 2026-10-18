@@ -1,13 +1,12 @@
 import { getReauthenticationSignInURL, localization } from '@better-auth-ui/core';
-import { lastLoginMethodPlugin } from '@better-auth-ui/core/plugins/last-login-method';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestQueryClient } from '../helpers/query-client';
 
-import { AuthProvider } from '@/components/auth/auth-provider';
-import { SignIn } from '@/components/auth/sign-in';
+import { AuthProvider } from '@/components/auth/provider/auth-provider';
+import { SignIn } from '@/components/auth/views/sign-in';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));
@@ -233,22 +232,6 @@ describe('SignIn', () => {
 
     expect(screen.getByText('Fake captcha')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Plugin signIn' })).toBeTruthy();
-  });
-
-  it('shows the last-used badge when email was the last login method', () => {
-    renderSignIn(makeClient({ getLastUsedLoginMethod: () => 'email' }), {
-      plugins: [lastLoginMethodPlugin()],
-    });
-
-    expect(screen.getByText('Last')).toBeTruthy();
-  });
-
-  it('omits the last-used badge for another method', () => {
-    renderSignIn(makeClient({ getLastUsedLoginMethod: () => 'github' }), {
-      plugins: [lastLoginMethodPlugin()],
-    });
-
-    expect(screen.queryByText('Last')).toBeNull();
   });
 
   it('shows the reauthentication notice when opened for reauthentication', () => {

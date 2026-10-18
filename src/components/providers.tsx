@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type PropsWithChildren } from 'react';
 
-import { AuthProvider } from '@/components/auth/auth-provider';
+import { AuthProvider } from '@/components/auth/provider/auth-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { authClient } from '@/lib/auth-client';
 import { adminPlugin } from '@/lib/auth/admin-plugin';

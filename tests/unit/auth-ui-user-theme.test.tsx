@@ -6,11 +6,11 @@ import userEvent from '@testing-library/user-event';
 import { type ReactNode, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AuthProvider } from '@/components/auth/auth-provider';
-import { Appearance } from '@/components/auth/theme/appearance';
-import { UserAvatar } from '@/components/auth/user/user-avatar';
-import { UserButton } from '@/components/auth/user/user-button';
-import { UserView } from '@/components/auth/user/user-view';
+import { AuthProvider } from '@/components/auth/provider/auth-provider';
+import { Appearance } from '@/components/settings/account/appearance';
+import { UserAvatar } from '@/components/header/user/user-avatar';
+import { UserButton } from '@/components/header/user/user-button';
+import { UserView } from '@/components/header/user/user-view';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { themePlugin } from '@/lib/auth/theme-plugin';
 

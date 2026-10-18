@@ -5,12 +5,12 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestQueryClient } from '../helpers/query-client';
 
-import { AuthProvider } from '@/components/auth/auth-provider';
-import { AccountSettings } from '@/components/auth/settings/account/account-settings';
-import { ChangeAvatar } from '@/components/auth/settings/account/change-avatar';
-import { ChangeEmail } from '@/components/auth/settings/account/change-email';
-import { UserProfile } from '@/components/auth/settings/account/user-profile';
-import { Settings } from '@/components/auth/settings/settings';
+import { AuthProvider } from '@/components/auth/provider/auth-provider';
+import { AccountSettings } from '@/components/settings/account/account-settings';
+import { ChangeAvatar } from '@/components/settings/account/change-avatar';
+import { ChangeEmail } from '@/components/settings/account/change-email';
+import { UserProfile } from '@/components/settings/account/user-profile';
+import { Settings } from '@/components/settings/settings';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));

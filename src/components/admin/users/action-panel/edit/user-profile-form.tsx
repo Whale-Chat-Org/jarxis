@@ -1,6 +1,6 @@
 'use client';
 import { RolePicker } from '@/components/admin/role-picker';
-import { getAuthAdditionalFieldValidators } from '@/components/auth/auth-form';
+import { getAuthAdditionalFieldValidators } from '@/lib/auth/auth-form-utils';
 import {
   Field,
   FieldContent,

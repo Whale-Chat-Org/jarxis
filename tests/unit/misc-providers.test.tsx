@@ -28,7 +28,7 @@ vi.mock('@/lib/permissions', () => ({
   defaultRole: 'user',
   adminRoles: ['owner'],
 }));
-vi.mock('@/components/auth/auth-provider', () => ({
+vi.mock('@/components/auth/provider/auth-provider', () => ({
   AuthProvider: (props: AuthProps) => {
     mocks.authProps = props;
     return <>{props.children}</>;

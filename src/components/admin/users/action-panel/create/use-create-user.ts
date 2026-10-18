@@ -10,7 +10,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useEffect, useEffectEvent } from 'react';
 
 import { useAdminSubmission } from '@/components/admin/use-admin-submission';
-import { useAuthForm } from '@/components/auth/auth-form';
+import { useAuthForm } from '@/components/auth/form/auth-form';
 import { asAdminRoles, withInlineErrors } from '@/lib/admin-user-utils';
 import { adminPlugin } from '@/lib/auth/admin-plugin';
 import type { CreateUserProps } from '@/types/admin-users';

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('sonner', () => ({ toast }));
-vi.mock('@/components/theme-toggle', () => ({ ThemeToggle: () => <button>Theme</button> }));
+vi.mock('@/components/header/theme-toggle', () => ({ ThemeToggle: () => <button>Theme</button> }));
 
 import { ChatPage } from '@/components/chat/chat-page';
 

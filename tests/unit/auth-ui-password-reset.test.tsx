@@ -5,12 +5,13 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestQueryClient } from '../helpers/query-client';
 
-import { AuthProvider } from '@/components/auth/auth-provider';
-import { ForgotPassword } from '@/components/auth/forgot-password';
-import { OpenEmailButton } from '@/components/auth/open-email-button';
-import { RESET_LINK_SENT_STORAGE_KEY, ResetLinkSent } from '@/components/auth/reset-link-sent';
-import { ResetPassword } from '@/components/auth/reset-password';
-import { VerifyEmail } from '@/components/auth/verify-email';
+import { AuthProvider } from '@/components/auth/provider/auth-provider';
+import { ForgotPassword } from '@/components/auth/views/forgot-password';
+import { OpenEmailButton } from '@/components/auth/shared/open-email-button';
+import { ResetLinkSent } from '@/components/auth/views/reset-link-sent';
+import { RESET_LINK_SENT_STORAGE_KEY } from '@/lib/auth/auth-storage';
+import { ResetPassword } from '@/components/auth/views/reset-password';
+import { VerifyEmail } from '@/components/auth/views/verify-email';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));

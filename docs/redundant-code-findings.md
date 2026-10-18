@@ -118,7 +118,7 @@ The show/hide password `InputGroup` appears **eight times in four files**:
 - `src/components/auth/sign-in.tsx:168-208`
 - `src/components/auth/sign-up.tsx:273-313, 362-397`
 - `src/components/auth/reset-password.tsx:136-176, 225-262`
-- `src/components/auth/settings/security/change-password.tsx:216-251, 290-323, 375-405`
+- `src/components/settings/security/change-password.tsx:216-251, 290-323, 375-405`
 
 Each has local visibility state, an input, a toggle and localized accessible labels. Seven new-password/general length-validation blocks plus the current-password variant repeat similar checks. These are registry copies, so duplication is a maintenance cost within the project's registry-preservation policy, not evidence that the registry-first rule was broken.
 
@@ -126,14 +126,14 @@ The admin create-password field is another implementation with different behavio
 
 ### U3. Auth and setup layouts contain identical public-frame JSX — Medium, confirmed
 
-`src/app/auth/layout.tsx:13-24` and `src/app/setup/layout.tsx:9-20` repeat the same outer div, `PublicHeader`, centered/tinted main classes, children and `PublicFooter`. Their returned JSX matches after whitespace normalization.
+`src/app/(public)/auth/layout.tsx:13-24` and `src/app/(public)/setup/layout.tsx:9-20` repeat the same outer div, `Header`, centered/tinted main classes, children and `Footer`. Their returned JSX matches after whitespace normalization.
 
-Both layout files are Next.js entry points and have a legitimate route responsibility. The duplication is the frame body inside them. `src/app/settings/layout.tsx:23-31` and `landing/landing-page.tsx:5-13` have related header/footer shells but different content layout; settings additionally enforces access before rendering. Those are partial overlap, not identical replacements.
+Both layout files are Next.js entry points and have a legitimate route responsibility. The duplication is the frame body inside them. `src/app/(public)/settings/layout.tsx:23-31` and `landing/landing-page.tsx:5-13` have related header/footer shells but different content layout; settings additionally enforces access before rendering. Those are partial overlap, not identical replacements.
 
 ### U4. “Setup already completed” is built twice and differs visually — Medium, confirmed
 
-- Server decision: `src/app/setup/page.tsx:35-58`.
-- Client transition after a completed response: `src/components/auth/owner-setup.tsx:325-343`.
+- Server decision: `src/app/(public)/setup/page.tsx:35-58`.
+- Client transition after a completed response: `src/components/setup/owner-setup.tsx:325-343`.
 
 Both show the same title, description and sign-in destination in a narrow Card. The server version includes a success icon and a spaced `CardContent`; the client version omits the icon and makes the button full width. These are two presentations of the same completed state. Their server/client state decisions remain different responsibilities.
 
@@ -173,7 +173,7 @@ The local gateway `json` helper (`gateway.ts:36-37`) is identical to `http.ts:43
 
 | Presentation       | Implementations                                                                                | Why the overlap is limited                                                                                                                                                                                                                                                                           |
 | ------------------ | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Session list rows  | `auth/settings/security/active-session.tsx:57-110` and `auth/admin/admin-users.tsx:1586-1619`  | Settings parses browser/OS with Bowser, shows relative age/current-session state and signs the current user out. Admin shows raw user-agent text and created/expiry dates, optional IP and permission-gated remote revocation. They display the same entity but have distinct authority and actions. |
+| Session list rows  | `settings/security/active-session.tsx:57-110` and `auth/admin/admin-users.tsx:1586-1619`       | Settings parses browser/OS with Bowser, shows relative age/current-session state and signs the current user out. Admin shows raw user-agent text and created/expiry dates, optional IP and permission-gated remote revocation. They display the same entity but have distinct authority and actions. |
 | User-table loading | `admin/access-skeleton.tsx:14-28`, `auth/admin/admin-users.tsx:585-620`, `skeletons.tsx:63-92` | Route loading uses a generic four-column table/mobile cards; the registry table uses avatar/text cells, five rows and responsive columns; the generic helper supports variable rows/columns. There are multiple loading presentations for the users screen, but no evidence all are redundant.       |
 
 ## 6. Thin layers that add a responsibility
@@ -182,7 +182,7 @@ The local gateway `json` helper (`gateway.ts:36-37`) is identical to `http.ts:43
 | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `components/auth/auth-provider.tsx:38-45`                       | Injects `ErrorToaster`; the file also augments Link and additional-field types.                                                                                      |
 | `lib/auth/admin-plugin.ts:9-15`                                 | Extends the core plugin with `StopImpersonating` menu content.                                                                                                       |
-| `components/theme-toggle.tsx:21-33`                             | Supplies the standalone trigger/menu around the registry's menu item.                                                                                                |
+| `components/header/theme-toggle.tsx:21-33`                      | Supplies the standalone trigger/menu around the registry's menu item.                                                                                                |
 | `components/auth/admin/admin-table.ts:13-23`                    | Establishes shared table feature/sort defaults rather than just forwarding a call.                                                                                   |
 | `components/auth/auth-result.tsx:93-99`                         | `AuthCallback` and `AuthError` fix different fallback intents.                                                                                                       |
 | `lib/auth/auth-plugin.ts`                                       | Unimported but required module augmentation; in-memory deletion creates 38 type errors.                                                                              |

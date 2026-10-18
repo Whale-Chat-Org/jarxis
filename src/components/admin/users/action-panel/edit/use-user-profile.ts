@@ -12,7 +12,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 
 import { useAdminSubmission } from '@/components/admin/use-admin-submission';
-import { useAuthForm } from '@/components/auth/auth-form';
+import { useAuthForm } from '@/components/auth/form/auth-form';
 import { asAdminRoles, parseAdminRoles, sameRoles, withInlineErrors } from '@/lib/admin-user-utils';
 import type { UserInspectorData, UserInspectorProps } from '@/types/admin-users';
 export function useUserProfile(

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ComponentProps } from 'react';
 
-import { UserButton } from '@/components/auth/user/user-button';
+import { UserButton } from '@/components/header/user/user-button';
 import { BrandMark } from '@/components/brand';
 import {
   Sidebar,

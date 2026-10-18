@@ -70,11 +70,17 @@ export default defineConfig([
   // Upstream Better Auth UI registry components intentionally hydrate browser
   // storage in effects. Keep these two compiler advisories scoped to vendor UI.
   {
-    files: ['src/components/auth/**/*.{ts,tsx}'],
+    files: ['src/components/{auth,settings}/**/*.{ts,tsx}'],
     rules: {
       'react-hooks/set-state-in-effect': 'off',
       'react-hooks/preserve-manual-memoization': 'off',
     },
+  },
+  // Owner setup restores a pending request from sessionStorage after hydration,
+  // the same pattern as the vendor auth forms it builds on.
+  {
+    files: ['src/components/setup/owner-setup-state.ts'],
+    rules: { 'react-hooks/set-state-in-effect': 'off' },
   },
   /*
    * Design tokens only (.agents/rules/design-system.md): tokens.css clears Tailwind's default
@@ -179,6 +185,10 @@ export default defineConfig([
       'src/app/**/*.{ts,tsx}',
       'src/components/admin/**/*.{ts,tsx}',
       'src/components/auth/**/*.{ts,tsx}',
+      'src/components/settings/**/*.{ts,tsx}',
+      'src/components/setup/**/*.{ts,tsx}',
+      'src/components/header/**/*.{ts,tsx}',
+      'src/components/footer/**/*.{ts,tsx}',
       'src/components/landing/**/*.{ts,tsx}',
       'src/components/chat/**/*.{ts,tsx}',
     ],

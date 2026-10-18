@@ -208,7 +208,7 @@ On top of this, the cast `as ('user' | 'admin')[]` is repeated at `admin-users.t
 | `createUpstreamStreamParser.parse` (`protocol.ts:1276-1426`)                | 151 lines   | **8 levels of nesting** when each `else if` counts as a level (5 with chains flattened)                                                                                                                                                                                             |
 | `renderUpstreamRequest` (`protocol.ts:1434-1604`)                           | 171 lines   |                                                                                                                                                                                                                                                                                     |
 | `handleGateway` (`src/lib/ml/gateway.ts:249-409`)                           | 161 lines   | 6 levels of nesting. Auth, DB, routing, body reading, failover, credentials, cooldown state and streaming, all in one function                                                                                                                                                      |
-| `OwnerSetup` (`src/components/auth/owner-setup.tsx:138-548`)                | 411 lines   | 9 `useState` (one of them a dummy `setTick` re-render counter at `:151`), 3 hand-rolled `fetch` flows (`:181`, `:236`, `:282`), a ternary with 4 nested `?:` and 2 `??` (`:423-433`)                                                                                                |
+| `OwnerSetup` (`src/components/setup/owner-setup.tsx:138-548`)               | 411 lines   | 9 `useState` (one of them a dummy `setTick` re-render counter at `:151`), 3 hand-rolled `fetch` flows (`:181`, `:236`, `:282`), a ternary with 4 nested `?:` and 2 `??` (`:423-433`)                                                                                                |
 | `ChatWorkspace` (`src/components/chat/chat-page.tsx:74-412`)                | 339 lines   | Dialog title, description, label and icon each picked by repeated `modal?.type === …` chains (`:365-404`)                                                                                                                                                                           |
 | `RolesManager` (`src/components/admin/roles-manager.tsx:81-426`)            | 346 lines   | 3 inline `fetch` calls (`:99`, `:125`, `:158`), 6 `useState`                                                                                                                                                                                                                        |
 
@@ -386,7 +386,7 @@ There is no shared client, so three panels follow three different error policies
 
 - The disabled Better Auth paths are listed in both `auth.ts:25-32` and `api/auth/[...all]/route.ts:10-17`.
 - `scripts/seed-users.ts:36` hard-codes `pg_advisory_xact_lock(72419831)` although `SETUP_ADVISORY_LOCK` exists (`owner-bootstrap-state.ts:4`).
-- The "Setup already completed" card is built twice, and the copies look different: `app/setup/page.tsx:35-58` and `owner-setup.tsx:325-343`.
+- The "Setup already completed" card is built twice, and the copies look different: `app/(public)/setup/page.tsx:35-58` and `owner-setup.tsx:325-343`.
 
 ### H7. Unchecked casts at trust boundaries — Q5
 
@@ -481,8 +481,8 @@ There is no shared client, so three panels follow three different error policies
     - `auth/post-login/route.ts:16`
     - `setup/page.tsx:54`
     - `admin/layout.tsx:15`
-    - `public-chrome.tsx:53`
-    - `public-account-nav.tsx:23`
+    - `footer/footer.tsx:10`
+    - `header/account-nav.tsx:23`
     - `owner-setup.tsx:270, 338`
     - `rbac.ts:113`
 - **Single-letter names** (`p`, `g`, `i`, `s`, `u`, `f`, `t`) in `api/v1/[...path]/route.ts`, `rbac.ts`, `tokens.ts` and `docs-access.ts`. `api/v1/[...path]/route.ts:16-52` is a hand-rolled router on `p[0]`/`p[1]`.
