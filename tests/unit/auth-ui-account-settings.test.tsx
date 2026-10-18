@@ -489,6 +489,8 @@ describe('Settings', () => {
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith({
         to: '/auth/sign-in?redirectTo=%2Fsettings%2Faccount',
+        view: 'signIn',
+        params: { redirectTo: '/settings/account' },
         replace: true,
       }),
     );

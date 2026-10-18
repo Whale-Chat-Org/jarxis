@@ -18,7 +18,8 @@ minimumReleaseAgeExclude:
   - '@scalar/schemas@0.12.3'
   - '@scalar/types@0.22.4'
   - '@scalar/validation@0.6.6'
-  - '@tanstack/query-core@5.104.1'
-  - '@tanstack/react-query@5.104.1'
+  # pnpm added 5.104.4 during the explicitly requested ncu -u dependency refresh.
+  - '@tanstack/query-core@5.104.1 || 5.104.4'
+  - '@tanstack/react-query@5.104.1 || 5.104.4'
   - eslint@10.12.0
   - lucide-react@1.50.0
