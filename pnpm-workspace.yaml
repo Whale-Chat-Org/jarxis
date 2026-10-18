@@ -12,9 +12,6 @@ overrides:
   # Security fixes for transitive dependencies flagged by Trivy (HIGH, fix available).
   'mysql2': '^3.22.0'
   '@prisma/config>deepmerge-ts': '^8.0.2'
-ignoredOptionalDependencies:
-  - drizzle-orm
-  - drizzle-kit
 minimumReleaseAgeExclude:
   - '@scalar/client-side-rendering@0.4.8'
   - '@scalar/nextjs-api-reference@0.12.7'

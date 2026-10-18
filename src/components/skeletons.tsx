@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   Sidebar,
   SidebarContent,
@@ -15,6 +14,7 @@ import {
   SidebarMenuSkeleton,
   SidebarProvider,
 } from '@/components/ui/sidebar';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -60,7 +60,7 @@ export function PageHeaderSkeleton({ action }: { action?: ReactNode }) {
 // Varied widths so rows don't look like a solid block.
 const CELL_WIDTHS = ['w-3/4', 'w-1/2', 'w-2/3', 'w-5/12', 'w-7/12'];
 
-export function TableRowsSkeleton({ columns, rows }: { columns: number; rows: number }) {
+function TableRowsSkeleton({ columns, rows }: { columns: number; rows: number }) {
   return Array.from({ length: rows }, (_, row) => (
     <TableRow key={row} className="hover:bg-transparent">
       {Array.from({ length: columns }, (_, col) => (
@@ -142,26 +142,6 @@ export function ListCardSkeleton({ lines = 5 }: { lines?: number }) {
         ))}
       </CardContent>
     </Card>
-  );
-}
-
-export function RoleCardsSkeleton({ count = 4 }: { count?: number }) {
-  return (
-    <div className="grid gap-lg md:grid-cols-2">
-      {Array.from({ length: count }, (_, i) => (
-        <Card key={i}>
-          <CardHeader className="gap-sm">
-            <Skeleton className="h-lg-plus w-bar-lg" />
-            <Skeleton className="h-lg w-bar-4xl" />
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2xs">
-            {Array.from({ length: 4 }, (_, j) => (
-              <Skeleton key={j} className="h-lg-plus w-bar-sm rounded-full" />
-            ))}
-          </CardContent>
-        </Card>
-      ))}
-    </div>
   );
 }
 

@@ -126,10 +126,12 @@ describe('OwnerSetup details step', () => {
     await submitDetails(user);
 
     expect(await screen.findByText('Setup could not be reached. Try again.')).toBeTruthy();
-    expect((screen.getByLabelText('Password') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Password') as HTMLInputElement).value).toBe(
+      'correct-horse-battery',
+    );
   });
 
-  it('maps an allowlisted error code and clears the password', async () => {
+  it('maps an allowlisted error code and preserves the password', async () => {
     fetchMock.mockResolvedValueOnce(
       json(409, { error: { code: 'EMAIL_CONFLICT', message: '<b>raw</b>' } }),
     );
@@ -144,7 +146,9 @@ describe('OwnerSetup details step', () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByText('<b>raw</b>')).toBeNull();
-    expect((screen.getByLabelText('Password') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Password') as HTMLInputElement).value).toBe(
+      'correct-horse-battery',
+    );
   });
 
   it('falls back to generic copy when the error body is not JSON', async () => {

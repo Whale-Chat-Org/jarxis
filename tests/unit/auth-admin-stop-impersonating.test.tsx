@@ -2,6 +2,13 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { StopImpersonating } from '@/components/admin/users/action-panel/shared/stop-impersonating';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
 /** The Better Auth UI hooks are mocked; no session or network request is involved. */
 
 const state = vi.hoisted(() => ({
@@ -18,13 +25,6 @@ vi.mock('@better-auth-ui/react', () => ({
 vi.mock('@better-auth-ui/react/plugins/admin', () => ({
   useStopImpersonating: () => state.stop,
 }));
-
-import { StopImpersonating } from '@/components/auth/admin/stop-impersonating';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 function renderMenu() {
   return render(

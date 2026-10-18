@@ -1,4 +1,5 @@
 import { AVATAR_CONTENT_TYPE, MAX_AVATAR_BYTES, isPng, uploadAvatar } from '@/lib/avatar-storage';
+import { readBoundedBody } from '@/lib/bounded-body';
 import { HttpError } from '@/lib/errors';
 import { handler, json } from '@/lib/http';
 import { identify } from '@/lib/rbac';
@@ -14,24 +15,11 @@ async function readAvatar(req: Request) {
   if (Number.isFinite(declaredLength) && declaredLength > MAX_AVATAR_BYTES)
     throw new HttpError(413, 'TOO_LARGE', 'Avatar is too large');
 
-  const reader = req.body?.getReader();
-  if (!reader) throw new HttpError(400, 'IMAGE_REQUIRED', 'Avatar image required');
-
-  let length = 0;
-  const chunks: Uint8Array[] = [];
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    length += value.byteLength;
-    if (length > MAX_AVATAR_BYTES) {
-      await reader.cancel();
-      throw new HttpError(413, 'TOO_LARGE', 'Avatar is too large');
-    }
-    chunks.push(value);
-  }
-
-  if (length === 0) throw new HttpError(400, 'IMAGE_REQUIRED', 'Avatar image required');
-  const image = Buffer.concat(chunks);
+  if (!req.body) throw new HttpError(400, 'IMAGE_REQUIRED', 'Avatar image required');
+  const image = await readBoundedBody(req.body, MAX_AVATAR_BYTES, {
+    tooLarge: () => new HttpError(413, 'TOO_LARGE', 'Avatar is too large'),
+  });
+  if (image.length === 0) throw new HttpError(400, 'IMAGE_REQUIRED', 'Avatar image required');
   if (!isPng(image)) throw new HttpError(400, 'INVALID_IMAGE', 'Invalid PNG image');
   return image;
 }

@@ -6,7 +6,7 @@ datasource db {
   provider = "postgresql"
 }
 
-model MlConnection {
+model ProviderConnection {
   id                  String    @id @default(uuid())
   name                String
   provider            String
@@ -23,13 +23,13 @@ model MlConnection {
   createdBy           String    @map("created_by")
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  models              MlModel[]
+  models              ProviderModel[]
 
   @@index([nextDiscoveryAt])
   @@map("ml_connections")
 }
 
-model MlModel {
+model ProviderModel {
   id           String       @id @default(uuid())
   connectionId String       @map("connection_id")
   upstreamId   String       @map("upstream_id")
@@ -37,13 +37,13 @@ model MlModel {
   enabled      Boolean      @default(true)
   discovered   Boolean      @default(true)
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  connection   MlConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  connection   ProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   @@unique([connectionId, upstreamId])
   @@map("ml_models")
 }
 
-model MlGatewayKey {
+model ProviderGatewayKey {
   id         String    @id @default(uuid())
   name       String
   prefix     String
@@ -62,7 +62,7 @@ model User {
   email         String             @unique
   emailVerified Boolean            @default(false) @map("email_verified")
   image         String?
-  // Better Auth admin plugin fields. `role` holds one or more code-declared role names,
+  // Better Auth admin plugin fields. `role` holds one or more system or custom role keys,
   // comma-separated; an unrecognised name grants nothing (fail closed).
   role          String?
   banned        Boolean            @default(false)

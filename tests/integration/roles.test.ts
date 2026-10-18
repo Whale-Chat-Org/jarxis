@@ -1,15 +1,16 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { randomUUID } from 'node:crypto';
 import { db } from '@/db';
-import { resetRoles } from './reset-roles';
-import { createRole, deleteRole, updateRole } from '@/lib/role-service';
-import { authorize, grants } from '@/lib/rbac';
-import { seedRbac } from '@/lib/rbac-seed';
 import {
   adminPermissionCatalog,
   permissionCatalog,
   restrictedPermissions,
 } from '@/lib/permissions';
+import { authorize, grants } from '@/lib/rbac';
+import { seedRbac } from '@/lib/rbac-seed';
+import { createRole, deleteRole, updateRole } from '@/lib/role-service';
+import { listRoles } from '@/lib/roles';
+import { randomUUID } from 'node:crypto';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { resetRoles } from './reset-roles';
 
 beforeEach(async () => {
   await resetRoles();
@@ -22,6 +23,33 @@ afterAll(async () => {
 });
 
 describe('stored role lifecycle', () => {
+  it('uses matching whitespace/deduplication rules in counts and both database triggers', async () => {
+    const role = await createRole('fixture-actor', {
+      name: 'Whitespace role',
+      description: '',
+      permissions: ['audit:read'],
+    });
+    const id = randomUUID();
+    await db.user.create({
+      data: {
+        id,
+        email: `${id}@example.test`,
+        name: 'Whitespace member',
+        role: `\t${role.key}\n, ${role.key} ,`,
+        emailVerified: true,
+      },
+    });
+    expect((await listRoles()).find((entry) => entry.key === role.key)?.userCount).toBe(1);
+    await expect(deleteRole('fixture-actor', role.key)).rejects.toMatchObject({
+      code: 'ROLE_IN_USE',
+    });
+    await expect(db.role.delete({ where: { key: role.key } })).rejects.toThrow();
+    await expect(
+      db.user.update({ where: { id }, data: { role: '\tcustom_missing\n' } }),
+    ).rejects.toThrow();
+    await db.user.update({ where: { id }, data: { role: null } });
+    expect((await listRoles()).find((entry) => entry.key === 'user')?.userCount).toBe(0);
+  });
   it('applies edits on the next request, keeps the key on rename, and refuses deletion in use', async () => {
     const actorId = randomUUID();
     const memberId = randomUUID();

@@ -19,6 +19,7 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar';
+
 import { isNavItemActive, visibleNavGroups } from './nav-items';
 
 /**

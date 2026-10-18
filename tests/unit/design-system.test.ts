@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /*
- * Guards the guard (.agent/rules/design-system.md §8).
+ * Guards the guard (.agents/rules/design-system.md §8).
  *
  * `pnpm lint` proves the current source is clean; this suite proves the rules that make it
  * clean are still switched on and still catch what the design-system rules promise. Weakening

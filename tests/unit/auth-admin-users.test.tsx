@@ -3,6 +3,10 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { adminPlugin as coreAdminPlugin } from '@better-auth-ui/core/plugins/admin';
+
+import { UsersPanel, type AdminUsersProps } from '@/components/admin/users/users-panel';
+import { AdminPanelHost } from '@/components/ui/admin-panel';
 
 /**
  * Unit coverage for the admin users directory and inspector. The Better Auth UI hooks are replaced
@@ -11,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 type Perm = boolean | 'pending';
+
 type QueryState = {
   data?: unknown;
   isError?: boolean;
@@ -116,10 +121,6 @@ vi.mock('@better-auth-ui/react/plugins/admin', () => ({
     options.enabled ? h.sessions : disabledQuery,
   useStopImpersonating: () => ({ isPending: false, mutate: vi.fn() }),
 }));
-
-import { adminPlugin as coreAdminPlugin } from '@better-auth-ui/core/plugins/admin';
-import { AdminUsers, type AdminUsersProps } from '@/components/auth/admin/admin-users';
-import { AdminPanelHost } from '@/components/ui/admin-panel';
 
 const ada = {
   id: 'u-ada',
@@ -232,11 +233,11 @@ function renderUsers(props: Partial<AdminUsersProps> = {}) {
       <AdminPanelHost>{node}</AdminPanelHost>
     </QueryClientProvider>
   );
-  const view = render(wrap(<AdminUsers {...merged} />));
+  const view = render(wrap(<UsersPanel {...merged} />));
   return {
     ...view,
     rerenderUsers: (next: Partial<AdminUsersProps> = props) =>
-      view.rerender(wrap(<AdminUsers {...defaultProps} {...next} />)),
+      view.rerender(wrap(<UsersPanel {...defaultProps} {...next} />)),
     user: userEvent.setup(),
   };
 }
@@ -273,7 +274,7 @@ beforeEach(() => {
   setConfig();
 });
 
-describe('AdminUsers directory', () => {
+describe('UsersPanel directory', () => {
   it('lists users with role, status and the pagination range', () => {
     renderUsers();
     expect(screen.queryByRole('heading', { level: 1, name: 'Users' })).toBeNull();
@@ -283,8 +284,8 @@ describe('AdminUsers directory', () => {
     expect(adaRow.getByText('ada@jarxis.test')).toBeTruthy();
     expect(adaRow.getByText('user')).toBeTruthy();
     expect(adaRow.getByText('Active')).toBeTruthy();
-    // A user without a role falls back to the configured default role.
-    expect(within(rows[2]).getByText('user')).toBeTruthy();
+    // Empty stored assignments grant nothing and are labelled explicitly.
+    expect(within(rows[2]).getByText('No role')).toBeTruthy();
     expect(within(rows[2]).getByText('Banned')).toBeTruthy();
     expect(screen.getByText('1-2 of 2')).toBeTruthy();
     expect(lastParams()).toEqual({
@@ -431,7 +432,7 @@ describe('AdminUsers directory', () => {
   });
 });
 
-describe('AdminUsers create user', () => {
+describe('UsersPanel create user', () => {
   async function openCreate(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', { name: 'Create user' }));
     return screen.findByRole('dialog', { name: 'Create user' });
@@ -533,7 +534,7 @@ describe('AdminUsers create user', () => {
   });
 });
 
-describe('AdminUsers inspector profile', () => {
+describe('UsersPanel inspector profile', () => {
   it('saves profile, email and role changes', async () => {
     const { user } = renderUsers();
     const dialog = await openInspector(user);
@@ -734,6 +735,19 @@ describe('AdminUsers inspector profile', () => {
     expect(h.admin.updateUser.mock.calls[0][0].data).toMatchObject({ title: 'Engineer' });
   });
 
+  it('retains unsaved profile fields when switching tabs after the view is split', async () => {
+    const { user } = renderUsers();
+    const dialog = await openInspector(user);
+    const name = within(dialog).getByLabelText('Name');
+    await user.clear(name);
+    await user.type(name, 'Unsaved draft');
+    await user.click(within(dialog).getByRole('tab', { name: 'Sessions' }));
+    await user.click(within(dialog).getByRole('tab', { name: 'Overview' }));
+    expect((within(dialog).getByLabelText('Name') as HTMLInputElement).value).toBe('Unsaved draft');
+    expect(h.admin.updateUser).not.toHaveBeenCalled();
+    expect(h.admin.setRole).not.toHaveBeenCalled();
+  });
+
   it('copies the user id', async () => {
     const { user } = renderUsers();
     const dialog = await openInspector(user);
@@ -756,7 +770,7 @@ describe('AdminUsers inspector profile', () => {
     const { user, rerenderUsers } = renderUsers();
     await user.click(screen.getByRole('button', { name: 'Ada Lovelace' }));
     const dialog = await screen.findByRole('dialog', { name: 'User details' });
-    expect(dialog.querySelectorAll('[data-slot="skeleton"]').length).toBe(3);
+    expect(within(dialog).getByRole('status', { name: 'Loading…' })).toBeTruthy();
 
     h.detail = { data: undefined, isPending: false };
     rerenderUsers();
@@ -788,7 +802,7 @@ describe('AdminUsers inspector profile', () => {
   });
 });
 
-describe('AdminUsers inspector security and danger zone', () => {
+describe('UsersPanel inspector security and danger zone', () => {
   async function openConfirm(
     user: ReturnType<typeof userEvent.setup>,
     action: string,
@@ -988,7 +1002,7 @@ describe('AdminUsers inspector security and danger zone', () => {
   });
 });
 
-describe('AdminUsers inspector sessions', () => {
+describe('UsersPanel inspector sessions', () => {
   const sessions = [
     {
       id: 's1',

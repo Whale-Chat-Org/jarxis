@@ -93,7 +93,7 @@
 /*
  * Design tokens. Tailwind's default scales are cleared so only these names exist;
  * numeric (p-4), raw (text-sm), palette (bg-zinc-800) and arbitrary (p-[13px])
- * classes become unknown and fail `pnpm lint`. See .agent/rules/design-system.md.
+ * classes become unknown and fail `pnpm lint`. See .agents/rules/design-system.md.
  */
 @theme {
   --color-*: initial;
@@ -161,12 +161,10 @@
   --spacing-menu-sm: 10rem;
   --spacing-menu-xs: 12rem;
   --spacing-popover: 18rem;
-  --spacing-col-icon: 2.5rem;
   --spacing-col-actions: 4rem;
   --spacing-col-scope: 7rem;
   --spacing-empty-row: 6rem;
   --spacing-empty-row-lg: 10rem;
-  --spacing-inspector: 52rem;
   --spacing-list-max: 16rem;
   --spacing-list-min: 10rem;
   --spacing-dropdown-max: 24rem;
@@ -467,15 +465,6 @@
   @media (prefers-reduced-motion: reduce) {
     transition: none;
   }
-}
-
-/* Legacy inspector geometry retained for registry token conversion. */
-@utility h-inspector {
-  height: min(var(--spacing-inspector), calc(100vh - var(--spacing-xl)));
-}
-
-@utility grid-rows-inspector {
-  grid-template-rows: auto minmax(0, 1fr);
 }
 
 @utility grid-rows-inspector-form {

@@ -1,31 +1,38 @@
 import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AdminShell } from '@/components/admin/admin-shell';
+import { AppSidebar } from '@/components/admin/app-sidebar';
+import { SiteHeader } from '@/components/admin/site-header';
+import {
+  UsersFiltersSkeleton,
+  UsersListSkeleton,
+} from '@/components/admin/users/table/users-skeleton';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import { flattenStatements, roles } from '@/lib/permissions';
+
 const nav = vi.hoisted(() => ({ pathname: '/admin', cookie: undefined as string | undefined }));
+
 vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname }));
+
 vi.mock('next/headers', () => ({
   cookies: async () => ({
     get: (name: string) =>
       name === 'sidebar_state' && nav.cookie !== undefined ? { value: nav.cookie } : undefined,
   }),
 }));
+
 vi.mock('@/components/theme-toggle', () => ({ ThemeToggle: () => <button>Theme</button> }));
+
 vi.mock('@/components/auth/user/user-button', () => ({
   UserButton: ({ size, side }: { size: string; side: string }) => (
     <span data-testid="user-button" data-size={size} data-side={side} />
   ),
 }));
-vi.mock('@/components/auth/admin/admin-users', () => ({
-  AdminUsers: () => <p>Accounts table</p>,
-}));
 
-import { AccessFiltersSkeleton, AccessListSkeleton } from '@/components/admin/access-skeleton';
-import { AdminShell } from '@/components/admin/admin-shell';
-import { AppSidebar } from '@/components/admin/app-sidebar';
-import { SiteHeader } from '@/components/admin/site-header';
-import { UsersWorkspace } from '@/components/admin/users-workspace';
-import { SidebarProvider } from '@/components/ui/sidebar';
-import { flattenStatements, roles } from '@/lib/permissions';
+vi.mock('@/components/admin/users/users-panel', () => ({
+  UsersPanel: () => <p>Accounts table</p>,
+}));
 
 const ownerPermissions = flattenStatements(roles.owner);
 
@@ -38,8 +45,8 @@ describe('SiteHeader', () => {
   it.each([
     ['/admin', 'General', 'Overview'],
     ['/admin/users', 'General', 'Users'],
-    ['/admin/roles/extra', 'Access control', 'Roles'],
-    ['/admin/ml-providers', 'Proxy', 'Providers'],
+    ['/admin/roles/extra', 'General', 'Roles'],
+    ['/admin/providers', 'General', 'Providers'],
     ['/admin/unknown', 'General', 'Overview'],
     ['/elsewhere', 'Admin', 'Admin'],
   ])('labels %s as %s / %s', (pathname, group, title) => {
@@ -106,23 +113,15 @@ describe('AdminShell', () => {
   });
 });
 
-describe('UsersWorkspace', () => {
-  it('shows the accounts table as its only content', () => {
-    render(<UsersWorkspace currentUserId="me" canManageAccess roles={[]} />);
-    expect(screen.getByText('Accounts table')).toBeTruthy();
-    expect(screen.queryByRole('tab')).toBeNull();
-  });
-});
-
 describe('access skeletons', () => {
   it('renders the filter and list placeholders', () => {
     const { container } = render(
       <>
-        <AccessFiltersSkeleton />
-        <AccessListSkeleton />
+        <UsersFiltersSkeleton />
+        <UsersListSkeleton />
       </>,
     );
-    expect(screen.getByRole('status').textContent).toContain('Loading people…');
+    expect(screen.getByRole('status').textContent).toContain('Loading users…');
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(3);
   });
 });

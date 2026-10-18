@@ -19,7 +19,7 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('next/server', () => ({ connection: mocks.connection }));
 vi.mock('@/lib/initial-owner-setup', () => ({
-  getInitialOwnerSetupStatus: mocks.setupStatus,
+  ensureInitialOwnerSetupStatus: mocks.setupStatus,
 }));
 vi.mock('@/lib/rbac', () => ({ pageGrants: mocks.pageGrants }));
 vi.mock('@/components/landing/landing-page', () => ({ LandingPage: () => <p>Landing</p> }));

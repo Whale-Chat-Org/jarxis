@@ -1,7 +1,9 @@
+import { hashPassword } from 'better-auth/crypto';
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { hashPassword } from 'better-auth/crypto';
 import { db } from '../src/db';
+import { createCredentialAccount } from '../src/lib/credential-account';
+import { SETUP_ADVISORY_LOCK } from '../src/lib/owner-bootstrap-state';
 import type { RoleName } from '../src/lib/permissions';
 // Development-only fixtures. Refuses production and non-local databases.
 // Idempotent by default: only missing fixtures are created, so re-running never duplicates rows or
@@ -33,7 +35,7 @@ const fixtures = [
 try {
   const hash = await hashPassword(password);
   const results = await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(72419831)::text`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(${SETUP_ADVISORY_LOCK})::text`;
     const outcome: Record<string, 'created' | 'reset' | 'exists'> = {};
     for (const f of fixtures) {
       const existing = await tx.user.findUnique({ where: { email: f.email } });
@@ -60,16 +62,7 @@ try {
           where: { id: account.id },
           data: { password: hash, updatedAt: new Date() },
         });
-      else
-        await tx.account.create({
-          data: {
-            id: randomUUID(),
-            userId: user.id,
-            accountId: user.id,
-            providerId: 'credential',
-            password: hash,
-          },
-        });
+      else await createCredentialAccount(tx, user.id, hash);
       // Password changes revoke existing sessions and API token families.
       await tx.tokenFamily.updateMany({
         where: { userId: user.id, revokedAt: null },

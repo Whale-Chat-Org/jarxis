@@ -1,19 +1,24 @@
-import 'server-only';
-import { randomUUID } from 'node:crypto';
+import { db } from '@/db';
+import { adminAuditActions } from '@/lib/audit-actions';
+import { activeOwnerIds } from '@/lib/owner-bootstrap-state';
+import { passwordPolicy } from '@/lib/password-policy';
+import { parseRoles } from '@/lib/permissions';
+import { hasOwnerRole, parseRoleKeys } from '@/lib/role-keys';
+import { isActiveUser } from '@/lib/user-status';
 import {
   APIError,
   createAuthMiddleware,
   getAuthoritativeSessionFromCtx,
   isAPIError,
 } from 'better-auth/api';
-import { db } from '@/db';
-import { parseRoles } from '@/lib/permissions';
-import { isActiveUser } from '@/lib/user-status';
+import { randomUUID } from 'node:crypto';
+import 'server-only';
+import { z } from 'zod';
 
 /**
  * Server-side guards for the Better Auth admin plugin's mutation endpoints.
  *
- * The plugin replaces `src/lib/admin-service.ts`, whose `adminWrite` helper reauthorized inside a
+ * The plugin owns user mutations; the former `adminWrite` helper reauthorized inside a
  * transaction under a PostgreSQL advisory lock. The plugin's endpoints cannot be wrapped that way,
  * so the equivalent rules run here:
  *
@@ -25,11 +30,12 @@ import { isActiveUser } from '@/lib/user-status';
  *
  * Accepted trade-off: the checks run before the mutation without holding a lock, so a narrow
  * window exists between check and commit, and the audit row is written after commit rather than
- * atomically. See `.agent/rules/security.md`.
+ * atomically. See `.agents/rules/security.md`.
  */
 
 /** Endpoints that mutate a user and therefore need owner/last-owner checks. */
 const GUARDED_PATHS = new Set([
+  '/admin/create-user',
   '/admin/set-role',
   '/admin/update-user',
   // The plugin checks only the caller's `user:set-password` grant, never the target's role.
@@ -48,20 +54,6 @@ const ACCESS_REMOVING_PATHS = new Set([
   '/admin/revoke-user-session',
   '/admin/revoke-user-sessions',
 ]);
-
-const AUDIT_ACTIONS: Record<string, string> = {
-  '/admin/create-user': 'user.create',
-  '/admin/update-user': 'user.update',
-  '/admin/set-role': 'user.roles.replace',
-  '/admin/set-user-password': 'user.password.set',
-  '/admin/ban-user': 'user.ban',
-  '/admin/unban-user': 'user.unban',
-  '/admin/remove-user': 'user.delete',
-  '/admin/revoke-user-session': 'user.session.revoke',
-  '/admin/revoke-user-sessions': 'user.sessions.revoke',
-  '/admin/impersonate-user': 'user.impersonate',
-  '/admin/stop-impersonating': 'user.impersonate.stop',
-};
 
 type AdminUserRow = {
   id: string;
@@ -97,15 +89,6 @@ function isOwner(value: unknown) {
   return parseRoles(roleOf(value)).includes('owner');
 }
 
-/** Count owners who can still sign in, so a lapsed or banned owner is not protected. */
-async function activeOwnerIds(): Promise<string[]> {
-  const candidates = await db.user.findMany({
-    where: { emailVerified: true, role: { contains: 'owner' } },
-    select: { id: true, role: true, banned: true, banExpires: true, emailVerified: true },
-  });
-  return candidates.filter((user) => isOwner(user) && isActiveUser(user)).map((user) => user.id);
-}
-
 /** The actor's authoritative session, or a 401. Mirrors the plugin's own admin middleware. */
 async function requireActor(ctx: Parameters<Parameters<typeof createAuthMiddleware>[0]>[0]) {
   const session = await getAuthoritativeSessionFromCtx(ctx);
@@ -120,25 +103,29 @@ function targetIdFrom(body: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-/** Whether this request takes the target's owner access away. */
-function removesOwnerAccess(path: string, body: unknown): boolean {
-  if (ACCESS_REMOVING_PATHS.has(path)) return true;
-  if (path !== '/admin/set-role') {
-    if (path !== '/admin/update-user') return false;
-    const data = (body as { data?: { banned?: unknown } } | undefined)?.data;
-    return data?.banned === true;
-  }
-  const role = (body as { role?: unknown } | undefined)?.role;
-  const requested = Array.isArray(role) ? role : [role];
-  return !requested.includes('owner');
-}
+/** Parse the policy-relevant fields once; the plugin validates its complete endpoint schema. */
+const mutationFields = z
+  .object({
+    role: z.union([z.string(), z.array(z.string())]).optional(),
+    banned: z.boolean().optional(),
+    emailVerified: z.boolean().optional(),
+    banExpires: z.union([z.date(), z.string().datetime()]).nullable().optional(),
+  })
+  .passthrough();
+const mutationBody = z
+  .object({
+    userId: z.string().optional(),
+    role: z.union([z.string(), z.array(z.string())]).optional(),
+    password: z.string().optional(),
+    data: mutationFields.optional(),
+  })
+  .passthrough();
 
-/** Whether this request bans the target (through either the ban endpoint or an update). */
-function bansTarget(path: string, body: unknown): boolean {
-  if (path === '/admin/ban-user') return true;
-  if (path !== '/admin/update-user') return false;
-  const data = (body as { data?: { banned?: unknown } } | undefined)?.data;
-  return data?.banned === true;
+function readMutation(body: unknown) {
+  const result = mutationBody.safeParse(body && typeof body === 'object' ? body : {});
+  if (!result.success)
+    throw new APIError('BAD_REQUEST', { code: 'VALIDATION_ERROR', message: 'Invalid request' });
+  return result.data;
 }
 
 /**
@@ -151,36 +138,62 @@ function bansTarget(path: string, body: unknown): boolean {
  */
 export const adminMutationGuard = createAuthMiddleware(async (ctx) => {
   const path = ctx.path ?? '';
-  if (!GUARDED_PATHS.has(path) && path !== '/admin/set-role') return;
-
+  if (!GUARDED_PATHS.has(path)) return;
   const actor = await requireActor(ctx);
-  const targetId = targetIdFrom(ctx.body);
-  if (!targetId) return;
+  const input = readMutation(ctx.body);
+  const creating = path === '/admin/create-user';
+  if (
+    creating &&
+    input.password !== undefined &&
+    (input.password.length < passwordPolicy.minLength ||
+      input.password.length > passwordPolicy.maxLength)
+  )
+    throw new APIError('BAD_REQUEST', {
+      code: 'INVALID_PASSWORD_LENGTH',
+      message: 'Password must be 12–128 characters',
+    });
 
-  const target = await findUser(targetId);
+  const targetId = targetIdFrom(input);
+  const target = creating
+    ? { id: '', role: 'user', banned: false, banExpires: null, emailVerified: false }
+    : targetId
+      ? await findUser(targetId)
+      : null;
   if (!target) return; // Let the endpoint answer NOT_FOUND.
-
   const actorIsOwner = isOwner(actor);
   const targetIsOwner = isOwner(target);
-
   if (targetIsOwner && !actorIsOwner) throw forbidden('Only owners may modify an owner account');
 
-  if (path === '/admin/set-role') {
-    const role = (ctx.body as { role?: unknown }).role;
-    const requested = (Array.isArray(role) ? role : [role]).map(String);
-    const grantingOwner = requested.includes('owner');
-    if (grantingOwner && !isActiveUser(target))
+  const requestedRole = creating
+    ? (input.role ?? input.data?.role)
+    : path === '/admin/set-role'
+      ? input.role
+      : path === '/admin/update-user'
+        ? input.data?.role
+        : undefined;
+  const next = {
+    ...target,
+    ...(creating || path === '/admin/update-user' ? input.data : {}),
+    role: requestedRole === undefined ? target.role : parseRoleKeys(requestedRole).join(','),
+    banExpires:
+      input.data?.banExpires === undefined
+        ? target.banExpires
+        : input.data.banExpires === null
+          ? null
+          : new Date(input.data.banExpires),
+  };
+  const nextIsOwner = hasOwnerRole(next.role);
+  const removingAccess = ACCESS_REMOVING_PATHS.has(path) || !nextIsOwner || !isActiveUser(next);
+  if (!creating && targetIsOwner && removingAccess) {
+    const owners = await activeOwnerIds(db);
+    if (owners.length <= 1 && owners.includes(target.id))
+      throw conflict('The last active owner cannot be removed or disabled', 'LAST_OWNER');
+  }
+  if (requestedRole !== undefined && nextIsOwner) {
+    if (!actorIsOwner) throw forbidden('Only owners may grant owner access');
+    if (!isActiveUser(next))
       throw conflict('An owner must be active and verified', 'INACTIVE_OWNER');
   }
-
-  if (!targetIsOwner) return;
-
-  const removingAccess = removesOwnerAccess(path, ctx.body) || bansTarget(path, ctx.body);
-  if (!removingAccess) return;
-
-  const owners = await activeOwnerIds();
-  if (owners.length <= 1 && owners.includes(target.id))
-    throw conflict('The last active owner cannot be removed or disabled', 'LAST_OWNER');
 });
 
 /**
@@ -209,7 +222,7 @@ export const userStatusHooks = {
           ? (context as { context?: { session?: { user?: unknown } } }).context?.session?.user
           : undefined;
       if (!isOwner(sessionUser)) throw forbidden('Only owners may delete an owner account');
-      const owners = await activeOwnerIds();
+      const owners = await activeOwnerIds(db);
       if (owners.length <= 1 && owners.includes(user.id))
         throw conflict('The last active owner cannot be deleted', 'LAST_OWNER');
     },
@@ -228,7 +241,15 @@ function auditChanges(path: string, body: unknown): Record<string, unknown> {
   if (path === '/admin/remove-user' || path === '/admin/impersonate-user') out.confirmed = true;
   const data = source.data;
   if (data && typeof data === 'object') {
-    for (const key of ['name', 'email', 'emailVerified', 'banned', 'banReason', 'banExpires']) {
+    for (const key of [
+      'name',
+      'email',
+      'emailVerified',
+      'role',
+      'banned',
+      'banReason',
+      'banExpires',
+    ]) {
       const value = (data as Record<string, unknown>)[key];
       if (value !== undefined) out[key] = value;
     }
@@ -243,7 +264,9 @@ function auditChanges(path: string, body: unknown): Record<string, unknown> {
  */
 export const adminAuditHook = createAuthMiddleware(async (ctx) => {
   const path = ctx.path ?? '';
-  const action = AUDIT_ACTIONS[path];
+  const action = Object.hasOwn(adminAuditActions, path)
+    ? adminAuditActions[path as keyof typeof adminAuditActions]
+    : undefined;
   if (!action) return;
   if (isAPIError(ctx.context.returned)) return;
 
@@ -264,6 +287,8 @@ export const adminAuditHook = createAuthMiddleware(async (ctx) => {
       },
     });
   } catch (error) {
-    ctx.context.logger.error('Admin audit record failed', error);
+    ctx.context.logger.error('Admin audit record failed', {
+      kind: error instanceof Error ? error.name : 'UnknownError',
+    });
   }
 });

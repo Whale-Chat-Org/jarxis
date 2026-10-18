@@ -1,15 +1,8 @@
-import 'dotenv/config';
 import { defineConfig, devices } from '@playwright/test';
+import 'dotenv/config';
+import { assertTestDatabaseUrl } from './scripts/lib/test-database.mjs';
 
-const databaseURL = process.env.DATABASE_URL;
-if (
-  !databaseURL?.includes('jarxis_test') ||
-  !/^\/jarxis_test(?:_[a-z0-9]+)*$/.test(new URL(databaseURL).pathname)
-) {
-  throw new Error(
-    'Acceptance tests require DATABASE_URL pointing to the dedicated jarxis_test database',
-  );
-}
+const databaseURL = assertTestDatabaseUrl(process.env.DATABASE_URL).toString();
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
 const webServerCommand = process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ?? 'pnpm dev:next';
 // The app sends mail to a local Brevo stub so acceptance runs never deliver real email.
@@ -46,6 +39,7 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 120_000,
       env: {
+        NEXT_DIST_DIR: '.next/e2e',
         DATABASE_URL: databaseURL,
         BETTER_AUTH_URL: baseURL,
         TRUST_PROXY: 'true',

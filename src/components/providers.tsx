@@ -1,10 +1,11 @@
 'use client';
+import { passwordPolicy } from '@/lib/password-policy';
 
-import { useState, type PropsWithChildren } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, useTheme } from 'next-themes';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useState, type PropsWithChildren } from 'react';
 
 import { AuthProvider } from '@/components/auth/auth-provider';
 import { Toaster } from '@/components/ui/sonner';
@@ -69,7 +70,8 @@ function AuthProviders({ queryClient, children }: PropsWithChildren<{ queryClien
         plugins={plugins}
         emailAndPassword={{
           requireEmailVerification: true,
-          minPasswordLength: 12,
+          minPasswordLength: passwordPolicy.minLength,
+          maxPasswordLength: passwordPolicy.maxLength,
         }}
         avatar={{
           enabled: true,
@@ -85,8 +87,8 @@ function AuthProviders({ queryClient, children }: PropsWithChildren<{ queryClien
           duration={7000}
           toastOptions={{
             classNames: {
-              title: 'break-words text-foreground',
-              description: 'break-words text-muted-foreground',
+              title: 'wrap-break-word text-foreground',
+              description: 'wrap-break-word text-muted-foreground',
             },
           }}
         />

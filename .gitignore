@@ -17,4 +17,3 @@ coverage
 .mcp.json
 *.log
 *.pid
-src/generated/

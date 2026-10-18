@@ -1,9 +1,9 @@
 import { localization } from '@better-auth-ui/core';
-import { QueryClient } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient } from '../helpers/query-client';
 
 import { AuthProvider } from '@/components/auth/auth-provider';
 import { PasswordStrengthMeter } from '@/components/auth/password-strength-meter';
@@ -47,9 +47,7 @@ function makeClient(
 
 function renderWithAuth(ui: ReactNode, client: object, options: Record<string, unknown> = {}) {
   const navigate = vi.fn();
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   const view = render(
     <AuthProvider
       authClient={client as never}
@@ -201,7 +199,7 @@ describe('SignUp', () => {
     await user.click(submit());
 
     expect(await screen.findByText(localization.auth.passwordCompromised)).toBeTruthy();
-    expect(byLabel(localization.auth.password).value).toBe('');
+    expect(byLabel(localization.auth.password).value).toBe('Mnbvxzlk1pqw!');
     expect(toastMock.error).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
 
@@ -209,7 +207,7 @@ describe('SignUp', () => {
     expect(screen.queryByText(localization.auth.passwordCompromised)).toBeNull();
   });
 
-  it('toasts other sign-up failures', async () => {
+  it('shows other sign-up failures inline', async () => {
     const user = userEvent.setup();
     renderWithAuth(
       <SignUp />,
@@ -221,9 +219,8 @@ describe('SignUp', () => {
     await fillBasics(user);
     await user.click(submit());
 
-    await waitFor(() =>
-      expect(toastMock.error).toHaveBeenCalledWith('An account with this email already exists.'),
-    );
+    expect(await screen.findByText('An account with this email already exists.')).toBeTruthy();
+    expect(toastMock.error).not.toHaveBeenCalled();
   });
 
   it('renders configured additional fields above and below and submits their values', async () => {
@@ -293,7 +290,7 @@ describe('PasswordStrengthMeter', () => {
     const segments = view.container.querySelectorAll('[aria-hidden="true"] > span');
     expect(segments).toHaveLength(4);
     const coloured = Array.from(segments).filter((segment) =>
-      /bg-(destructive|amber-500|sky-500|emerald-500)/.test(segment.className),
+      /bg-(destructive|warning|primary)/.test(segment.className),
     );
     expect(coloured).toHaveLength(filled);
   });

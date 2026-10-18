@@ -1,7 +1,24 @@
-import { render, screen, within } from '@testing-library/react';
+import ApiKeysPage from '@/app/admin/api-keys/page';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import AuditLoading from '@/app/admin/audit/loading';
+import AuditPage from '@/app/admin/audit/page';
+import AdminError from '@/app/admin/error';
+import AdminLayout from '@/app/admin/layout';
+import AdminLoading from '@/app/admin/loading';
+import AdminDashboardPage from '@/app/admin/page';
+import ProvidersLoading from '@/app/admin/providers/loading';
+import ProvidersPage from '@/app/admin/providers/page';
+import RolesLoading from '@/app/admin/roles/loading';
+import RolesPage from '@/app/admin/roles/page';
+import UsersLoading from '@/app/admin/users/loading';
+import UsersPage from '@/app/admin/users/page';
+import { AdminPanelHost } from '@/components/ui/admin-panel';
+import { HttpError } from '@/lib/errors';
+import { flattenStatements, roles } from '@/lib/permissions';
 
 const mocks = vi.hoisted(() => ({
   requirePage: vi.fn(),
@@ -21,7 +38,9 @@ vi.mock('next/navigation', () => ({
   },
   usePathname: () => '/admin',
 }));
+
 vi.mock('@/lib/rbac', () => ({ requirePage: mocks.requirePage, pageGrants: mocks.pageGrants }));
+
 vi.mock('@/db', () => ({
   db: {
     user: { count: mocks.userCount, findMany: mocks.findUsers },
@@ -31,14 +50,17 @@ vi.mock('@/db', () => ({
     $queryRaw: mocks.roleCounts,
   },
 }));
-vi.mock('@/lib/admin-service', () => ({ listAudit: mocks.listAudit }));
+
+vi.mock('@/lib/audit-service', () => ({ listAudit: mocks.listAudit }));
+
 vi.mock('@/components/admin/admin-shell', () => ({
   AdminShell: ({ permissions, children }: { permissions: string[]; children: ReactNode }) => (
     <div data-permissions={permissions.join(',')}>{children}</div>
   ),
 }));
-vi.mock('@/components/admin/users-workspace', () => ({
-  UsersWorkspace: ({
+
+vi.mock('@/components/admin/users/users-panel', () => ({
+  UsersPanel: ({
     currentUserId,
     canManageAccess,
   }: {
@@ -50,32 +72,14 @@ vi.mock('@/components/admin/users-workspace', () => ({
     </p>
   ),
 }));
-vi.mock('@/components/admin/ml-providers-panel', () => ({
-  MlProvidersPanel: ({ canManage }: { canManage: boolean }) => <p>Providers {String(canManage)}</p>,
+
+vi.mock('@/components/admin/provider/providers-panel', () => ({
+  ProvidersPanel: ({ canManage }: { canManage: boolean }) => <p>Providers {String(canManage)}</p>,
 }));
 
-import AuditLoading from '@/app/admin/audit/loading';
-import AuditPage from '@/app/admin/audit/page';
-import AdminError from '@/app/admin/error';
-import AdminLayout from '@/app/admin/layout';
-import AdminLoading from '@/app/admin/loading';
-import MlLoading from '@/app/admin/ml-providers/loading';
-import MlProvidersPage from '@/app/admin/ml-providers/page';
-import AdminDashboardPage from '@/app/admin/page';
-import { AdminPanelHost } from '@/components/ui/admin-panel';
-import PermissionsLoading from '@/app/admin/permissions/loading';
-import PermissionsPage from '@/app/admin/permissions/page';
-import RolesLoading from '@/app/admin/roles/loading';
-import RolesPage from '@/app/admin/roles/page';
-import UsersLoading from '@/app/admin/users/loading';
-import UsersPage from '@/app/admin/users/page';
-import { HttpError } from '@/lib/errors';
-import {
-  adminPermissionCatalog,
-  flattenStatements,
-  permissionCatalog,
-  roles,
-} from '@/lib/permissions';
+vi.mock('@/components/admin/api-keys/api-keys-panel', () => ({
+  ApiKeysPanel: ({ canManage }: { canManage: boolean }) => <p>API Keys {String(canManage)}</p>,
+}));
 
 const ownerPermissions = new Set(flattenStatements(roles.owner));
 
@@ -135,8 +139,7 @@ describe('admin loading skeletons', () => {
   it.each([
     [AdminLoading, 'Loading overview…'],
     [AuditLoading, 'Loading audit log…'],
-    [MlLoading, 'Loading providers…'],
-    [PermissionsLoading, 'Loading permissions…'],
+    [ProvidersLoading, 'Loading providers…'],
     [RolesLoading, 'Loading roles…'],
     [UsersLoading, 'Loading users and access…'],
   ])('renders %#', (Loading, label) => {
@@ -160,15 +163,9 @@ describe('admin overview', () => {
     expect(screen.getByText('8 active, 2 banned')).toBeTruthy();
     expect(screen.getByText('4')).toBeTruthy();
     expect(screen.getByText('7')).toBeTruthy();
-    expect(
-      screen.getByText(
-        String(Object.keys(permissionCatalog).length + Object.keys(adminPermissionCatalog).length),
-      ),
-    ).toBeTruthy();
     expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       '/admin/users',
       '/admin/roles',
-      '/admin/permissions',
       '/admin/audit',
     ]);
     expect(screen.getByText('Recent activity')).toBeTruthy();
@@ -207,38 +204,6 @@ describe('roles page', () => {
     mocks.requirePage.mockResolvedValue(access(['roles:read'], ['viewer']));
     render(<AdminPanelHost>{await RolesPage()}</AdminPanelHost>);
     expect(screen.queryByRole('button', { name: 'Create role' })).toBeNull();
-  });
-});
-
-describe('permissions page', () => {
-  it('reads the catalog from the permissions table', async () => {
-    mocks.requirePage.mockResolvedValue(access(ownerPermissions));
-    mocks.findPermissions.mockResolvedValue([
-      { key: 'user:list', description: 'List users from the database', restricted: false },
-      { key: 'audit:read', description: 'Audit from the database', restricted: true },
-    ]);
-    render(await PermissionsPage());
-    expect(screen.getByText(/^2 permissions in the catalog/)).toBeTruthy();
-    const [administration, application] = screen.getAllByRole('table');
-    expect(within(administration).getByText('List users from the database')).toBeTruthy();
-    const audit = within(application).getByText('audit:read').closest('tr')!;
-    expect(within(audit).getByText('Owner only')).toBeTruthy();
-  });
-
-  it('lists both catalogs with their scope', async () => {
-    mocks.requirePage.mockResolvedValue(access(ownerPermissions));
-    render(await PermissionsPage());
-    expect(mocks.requirePage).toHaveBeenCalledWith('permissions:read');
-    const total =
-      Object.keys(permissionCatalog).length + Object.keys(adminPermissionCatalog).length;
-    expect(screen.getByText(new RegExp(`^${total} permissions in the catalog`))).toBeTruthy();
-    const [administration, application] = screen.getAllByRole('table');
-    const setRole = within(administration).getByText('user:set-role').closest('tr')!;
-    expect(within(setRole).getByText('Owner only')).toBeTruthy();
-    const list = within(administration).getByText('user:list').closest('tr')!;
-    expect(within(list).getByText('Standard')).toBeTruthy();
-    expect(within(application).getAllByText('Owner only').length).toBeGreaterThan(0);
-    expect(within(application).getAllByText('Standard').length).toBeGreaterThan(0);
   });
 });
 
@@ -336,17 +301,17 @@ describe('users page', () => {
   });
 });
 
-describe('ML providers page', () => {
+describe('Providers page', () => {
   it('rejects non-owners', async () => {
     mocks.requirePage.mockResolvedValue(access(ownerPermissions, ['administrator']));
-    await expect(MlProvidersPage()).rejects.toThrow('REDIRECT:/access-denied');
+    await expect(ProvidersPage()).rejects.toThrow('REDIRECT:/access-denied');
     expect(mocks.findSession).not.toHaveBeenCalled();
   });
 
   it('rejects impersonated or missing sessions', async () => {
     mocks.requirePage.mockResolvedValue(access(ownerPermissions));
     mocks.findSession.mockResolvedValue(null);
-    await expect(MlProvidersPage()).rejects.toThrow('REDIRECT:/access-denied');
+    await expect(ProvidersPage()).rejects.toThrow('REDIRECT:/access-denied');
     expect(mocks.findSession).toHaveBeenCalledWith({
       where: { id: 's1', userId: 'u1', impersonatedBy: null },
       select: { id: true },
@@ -356,7 +321,7 @@ describe('ML providers page', () => {
   it('renders the panel for a direct owner session', async () => {
     mocks.requirePage.mockResolvedValue(access(ownerPermissions));
     mocks.findSession.mockResolvedValue({ id: 's1' });
-    render(await MlProvidersPage());
+    render(await ProvidersPage());
     expect(mocks.requirePage).toHaveBeenCalledWith('providers:read');
     expect(screen.getByText('Providers true')).toBeTruthy();
   });
@@ -364,7 +329,39 @@ describe('ML providers page', () => {
   it('renders read-only without the manage grant', async () => {
     mocks.requirePage.mockResolvedValue(access(['providers:read']));
     mocks.findSession.mockResolvedValue({ id: 's1' });
-    render(await MlProvidersPage());
+    render(await ProvidersPage());
     expect(screen.getByText('Providers false')).toBeTruthy();
+  });
+});
+describe('API Keys page', () => {
+  it('rejects non-owners', async () => {
+    mocks.requirePage.mockResolvedValue(access(ownerPermissions, ['administrator']));
+    await expect(ApiKeysPage()).rejects.toThrow('REDIRECT:/access-denied');
+    expect(mocks.findSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects impersonated or missing sessions', async () => {
+    mocks.requirePage.mockResolvedValue(access(ownerPermissions));
+    mocks.findSession.mockResolvedValue(null);
+    await expect(ApiKeysPage()).rejects.toThrow('REDIRECT:/access-denied');
+    expect(mocks.findSession).toHaveBeenCalledWith({
+      where: { id: 's1', userId: 'u1', impersonatedBy: null },
+      select: { id: true },
+    });
+  });
+
+  it('renders the panel for a direct owner session', async () => {
+    mocks.requirePage.mockResolvedValue(access(ownerPermissions));
+    mocks.findSession.mockResolvedValue({ id: 's1' });
+    render(await ApiKeysPage());
+    expect(mocks.requirePage).toHaveBeenCalledWith('providers:read');
+    expect(screen.getByText('API Keys true')).toBeTruthy();
+  });
+
+  it('renders read-only without the manage grant', async () => {
+    mocks.requirePage.mockResolvedValue(access(['providers:read']));
+    mocks.findSession.mockResolvedValue({ id: 's1' });
+    render(await ApiKeysPage());
+    expect(screen.getByText('API Keys false')).toBeTruthy();
   });
 });

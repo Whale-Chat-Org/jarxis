@@ -1,7 +1,7 @@
 export type ContentBlock =
   | { type: 'paragraph' | 'heading' | 'quote' | 'code'; text: string }
   | { type: 'list'; items: string[] };
-export type ChatAttachment = { id: string; name: string; size: number; file?: File };
+export type ChatAttachment = { id: string; name: string; size: number };
 export type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';

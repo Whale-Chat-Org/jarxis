@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HttpError } from '@/lib/errors';
 
@@ -188,7 +188,7 @@ vi.mock('@/db', () => ({
 
 const { setupInput, setupResendInput, setupVerifyInput } = await import('@/lib/setup-validation');
 const {
-  getInitialOwnerSetupStatus,
+  ensureInitialOwnerSetupStatus,
   resendInitialOwnerSetup,
   startInitialOwnerSetup,
   verifyInitialOwnerSetup,
@@ -283,17 +283,17 @@ describe('setup input validation', () => {
 
 describe('availability', () => {
   it('reports available on a fresh installation', async () => {
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('available');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('available');
   });
 
   it('reports completed when the marker exists', async () => {
     store.installationSetup.rows.push({ id: SETUP_MARKER_ID, method: 'web' });
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('completed');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('completed');
   });
 
   it('persists the marker when an owner exists without one', async () => {
     store.user.rows.push({ id: 'u1', role: 'user,owner' });
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('completed');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('completed');
     expect(store.installationSetup.rows).toEqual([
       expect.objectContaining({ id: SETUP_MARKER_ID, completedBy: 'u1' }),
     ]);
@@ -301,13 +301,13 @@ describe('availability', () => {
 
   it('does not treat a role that merely contains "owner" as owner membership', async () => {
     store.user.rows.push({ id: 'u1', role: 'co-owner' });
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('available');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('available');
     expect(store.installationSetup.rows).toHaveLength(0);
   });
 
   it('stays available while a setup request is only pending', async () => {
     await start();
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('available');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('available');
   });
 });
 
@@ -424,7 +424,7 @@ describe('verifying the code', () => {
     expect(queryRaw.mock.calls.flat().some((sql) => JSON.stringify(sql).includes('72419831'))).toBe(
       true,
     );
-    await expect(getInitialOwnerSetupStatus()).resolves.toBe('completed');
+    await expect(ensureInitialOwnerSetupStatus()).resolves.toBe('completed');
   });
 
   it('rejects a wrong code, keeps the request pending and records the attempt', async () => {

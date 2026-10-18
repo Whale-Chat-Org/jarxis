@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 
+import { ThemeToggle } from '@/components/theme-toggle';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -11,7 +12,7 @@ import {
 } from '@/components/ui/breadcrumb';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { ThemeToggle } from '@/components/theme-toggle';
+
 import { NAV_GROUPS } from './nav-items';
 
 /** Resolve the current route to its nav group and item title. */

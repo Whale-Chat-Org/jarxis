@@ -1,6 +1,6 @@
+import { blockText, data } from '@/components/chat/chat-data';
+import { chatReducer, initialState } from '@/components/chat/chat-state';
 import { describe, expect, it } from 'vitest';
-import { blockText, data } from '../../src/components/chat/chat-data';
-import { chatReducer, initialState } from '../../src/components/chat/chat-state';
 
 const conversation = {
   id: 'test',

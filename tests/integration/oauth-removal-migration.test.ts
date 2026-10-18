@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { Client } from 'pg';
 import { expect, it } from 'vitest';
 const migration = readFileSync(

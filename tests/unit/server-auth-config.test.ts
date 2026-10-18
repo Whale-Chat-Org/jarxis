@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIError } from 'better-auth';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
   betterAuth: vi.fn(),
@@ -238,10 +238,10 @@ describe('OpenAPI document', () => {
     expect(doc.paths['/api/v1/auth/logout'].post.security).toEqual([{ bearerAuth: [] }]);
     expect(doc.paths['/api/v1/me'].get.security).toEqual([{ bearerAuth: [] }, { cookieAuth: [] }]);
     expect(doc.paths['/api/llm/v1/chat/completions'].post.security).toEqual([{ gatewayKey: [] }]);
-    expect(doc.paths['/api/admin/ml-providers'].get.security).toEqual([{ cookieAuth: [] }]);
-    expect(doc.paths['/api/admin/ml-providers/{id}/refresh'].post).toBeDefined();
-    expect(doc.paths['/api/admin/ml-providers/{id}/models'].post).toBeDefined();
-    expect(doc.paths['/api/admin/ml-providers/keys/{keyId}'].delete).toBeDefined();
+    expect(doc.paths['/api/admin/providers'].get.security).toEqual([{ cookieAuth: [] }]);
+    expect(doc.paths['/api/admin/providers/{id}/refresh'].post).toBeDefined();
+    expect(doc.paths['/api/admin/providers/{id}/models'].post).toBeDefined();
+    expect(doc.paths['/api/admin/providers/keys/{keyId}'].delete).toBeDefined();
     expect(doc.components.securitySchemes.native).toBeDefined();
     expect(doc.components.securitySchemes.cookieAuth.name).toBe(
       '__Secure-better-auth.session_token',

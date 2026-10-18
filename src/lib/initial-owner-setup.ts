@@ -1,21 +1,23 @@
-import 'server-only';
-import { createHmac, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
-import { hashPassword } from 'better-auth/crypto';
 import { db, Prisma, type Transaction } from '@/db';
+import { hashPassword } from 'better-auth/crypto';
+import { createHmac, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
+import 'server-only';
+import { createCredentialAccount } from './credential-account';
 import { env } from './env';
 import { HttpError } from './errors';
 import { sendMail } from './mailer';
-import { isBanActive } from './user-status';
-import type { SetupInput } from './setup-validation';
 import {
-  recordSetupCompletion as writeMarker,
-  SETUP_MARKER_ID,
   SETUP_ADVISORY_LOCK,
+  SETUP_MARKER_ID,
+  recordSetupCompletion as writeMarker,
 } from './owner-bootstrap-state';
+import { hasOwnerRole } from './role-keys';
+import type { SetupInput } from './setup-validation';
+import { isBanActive } from './user-status';
 export {
   recordSetupCompletion,
-  SETUP_MARKER_ID,
   SETUP_ADVISORY_LOCK,
+  SETUP_MARKER_ID,
 } from './owner-bootstrap-state';
 
 /**
@@ -63,14 +65,6 @@ export type StartedSetup = {
   /** `false` when the account exists but the email could not be delivered; retry via resend. */
   deliverySent: boolean;
 };
-
-/** `role` is a comma-separated list of code-declared names; match elements, never substrings. */
-function hasOwnerRole(role: string | null | undefined) {
-  return (role ?? '')
-    .split(',')
-    .map((name) => name.trim())
-    .includes('owner');
-}
 
 /** Six digits from a cryptographic source, zero-padded so every code is the same length. */
 function generateCode() {
@@ -147,7 +141,7 @@ function missing(): never {
  * has an owner but no marker (for example one bootstrapped by the CLI before this feature, or
  * seeded directly) gets the marker written here so the flow stays closed.
  */
-export async function getInitialOwnerSetupStatus(): Promise<InitialOwnerSetupStatus> {
+export async function ensureInitialOwnerSetupStatus(): Promise<InitialOwnerSetupStatus> {
   return db.$transaction(async (tx) => {
     await lock(tx);
     return (await setupStillOpen(tx)) ? 'available' : 'completed';
@@ -217,16 +211,7 @@ export async function startInitialOwnerSetup(input: SetupInput): Promise<Started
         },
         select: { id: true, email: true },
       });
-      await tx.account.create({
-        data: {
-          id: randomUUID(),
-          userId: user.id,
-          // Better Auth's credential convention: accountId mirrors the user id.
-          accountId: user.id,
-          providerId: 'credential',
-          password,
-        },
-      });
+      await createCredentialAccount(tx, user.id, password);
       const request = await tx.ownerSetupRequest.create({
         data: {
           id: requestId,

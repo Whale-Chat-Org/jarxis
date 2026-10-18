@@ -1,10 +1,10 @@
 import { getReauthenticationSignInURL, localization } from '@better-auth-ui/core';
 import { lastLoginMethodPlugin } from '@better-auth-ui/core/plugins/last-login-method';
-import { QueryClient } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient } from '../helpers/query-client';
 
 import { AuthProvider } from '@/components/auth/auth-provider';
 import { SignIn } from '@/components/auth/sign-in';
@@ -48,9 +48,7 @@ function makeClient(overrides: Record<string, unknown> = {}) {
 
 function renderSignIn(client: ReturnType<typeof makeClient>, options: ProviderOptions = {}) {
   const navigate = vi.fn();
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   const view = render(
     <AuthProvider
       authClient={client as never}
@@ -168,7 +166,7 @@ describe('SignIn', () => {
     expect(passwordInput().type).toBe('password');
   });
 
-  it('toasts a safe message and clears the password on invalid credentials', async () => {
+  it('shows a safe inline message and preserves the password on invalid credentials', async () => {
     const user = userEvent.setup();
     const client = makeClient({
       signIn: {
@@ -183,13 +181,10 @@ describe('SignIn', () => {
     await user.type(passwordInput(), 'wrong-password-1');
     await user.click(submitButton());
 
-    await waitFor(() =>
-      expect(toastMock.error).toHaveBeenCalledWith('The sign-in details are incorrect. Try again.'),
-    );
-    await waitFor(() => expect(passwordInput().value).toBe(''));
+    expect(await screen.findByText('The sign-in details are incorrect. Try again.')).toBeTruthy();
+    expect(passwordInput().value).toBe('wrong-password-1');
+    expect(toastMock.error).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
-    // The toaster owns the message, so no inline duplicate is rendered.
-    expect(screen.queryByText('The sign-in details are incorrect. Try again.')).toBeNull();
   });
 
   it('routes an unverified account to the verify-email view', async () => {

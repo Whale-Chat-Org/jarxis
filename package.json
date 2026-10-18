@@ -24,9 +24,10 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:users": "tsx scripts/seed-users.ts",
     "owner": "tsx scripts/owner.ts",
-    "ml:worker": "NODE_OPTIONS=--conditions=react-server tsx scripts/ml-worker.ts",
+    "providers:worker": "NODE_OPTIONS=--conditions=react-server tsx scripts/providers-worker.ts",
     "postinstall": "prisma generate",
-    "prepare": "husky"
+    "prepare": "husky",
+    "ml:worker": "pnpm providers:worker"
   },
   "dependencies": {
     "@azure/storage-blob": "^12.34.0",
@@ -37,7 +38,6 @@
     "@getbrevo/brevo": "^6.0.3",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
-    "@radix-ui/react-slot": "^1.3.3",
     "@scalar/nextjs-api-reference": "^0.12.7",
     "@shadcn/react": "^0.3.1",
     "@tanstack/react-form": "^1.33.5",

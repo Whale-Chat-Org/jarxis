@@ -2,11 +2,12 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const h = vi.hoisted(() => ({ success: vi.fn() }));
-vi.mock('sonner', () => ({ toast: { success: h.success, error: vi.fn() } }));
-
-import { RolesManager, type RoleView } from '@/components/admin/roles-manager';
+import { RolesPanel, type RoleView } from '@/components/admin/role/roles-panel';
 import { AdminPanelHost } from '@/components/ui/admin-panel';
+
+const h = vi.hoisted(() => ({ success: vi.fn() }));
+
+vi.mock('sonner', () => ({ toast: { success: h.success, error: vi.fn() } }));
 
 const owner: RoleView = {
   key: 'owner',
@@ -54,7 +55,7 @@ beforeEach(() => {
 function renderManager(roles = [owner, viewer, auditor], canManage = true) {
   return render(
     <AdminPanelHost>
-      <RolesManager initialRoles={roles} catalog={catalog} canManage={canManage} />
+      <RolesPanel initialRoles={roles} catalog={catalog} canManage={canManage} />
     </AdminPanelHost>,
   );
 }
@@ -64,7 +65,7 @@ async function menu(user: ReturnType<typeof userEvent.setup>, name: string) {
   return screen.findByRole('menu');
 }
 
-describe('RolesManager', () => {
+describe('RolesPanel', () => {
   it('lists roles in a table with type, permission and user counts', () => {
     renderManager();
     expect(screen.getByRole('table')).toBeTruthy();
@@ -137,6 +138,7 @@ describe('RolesManager', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/admin/roles', {
+      cache: 'no-store',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -163,6 +165,7 @@ describe('RolesManager', () => {
     await user.click(within(panel).getByRole('button', { name: 'Save role' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/admin/roles/viewer', {
+      cache: 'no-store',
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -217,13 +220,15 @@ describe('RolesManager', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('shows the first validation issue or error message in the form', async () => {
+  it('shows fixed safe error copy and retains the draft', async () => {
     const user = userEvent.setup();
     fetchMock
       .mockReturnValueOnce(
         reply(400, { error: { message: 'Invalid request', issues: [{ message: 'Too short' }] } }),
       )
-      .mockReturnValueOnce(reply(409, { error: { message: 'This role name is already in use' } }))
+      .mockReturnValueOnce(
+        reply(409, { error: { code: 'ROLE_NAME_TAKEN', message: 'unsafe server text' } }),
+      )
       .mockReturnValueOnce(reply(500, {}))
       .mockRejectedValueOnce('offline');
     renderManager();
@@ -231,8 +236,8 @@ describe('RolesManager', () => {
     const panel = await screen.findByRole('dialog', { name: 'Edit role' });
     const save = within(panel).getByRole('button', { name: 'Save role' });
     for (const message of [
-      'Too short',
-      'This role name is already in use',
+      'That request was invalid. Check the details and try again.',
+      'This role name is already in use.',
       'Could not save role',
       'Could not save role',
     ]) {
@@ -252,7 +257,7 @@ describe('RolesManager', () => {
     await user.click(row('Auditor'));
     const panel = await screen.findByRole('dialog', { name: 'Edit role' });
     await user.click(within(panel).getByRole('button', { name: 'Save role' }));
-    expect((await within(panel).findByRole('alert')).textContent).toBe('Could not refresh roles');
+    expect((await within(panel).findByRole('alert')).textContent).toBe('Could not save role');
   });
 
   it('blocks deleting a role that users still have and says how many', async () => {
@@ -274,28 +279,29 @@ describe('RolesManager', () => {
     const dialog = await screen.findByRole('alertdialog', { name: 'Delete role?' });
     await user.click(within(dialog).getByRole('button', { name: 'Delete role' }));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Auditor' })).toBeNull());
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/admin/roles/custom_a', { method: 'DELETE' });
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/admin/roles/custom_a', {
+      cache: 'no-store',
+      method: 'DELETE',
+    });
     expect(h.success).toHaveBeenCalledWith('Role deleted');
   });
 
-  it('shows a refused delete above the table', async () => {
+  it('keeps a refused delete open with safe inline errors', async () => {
     const user = userEvent.setup();
     fetchMock
       .mockReturnValueOnce(reply(409, { error: { message: '1 user must change role first' } }))
       .mockReturnValueOnce(reply(500, {}))
       .mockRejectedValueOnce('offline');
     renderManager();
+    await user.click(within(await menu(user, 'Auditor')).getByRole('menuitem', { name: 'Delete' }));
+    const dialog = await screen.findByRole('alertdialog');
     for (const message of [
-      '1 user must change role first',
+      'That conflicts with data that already exists.',
       'Could not delete role',
       'Could not delete role',
     ]) {
-      await user.click(
-        within(await menu(user, 'Auditor')).getByRole('menuitem', { name: 'Delete' }),
-      );
-      const dialog = await screen.findByRole('alertdialog');
       await user.click(within(dialog).getByRole('button', { name: 'Delete role' }));
-      expect((await screen.findByRole('alert')).textContent).toBe(message);
+      await waitFor(() => expect(within(dialog).getByRole('alert').textContent).toBe(message));
     }
   });
 });

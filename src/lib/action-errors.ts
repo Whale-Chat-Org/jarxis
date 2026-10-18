@@ -39,7 +39,12 @@ const CODE_MESSAGES: Record<string, string> = {
   FORBIDDEN: "You don't have permission to do this.",
   TOO_MANY_ATTEMPTS: 'Too many attempts. Wait a moment and try again.',
   TOO_MANY_REQUESTS: 'Too many attempts. Wait a moment and try again.',
-  ROLE_HAS_MEMBERS: 'This role still has members assigned to it.',
+  API_KEY_REVOKED: 'This API key has been revoked. Its name can no longer be changed.',
+  ROLE_IN_USE: 'This role still has members assigned to it.',
+  ROLE_NAME_TAKEN: 'This role name is already in use.',
+  SYSTEM_ROLE: 'This system role cannot be changed.',
+  INVALID_PERMISSION: 'This role contains an unavailable permission.',
+  INVALID_PASSWORD_LENGTH: 'Password must be 12–128 characters.',
   BANNED_USER: 'This account is banned.',
 };
 
@@ -70,7 +75,7 @@ function* errorChain(error: unknown): Generator<ErrorRecord> {
   }
 }
 
-function readErrorCode(error: unknown): string | undefined {
+function actionErrorCode(error: unknown): string | undefined {
   for (const node of errorChain(error)) {
     if (typeof node.code === 'string' && node.code) return node.code.toUpperCase();
   }
@@ -95,7 +100,7 @@ function readErrorStatus(error: unknown): number | undefined {
  * map are never read or returned.
  */
 export function safeActionErrorMessage(error: unknown, fallback: string): string {
-  const code = readErrorCode(error);
+  const code = actionErrorCode(error);
   if (code && Object.hasOwn(CODE_MESSAGES, code)) return CODE_MESSAGES[code];
 
   const status = readErrorStatus(error);

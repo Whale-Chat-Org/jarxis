@@ -6,12 +6,17 @@ import prettier from 'eslint-config-prettier/flat';
 import tailwind from 'eslint-plugin-better-tailwindcss';
 
 /*
- * Hardcoded design values (`.agent/rules/design-system.md` §2). These are AST rules rather
+ * Hardcoded design values (`.agents/rules/design-system.md` §2). These are AST rules rather
  * than class-string rules: they also catch `style={{ padding: '13px' }}`, `fill="#fff"` and
  * template literals, which never reach a Tailwind class validator. `$` anchors matter —
  * without them `'#feedback'` would be read as a hex colour.
  */
 const hardcodedValueRules = [
+  {
+    selector:
+      'Property > Literal[value=/^(?:bg|text|border|ring)-(?:amber|sky|emerald|red|blue|green|zinc|slate|gray|neutral|stone|orange|yellow|lime|teal|cyan|indigo|violet|purple|fuchsia|pink|rose)-[0-9]+(?:\\/[0-9]+)?$/]',
+    message: 'Palette class in a variant map. Use a semantic colour token.',
+  },
   {
     selector: 'Literal[value=/^(?:#[0-9a-fA-F]{3,8}|(?:rgb|hsl|oklch|color-mix)\\(.*)$/]',
     message:
@@ -72,7 +77,7 @@ export default defineConfig([
     },
   },
   /*
-   * Design tokens only (.agent/rules/design-system.md): tokens.css clears Tailwind's default
+   * Design tokens only (.agents/rules/design-system.md): tokens.css clears Tailwind's default
    * spacing/type/colour/container/shadow scales, so unknown classes are ad-hoc values.
    *
    * The restrict patterns are an allowlist-bounded denylist; `-*` families whose Tailwind
@@ -207,7 +212,8 @@ export default defineConfig([
   prettier,
   globalIgnores([
     '.next/**',
-    'src/generated/**',
+    '.claude/**',
+    '.codex/worktrees/**',
     'playwright-report/**',
     'test-results/**',
     'next-env.d.ts',

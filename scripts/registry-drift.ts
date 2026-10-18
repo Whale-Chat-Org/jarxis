@@ -3,7 +3,7 @@
  *
  * Every file under `src/components/ui`, `src/components/auth` and `src/lib/auth` that came from a
  * registry is only allowed to differ from upstream by the design-token conversion documented in
- * `.agent/rules/design-system.md` §2. This script re-fetches each item through the shadcn CLI,
+ * `.agents/rules/design-system.md` §2. This script re-fetches each item through the shadcn CLI,
  * formats both sides with the project's Prettier config, applies that conversion, and prints any
  * residual difference — i.e. a change someone made by hand.
  *
@@ -96,6 +96,8 @@ const FILE_MAP: Record<string, Record<string, string>> = {
  * `@utility` composites in `tokens.css`. Longest key wins so `gap-2.5` never becomes `gap-sm.5`.
  */
 const TOKEN_MAP: Record<string, string> = {
+  // Tailwind v4 canonical alias; both emit overflow-wrap: break-word.
+  'break-words': 'wrap-break-word',
   'p-1.5': 'p-xs',
   'top-3': 'top-md',
   'px-0': 'px-none',
@@ -391,10 +393,6 @@ const TOKEN_MAP: Record<string, string> = {
 };
 
 /**
- * Files with reviewed, intentional deviations from upstream. Each entry is a decision this repo
- * made on purpose; anything not listed here is unexplained and fails the check.
- */
-/**
  * Registry files this repo deliberately does not install, so a missing local file is not mistaken
  * for drift.
  */
@@ -404,15 +402,34 @@ const OMITTED: Record<string, string> = {
   'src/components/auth/settings/security/linked-account.tsx': 'OAuth account linking removed',
   'src/components/auth/settings/security/linked-accounts.tsx': 'OAuth account linking removed',
   'src/components/auth/admin/admin.tsx':
-    "the plugin's own horizontal-tab administration shell; this repo keeps the shadcn Sidebar shell and renders AdminUsers inside it",
+    "the plugin's own horizontal-tab administration shell; this repo keeps the shadcn Sidebar shell and renders UsersPanel inside it",
 };
 
+/**
+ * Files with reviewed, intentional deviations from upstream. Each entry is a decision this repo
+ * made on purpose; anything not listed here is unexplained and fails the check.
+ */
 const REVIEWED: Record<string, string> = {
+  'src/components/auth/settings/security/active-session.tsx':
+    'Shared session device and age presentation helpers preserve current-session sign-out and other-session revoke behavior.',
+  'src/components/admin/users/users-panel.tsx':
+    'Registry directory split into focused list, filters, table, create form, inspector sections and state hooks; shared AdminDataTable, RolePicker and the unified AdminActionPanel frame and lifecycle preserve grants and unchanged stored roles.',
+  'src/components/admin/table/table-state.ts':
+    'Promoted to src/components/admin/table/table-state.ts for all admin pages; page-size changes reset pagination.',
+  'src/components/admin/table/table.ts':
+    'Promoted to src/components/admin/table/table.ts; shared TanStack feature defaults.',
+  'src/components/auth/reset-password.tsx':
+    'Shared PasswordInput; safe inline submit errors retain values; nullable reset tokens are checked before mutation.',
+  'src/components/auth/settings/security/change-password.tsx':
+    'Shared PasswordInput and safe inline submit errors; credentialless SetPassword flow retained.',
+  'src/components/auth/password-strength-meter.tsx':
+    'Semantic destructive/warning/primary colour tokens replace cleared palette classes.',
+
   'src/components/auth/auth.tsx': 'OAuth removed: no social layout props or forwarding',
   'src/components/auth/sign-in.tsx':
-    'OAuth removed: email/password only, no social buttons or separators',
+    'OAuth removed; shared PasswordInput and safe inline failures preserve the entered password without duplicate toasts',
   'src/components/auth/sign-up.tsx':
-    'OAuth removed: email/password only; optional onSignUpSuccess preserves verification priority',
+    'OAuth removed; shared PasswordInput, retained values and safe inline failures; optional onSignUpSuccess preserves verification priority',
   'src/components/auth/settings/security/security-settings.tsx':
     'OAuth removed: no linked accounts card',
   'src/lib/auth/auth-plugin.ts': 'OAuth removed: no social layout props',
@@ -434,8 +451,6 @@ const REVIEWED: Record<string, string> = {
     'profile form initialization is guarded by user id so controlled-field changes are not reset during rerenders',
   'src/lib/auth/two-factor-methods.ts':
     'upstream doc comment dropped when the file was first token-converted',
-  'src/components/auth/admin/admin-users.tsx':
-    'token conversion of the registry user-management table (spacing, type and control sizes, and Button instead of a raw sort button), plus safe allowlisted mutation error copy, inline error presentation on inline-displaying mutations, a copy-user-id clipboard failure toast, and adaptation to the shared responsive admin panel (docked panel on desktop, right sheet on small screens) from @/components/ui/admin-panel: the inspector uses layout="inspector" with its toolbar/header and the shared DialogForm (asChild on the profile form), DialogScrollArea and inspector DialogFooter action bar, so the role editor renders the same frame, nested panels (set password, dangerous-action confirmation) get Back handling from the wrapper, the narrow inspector collapses the profile fields and account metadata to one column with a non-overflowing header and truncated-but-titled email, the plugin tab bar scrolls horizontally within bounds, pending saves or confirmations block accidental dismissal, JAR-18 puts a live role selector in the table with stored custom roles in create and inspector controls, and JAR-25 makes the inspector save call set-role only when the role selection changed, so an untouched multi-role value is not truncated to its first role or audited as a role change',
   'src/components/ui/sidebar.tsx':
     'widths read design tokens instead of raw lengths, and the skeleton width is fixed so server and client markup match',
   'src/components/ui/skeleton.tsx':
@@ -509,7 +524,14 @@ function view(item: string): { path: string; content: string }[] {
 function localPath(item: string, path: string): string | undefined {
   if (item.startsWith('@shadcn/')) return join(ROOT, 'src/components/ui', path.split('/').pop()!);
   const target = path.replace(/^@components\//, 'src/components/').replace(/^@lib\//, 'src/lib/');
-  return target.startsWith('src/') ? join(ROOT, target) : undefined;
+  const promoted: Record<string, string> = {
+    'src/components/auth/server-table-state.ts': 'src/components/admin/table/table-state.ts',
+    'src/components/auth/admin/admin-table.ts': 'src/components/admin/table/table.ts',
+    'src/components/auth/admin/admin-users.tsx': 'src/components/admin/users/users-panel.tsx',
+    'src/components/auth/admin/stop-impersonating.tsx':
+      'src/components/admin/users/action-panel/shared/stop-impersonating.tsx',
+  };
+  return target.startsWith('src/') ? join(ROOT, promoted[target] ?? target) : undefined;
 }
 
 async function format(local: string, code: string): Promise<string> {

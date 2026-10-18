@@ -60,7 +60,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"verified@example.com","password":"your-password"}'
 # Returns accessToken, refreshToken, tokenType, expiresIn, refreshExpiresAt.
-curl http://localhost:3000/api/v1/users -H 'Authorization: Bearer ACCESS_TOKEN'
+curl http://localhost:3000/api/v1/me -H 'Authorization: Bearer ACCESS_TOKEN'
 curl -X POST http://localhost:3000/api/v1/auth/refresh \
   -H 'Content-Type: application/json' -d '{"refreshToken":"REFRESH_TOKEN"}'
 curl -X POST http://localhost:3000/api/v1/auth/logout \
@@ -71,21 +71,21 @@ Access JWTs expire in 10 minutes and use a dedicated HS256 signing secret. Refre
 
 JWT signature/algorithm/issuer/audience/expiry **and** PostgreSQL session/family state are validated on every API request. Logout invalidates current family/session; account disabling and password reset invalidate all sessions/families. Browser sign-out deletes its current backing session, which also invalidates any linked API family. Permissions are not trusted from token claims.
 
-The API supports users, user-role assignments, custom roles, permission catalog, and audit logs under `/api/v1`. Scalar at `/api/docs` and `/api/openapi` includes generated Better Auth documentation and Zod-derived input schemas. Both are owner-only outside development; the original auth plugin schema/reference endpoints are blocked. Error envelopes use `{ error: { code, message } }` (validation adds issue paths/messages), with 401 for absent/invalid authentication and 403 for insufficient permissions.
+The `/api/v1` API supports token login, refresh, logout and `GET me`. Browser-session user mutations use `/api/auth/admin/*`; custom-role CRUD uses `/api/admin/roles`; permission and audit pages use their server-side read services. Scalar at `/api/docs` and `/api/openapi` includes generated Better Auth documentation and Zod-derived input schemas. Both are owner-only outside development; the original auth plugin schema/reference endpoints are blocked. Error envelopes use `{ error: { code, message } }` (validation adds issue paths/messages), with 401 for absent/invalid authentication and 403 for insufficient permissions.
 
-## ML provider pool
+## Provider pool
 
-Owners manage connections and application keys at `/admin/ml-providers`. OpenAI, Anthropic, OpenRouter and custom API-key providers share a priority-ordered model pool.
+Owners manage connections and application keys at `/admin/providers`. OpenAI, Anthropic, OpenRouter and custom API-key providers share a priority-ordered model pool.
 The persistent worker discovers model catalogs on connection and hourly thereafter.
 
 Applications use an owner-issued gateway key with the base URL `/api/llm/v1` for model listing,
 Chat Completions, and stateless Responses, including streaming and tool calls. Upstream credentials
-remain encrypted on the server. See [ML provider deployment and API usage](ml-providers.md)
+remain encrypted on the server. See [Provider deployment and API usage](providers.md)
 for worker setup, supported features, and validation limits.
 
 ## RBAC architecture
 
-User, role and permission management is the Better Auth `admin` plugin; the extra rules this
+The Better Auth `admin` plugin manages users and role assignments; the Prisma role service manages custom roles and editable grants; the extra rules this
 project needs are hooks. See [TECH.md](TECH.md#authorization-and-rbac) for the full picture.
 
 - **System roles** are declared in `src/lib/permissions.ts` and seeded into the `roles` table:
@@ -127,7 +127,7 @@ project needs are hooks. See [TECH.md](TECH.md#authorization-and-rbac) for the f
 - Owner and last-owner checks run in `hooks.before` on the plugin's mutation endpoints using an
   authoritative (database) session read; audit records are written by `hooks.after` after commit.
   **These are not lock-serialized** and administrative mutations are browser-session only — see
-  `.agent/rules/security.md` for the accepted trade-offs.
+  `.agents/rules/security.md` for the accepted trade-offs.
 - Permission checks are database-backed, not cached across requests. Sidebar visibility is not an
   authorization boundary. All pages and endpoints check permissions independently.
 - Single application-wide scope. No tenants, resource ownership rules, social login, MFA, or role
@@ -161,7 +161,7 @@ Monitor `/api/health` (database + Redis), container health, authentication failu
 
 ## CI/CD
 
-`.github/workflows/ci-cd.yml` runs on pull requests to `main` and on pushes to `main`:
+`.github/workflows/ci-cd.yml` runs on pushes to `main` and manual dispatch and on pushes to `main`:
 
 1. **test**: `format:check`, `lint`, `typecheck`, unit tests with coverage, then migrations, seed and integration tests against throwaway Postgres and Redis service containers (`jarxis_test`).
 2. **build**: builds the `runner` and `tools` images for `linux/amd64`. They are kept as workflow artifacts, not pushed.
@@ -199,7 +199,7 @@ pnpm exec playwright install chromium
 DATABASE_URL='<test-url>' pnpm test:e2e
 ```
 
-Design-system rules (tokens and shadcn MCP setup) are in `.agent/rules/design-system.md`. Agent instructions are indexed in `AGENTS.md`, with the rules in `.agent/rules/`.
+Design-system rules (tokens and shadcn MCP setup) are in `.agents/rules/design-system.md`. Agent instructions are indexed in `AGENTS.md`, with the rules in `.agents/rules/`.
 
 `pnpm registry:drift` (network required) re-fetches every copied shadcn / Better Auth UI component and fails if one has drifted from upstream by anything other than the documented token conversion.
 
@@ -210,7 +210,7 @@ The interface is assembled from registry components rather than hand-rolled mark
 - **Primitives** — `src/components/ui/*` are shadcn items (`sidebar`, `breadcrumb`, `alert-dialog`, `tabs`, `radio-group`, `avatar`, `item`, `pagination`, `collapsible`, `field`, `input-group`, …), token-converted.
 - **Auth and account** — every view under `src/components/auth/*` is a Better Auth UI registry item: the `auth` view router, the `user-button` menu, the `theme` plugin, and the `settings` account/security cards.
 - **Admin shell** — the shadcn `Sidebar` composition (`SidebarProvider` → `Sidebar` + `SidebarInset`), a `Breadcrumb` header, and the registry `UserButton` in `SidebarFooter`.
-- **Administration** — the Better Auth `admin` plugin and the `@better-auth-ui/admin` user-management UI.
+- **Administration** — the Better Auth `admin` plugin and the copied Better Auth admin UI user-management UI.
 - **Routes** — `/auth/*`, `/settings/*` and `/admin/*`; see [TECH.md](TECH.md#web-routes).
 
 Never hand-edit a registry file: re-`add` the item, re-apply the token conversion, and verify with `pnpm registry:drift`.

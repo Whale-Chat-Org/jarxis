@@ -1,9 +1,9 @@
 import { localization } from '@better-auth-ui/core';
-import { QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient } from '../helpers/query-client';
 
 import { AuthProvider } from '@/components/auth/auth-provider';
 import { ForgotPassword } from '@/components/auth/forgot-password';
@@ -55,9 +55,7 @@ function renderWithAuth(
   options: Record<string, unknown> = {},
 ) {
   const navigate = vi.fn();
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   const view = render(
     <AuthProvider
       authClient={client as never}

@@ -1,9 +1,7 @@
 import 'server-only';
 
-import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
 import { db, type Transaction } from '@/db';
+import { HttpError } from '@/lib/errors';
 import {
   ac,
   adminPermissionCatalog,
@@ -16,7 +14,9 @@ import {
   roles,
   type RoleName,
 } from '@/lib/permissions';
-import { HttpError } from '@/lib/errors';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 
 const knownGrants = new Set<string>([
   ...Object.keys(permissionCatalog),
@@ -65,7 +65,7 @@ export function validateSystemRoleInput(input: RoleInput) {
 }
 
 /** Drops keys that are unknown to code or owner-only, so a tampered row can never escalate. */
-export function storedPermissions(keys: readonly string[]): string[] {
+function storedPermissions(keys: readonly string[]): string[] {
   return keys.filter((key) => knownGrants.has(key) && !restrictedPermissions.has(key));
 }
 
@@ -90,11 +90,11 @@ export function effectivePermissions(role: StoredRole) {
   return storedPermissions(role.permissions.map((grant) => grant.permissionKey));
 }
 
-/** Users per role key; an empty `role` column counts as the default `user` role. */
+/** Count distinct users per normalized key; absent roles grant nothing. */
 async function roleUserCounts() {
   const rows = await db.$queryRaw<{ key: string; count: bigint }[]>`
-    SELECT btrim(value) AS key, count(*) AS count
-    FROM app_user, unnest(string_to_array(coalesce(nullif(role, ''), 'user'), ',')) AS value
+    SELECT value AS key, count(DISTINCT app_user.id) AS count
+    FROM app_user, unnest(normalized_role_keys(role)) AS value
     GROUP BY 1`;
   return new Map(rows.map((row) => [row.key, Number(row.count)]));
 }
@@ -137,7 +137,7 @@ export async function listRoles() {
 }
 
 /** Better Auth role objects for every editable stored role (custom roles, Viewer, Administrator). */
-export async function loadLiveRoles() {
+async function loadLiveRoles() {
   const stored = await db.role.findMany({
     where: { key: { notIn: [...lockedRoles] } },
     select: { key: true, system: true, permissions: { select: { permissionKey: true } } },

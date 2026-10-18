@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIError } from 'better-auth/api';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
   session: vi.fn(),
@@ -64,6 +64,73 @@ describe('adminMutationGuard', () => {
     await guard({ path: '/admin/list-users', body: {} });
     await guard({ body: {} });
     expect(m.session).not.toHaveBeenCalled();
+  });
+
+  it('guards nested role updates and unverification of the last owner', async () => {
+    actor(owner('o1'));
+    users(owner('o1'));
+    for (const data of [{ role: 'administrator' }, { emailVerified: false }]) {
+      const error = await rejection(
+        guard({ path: '/admin/update-user', body: { userId: 'o1', data } }),
+      );
+      expect(error.body?.code).toBe('LAST_OWNER');
+    }
+    users(owner('o1'), { id: 'u1', role: 'user', ...active, emailVerified: false });
+    expect(
+      (
+        await rejection(
+          guard({ path: '/admin/update-user', body: { userId: 'u1', data: { role: 'owner' } } }),
+        )
+      ).body?.code,
+    ).toBe('INACTIVE_OWNER');
+    await guard({
+      path: '/admin/update-user',
+      body: { userId: 'u1', data: { role: 'owner', emailVerified: true } },
+    });
+  });
+
+  it('enforces owner eligibility on both create-user role shapes', async () => {
+    actor(owner('o1'));
+    for (const body of [
+      { role: 'owner' },
+      { data: { role: ['owner'] } },
+      { role: 'owner', data: { emailVerified: true, banned: true } },
+    ]) {
+      expect((await rejection(guard({ path: '/admin/create-user', body }))).body?.code).toBe(
+        'INACTIVE_OWNER',
+      );
+    }
+    await guard({
+      path: '/admin/create-user',
+      body: { role: 'owner', data: { emailVerified: true } },
+    });
+    actor(admin('a1'));
+    expect(
+      (
+        await rejection(
+          guard({
+            path: '/admin/create-user',
+            body: { role: 'owner', data: { emailVerified: true } },
+          }),
+        )
+      ).body?.code,
+    ).toBe('OWNER_PROTECTED');
+  });
+
+  it('checks supplied create-user passwords but permits credentialless accounts', async () => {
+    actor(owner('o1'));
+    for (const length of [0, 1, 11, 129]) {
+      expect(
+        (
+          await rejection(
+            guard({ path: '/admin/create-user', body: { password: 'p'.repeat(length) } }),
+          )
+        ).body?.code,
+      ).toBe('INVALID_PASSWORD_LENGTH');
+    }
+    for (const length of [12, 128])
+      await guard({ path: '/admin/create-user', body: { password: 'p'.repeat(length) } });
+    await guard({ path: '/admin/create-user', body: {} });
   });
 
   it('requires an authoritative session for guarded endpoints', async () => {
@@ -342,6 +409,6 @@ describe('adminAuditHook', () => {
     m.session.mockResolvedValue({ user: { id: 'o1' } });
     m.auditCreate.mockRejectedValue(new Error('db down'));
     await expect(audit(ctx('/admin/ban-user', { userId: 'u1' }))).resolves.toBeUndefined();
-    expect(logger.error).toHaveBeenCalledWith('Admin audit record failed', expect.any(Error));
+    expect(logger.error).toHaveBeenCalledWith('Admin audit record failed', { kind: 'Error' });
   });
 });

@@ -1,8 +1,9 @@
+import { APIError } from 'better-auth';
 import 'server-only';
 import { z } from 'zod';
-import { APIError } from 'better-auth';
-import { HttpError } from './errors';
+import { readBoundedBody } from './bounded-body';
 import { env } from './env';
+import { HttpError } from './errors';
 export function assertOrigin(req: Request) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return;
   const origin = req.headers.get('origin');
@@ -18,23 +19,13 @@ export function assertOrigin(req: Request) {
 export async function body<T>(req: Request, schema: z.ZodType<T>): Promise<T> {
   if (!req.headers.get('content-type')?.startsWith('application/json'))
     throw new HttpError(415, 'CONTENT_TYPE', 'Expected application/json');
-  const reader = req.body?.getReader();
-  if (!reader) throw new HttpError(400, 'INVALID_JSON', 'Request body required');
-  let length = 0;
-  const chunks: Uint8Array[] = [];
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    length += value.length;
-    if (length > 16384) {
-      await reader.cancel();
-      throw new HttpError(413, 'TOO_LARGE', 'Request is too large');
-    }
-    chunks.push(value);
-  }
+  if (!req.body) throw new HttpError(400, 'INVALID_JSON', 'Request body required');
+  const bytes = await readBoundedBody(req.body, 16384, {
+    tooLarge: () => new HttpError(413, 'TOO_LARGE', 'Request is too large'),
+  });
   let json;
   try {
-    json = JSON.parse(Buffer.concat(chunks).toString());
+    json = JSON.parse(bytes.toString());
   } catch {
     throw new HttpError(400, 'INVALID_JSON', 'Invalid JSON body');
   }

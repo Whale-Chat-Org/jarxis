@@ -1,14 +1,16 @@
-import { betterAuth, APIError } from 'better-auth';
-import { prismaAdapter } from '@better-auth/prisma-adapter';
-import { admin } from 'better-auth/plugins/admin';
-import { openAPI } from 'better-auth/plugins';
 import { db } from '@/db';
+import { passwordPolicy } from '@/lib/password-policy';
+import { prismaAdapter } from '@better-auth/prisma-adapter';
+import { APIError, betterAuth } from 'better-auth';
+import { openAPI } from 'better-auth/plugins';
+import { admin } from 'better-auth/plugins/admin';
+import { disabledAuthPaths } from './auth-paths';
+import { adminAuditHook, adminMutationGuard, userStatusHooks } from './auth/admin-guards';
 import { env } from './env';
 import { sendMail } from './mailer';
 import { ac, adminRoles, defaultRole } from './permissions';
 import { liveAdminRoles } from './roles';
 import { isActiveUser } from './user-status';
-import { adminAuditHook, adminMutationGuard, userStatusHooks } from './auth/admin-guards';
 let instance: ReturnType<typeof makeAuth> | undefined;
 function makeAuth() {
   const e = env();
@@ -22,19 +24,13 @@ function makeAuth() {
     appName: 'Jarxis',
     baseURL: e.BETTER_AUTH_URL,
     secret: e.BETTER_AUTH_SECRET,
-    disabledPaths: [
-      '/sign-in/social',
-      '/link-social',
-      '/unlink-account',
-      '/get-access-token',
-      '/refresh-token',
-      '/account-info',
-    ],
+    disabledPaths: disabledAuthPaths,
     trustedOrigins: [new URL(e.BETTER_AUTH_URL).origin],
     database: prismaAdapter(db, { provider: 'postgresql' }),
     emailAndPassword: {
       enabled: true,
-      minPasswordLength: 12,
+      minPasswordLength: passwordPolicy.minLength,
+      maxPasswordLength: passwordPolicy.maxLength,
       requireEmailVerification: true,
       revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) =>

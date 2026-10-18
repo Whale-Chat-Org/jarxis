@@ -1,9 +1,9 @@
 import type { AdditionalField } from '@better-auth-ui/core';
-import { QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient } from '../helpers/query-client';
 
 import {
   focusFirstInvalidAuthFormControl,
@@ -23,9 +23,7 @@ function TestLink({ href, children }: { href: string; children?: ReactNode }) {
 }
 
 function withAuth(ui: ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   return render(
     <AuthProvider
       authClient={{ getSession: vi.fn(async () => null) } as never}

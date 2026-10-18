@@ -4,14 +4,17 @@ import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { UserRoleCell } from '@/components/admin/users/table/user-role-cell';
+
 const h = vi.hoisted(() => ({ setRole: vi.fn(), success: vi.fn(), error: vi.fn() }));
+
 vi.mock('sonner', () => ({ toast: { success: h.success, error: h.error } }));
+
 vi.mock('@better-auth-ui/react', () => ({ useAuth: () => ({ authClient: {} }) }));
+
 vi.mock('@better-auth-ui/core/plugins/admin', () => ({
   setAdminUserRoleOptions: () => ({ mutationFn: h.setRole }),
 }));
-
-import { UserRoleCell } from '@/components/admin/user-role-cell';
 
 const roles = [
   {
@@ -80,9 +83,9 @@ describe('UserRoleCell', () => {
     expect(screen.queryByText('You')).toBeNull();
   });
 
-  it('falls back to User for an empty role and the raw key for an unknown one', () => {
+  it('shows No role for an empty assignment and the raw key for an unknown one', () => {
     const { unmount } = renderCell({ canManageAccess: false, user: { ...member, role: null } });
-    expect(screen.getByText('User')).toBeTruthy();
+    expect(screen.getByText('No role')).toBeTruthy();
     unmount();
     renderCell({ canManageAccess: false, user: { ...member, role: 'custom_gone' } });
     expect(screen.getByText('custom_gone')).toBeTruthy();

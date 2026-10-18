@@ -9,7 +9,6 @@ import {
   LoadingRegion,
   PageHeaderSkeleton,
   PaginationSkeleton,
-  RoleCardsSkeleton,
   SettingsSkeleton,
   StatCardsSkeleton,
   TableSkeleton,
@@ -44,10 +43,6 @@ describe('skeletons', () => {
     expect(count(container, '[data-slot="card"]')).toBe(4);
     rerender(<StatCardsSkeleton count={2} />);
     expect(count(container, '[data-slot="card"]')).toBe(2);
-    rerender(<RoleCardsSkeleton count={3} />);
-    expect(count(container, '[data-slot="card"]')).toBe(3);
-    rerender(<RoleCardsSkeleton />);
-    expect(count(container, '[data-slot="card"]')).toBe(4);
     rerender(<ListCardSkeleton />);
     expect(count(container, '[data-slot="card-content"] > div')).toBe(5);
     rerender(<ListCardSkeleton lines={2} />);
