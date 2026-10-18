@@ -30,6 +30,7 @@
     "ml:worker": "pnpm providers:worker"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1152.0",
     "@azure/storage-blob": "^12.34.0",
     "@base-ui/react": "^1.8.0",
     "@better-auth-ui/core": "^1.7.26",

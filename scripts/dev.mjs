@@ -9,6 +9,8 @@
  * - Fixture users are created only when missing (see scripts/seed-users.ts), so nothing duplicates.
  */
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { parseEnv } from 'node:util';
 
 import { prepareEnv } from './lib/prepare-env.mjs';
 
@@ -59,8 +61,16 @@ step('Installing dependencies');
 run('pnpm', ['install', '--frozen-lockfile']);
 run('pnpm', ['db:generate']);
 
-step('Starting PostgreSQL, Redis and Azurite');
-run('docker', [...compose, 'up', '-d', '--wait', 'postgres', 'redis', 'azurite']);
+const localEnv = { ...parseEnv(readFileSync('.env', 'utf8')), ...process.env };
+const storageServices = [
+  ...(localEnv.S3_BUCKET ? ['minio'] : []),
+  ...(localEnv.AZURE_STORAGE_CONNECTION_STRING ? ['azurite'] : []),
+];
+step('Starting PostgreSQL, Redis and configured object storage');
+run('docker', [...compose, 'up', '-d', '--wait', 'postgres', 'redis', ...storageServices]);
+
+step('Preparing local MinIO bucket');
+run('node', ['scripts/setup-minio.mjs']);
 
 step('Applying migrations');
 run('pnpm', ['db:migrate']);

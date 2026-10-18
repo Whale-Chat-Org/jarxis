@@ -5,6 +5,7 @@ services:
   redis:
     ports: ['127.0.0.1:${REDIS_PORT:-56379}:6379']
   azurite:
+    profiles: [azure]
     image: mcr.microsoft.com/azure-storage/azurite:latest
     command: [azurite-blob, --blobHost, 0.0.0.0, --location, /data, --skipApiVersionCheck]
     ports: ['127.0.0.1:${AZURITE_BLOB_PORT:-10000}:10000']
@@ -21,13 +22,37 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
+  minio:
+    container_name: jarxis-storage
+    image: jarxis-minio:local
+    build: { context: ., dockerfile: Dockerfile.minio }
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:?Set local AWS_ACCESS_KEY_ID in .env}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?Set local AWS_SECRET_ACCESS_KEY in .env}
+    ports: ['127.0.0.1:${MINIO_PORT:-9000}:9000']
+    volumes: [minio-data:/data]
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:9000/minio/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
   app:
     build: { target: tools }
-    command: pnpm dev:next --hostname 0.0.0.0
+    command: sh -c "node scripts/setup-minio.mjs && pnpm dev:next --hostname 0.0.0.0"
     environment:
       NODE_ENV: development
-      AZURE_STORAGE_CONNECTION_STRING: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      S3_ENDPOINT: http://minio:9000
+      # Host Azurite connection strings use localhost; opt in with its container-network URL.
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_DOCKER_CONNECTION_STRING:-${AZURE_STORAGE_CONNECTION_STRING:-}}
     depends_on:
-      azurite: { condition: service_healthy }
+      minio: { condition: service_healthy }
 volumes:
+  minio-data:
   azurite-data:

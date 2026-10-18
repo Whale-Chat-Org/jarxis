@@ -60,7 +60,16 @@ beforeEach(() => {
   m.redisArgs.length = 0;
   m.prismaArgs.length = 0;
   m.adapterArgs.length = 0;
-  for (const key of ['TRUST_PROXY', 'AZURE_STORAGE_CONNECTION_STRING', 'AZURE_STORAGE_CONTAINER'])
+  for (const key of [
+    'TRUST_PROXY',
+    'STORAGE_PROVIDER',
+    'S3_BUCKET',
+    'S3_REGION',
+    'S3_ENDPOINT',
+    'S3_FORCE_PATH_STYLE',
+    'AZURE_STORAGE_CONNECTION_STRING',
+    'AZURE_STORAGE_CONTAINER',
+  ])
     delete process.env[key];
   Object.assign(process.env, BASE_ENV);
 });
@@ -90,18 +99,73 @@ describe('env', () => {
     expect(() => env()).toThrow('JWT_SECRET must differ from BETTER_AUTH_SECRET');
   });
 
-  it('parses avatar storage settings lazily with a private default container', async () => {
-    const { avatarEnv } = await import('@/lib/env');
-    expect(() => avatarEnv()).toThrow();
+  it('detects Azure lazily with a private default container', async () => {
+    const { storageEnv } = await import('@/lib/env');
+    expect(() => storageEnv()).toThrow();
     process.env.AZURE_STORAGE_CONNECTION_STRING = 'UseDevelopmentStorage=true';
-    expect(avatarEnv().AZURE_STORAGE_CONTAINER).toBe('profile-photos');
+    expect(storageEnv()).toEqual([
+      {
+        STORAGE_PROVIDER: 'azure',
+        AZURE_STORAGE_CONNECTION_STRING: 'UseDevelopmentStorage=true',
+        AZURE_STORAGE_CONTAINER: 'jarxis-storage',
+      },
+    ]);
   });
 
-  it('rejects an invalid container name', async () => {
-    process.env.AZURE_STORAGE_CONNECTION_STRING = 'UseDevelopmentStorage=true';
-    process.env.AZURE_STORAGE_CONTAINER = 'Bad_Name';
-    const { avatarEnv } = await import('@/lib/env');
-    expect(() => avatarEnv()).toThrow();
+  it('detects S3 without requiring Azure configuration', async () => {
+    const { env, storageEnv } = await import('@/lib/env');
+    expect(() => env()).not.toThrow();
+    process.env.S3_BUCKET = 'avatars';
+    process.env.S3_REGION = 'us-east-1';
+    process.env.S3_ENDPOINT = '';
+    const config = storageEnv();
+    expect(config).toEqual([
+      {
+        STORAGE_PROVIDER: 's3',
+        S3_BUCKET: 'avatars',
+        S3_REGION: 'us-east-1',
+        S3_ENDPOINT: undefined,
+        S3_FORCE_PATH_STYLE: false,
+      },
+    ]);
+    process.env.S3_BUCKET = '';
+    expect(storageEnv()).toBe(config);
+  });
+
+  it('detects both configured providers', async () => {
+    Object.assign(process.env, {
+      AZURE_STORAGE_CONNECTION_STRING: 'UseDevelopmentStorage=true',
+      S3_BUCKET: 'avatars',
+      S3_REGION: 'us-east-1',
+      S3_ENDPOINT: 'http://localhost:9000',
+      S3_FORCE_PATH_STYLE: 'true',
+    });
+    const { storageEnv } = await import('@/lib/env');
+    expect(storageEnv().map((config) => config.STORAGE_PROVIDER)).toEqual(['azure', 's3']);
+    expect(storageEnv()[1]).toMatchObject({ S3_FORCE_PATH_STYLE: true });
+  });
+
+  it.each([
+    { S3_BUCKET: 'avatars' },
+    { S3_BUCKET: 'avatars', S3_REGION: 'us-east-1', S3_ENDPOINT: 'bad' },
+    { S3_BUCKET: 'avatars', S3_REGION: 'us-east-1', S3_FORCE_PATH_STYLE: 'yes' },
+    {
+      AZURE_STORAGE_CONNECTION_STRING: 'UseDevelopmentStorage=true',
+      AZURE_STORAGE_CONTAINER: 'Bad_Name',
+    },
+  ])('rejects invalid configured storage: %j', async (values) => {
+    Object.assign(process.env, values);
+    const { storageEnv } = await import('@/lib/env');
+    expect(() => storageEnv()).toThrow();
+  });
+
+  it('ignores settings for a backend without a bucket or connection string', async () => {
+    Object.assign(process.env, {
+      AZURE_STORAGE_CONNECTION_STRING: 'UseDevelopmentStorage=true',
+      S3_ENDPOINT: 'bad',
+    });
+    const { storageEnv } = await import('@/lib/env');
+    expect(storageEnv()).toHaveLength(1);
   });
 });
 
