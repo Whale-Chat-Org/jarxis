@@ -13,6 +13,10 @@ import { flattenStatements, roles } from '@/lib/permissions';
 
 const nav = vi.hoisted(() => ({ pathname: '/admin', cookie: undefined as string | undefined }));
 
+vi.mock('@/components/admin/use-navigation-permissions', () => ({
+  useNavigationPermissions: (permissions: string[]) => permissions,
+}));
+
 vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname }));
 
 vi.mock('next/headers', () => ({
@@ -70,7 +74,7 @@ describe('AppSidebar', () => {
     nav.pathname = '/admin/users/123';
     render(
       <SidebarProvider>
-        <AppSidebar permissions={['dashboard:read', 'users:read']} />
+        <AppSidebar permissions={['dashboard:read', 'users:read', 'user:list']} />
       </SidebarProvider>,
     );
     expect(screen.getByRole('link', { name: 'Jarxis Admin' }).getAttribute('href')).toBe('/admin');

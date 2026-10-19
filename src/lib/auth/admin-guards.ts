@@ -40,6 +40,7 @@ const GUARDED_PATHS = new Set([
   '/admin/update-user',
   // The plugin checks only the caller's `user:set-password` grant, never the target's role.
   '/admin/set-user-password',
+  '/admin/impersonate-user',
   '/admin/ban-user',
   '/admin/unban-user',
   '/admin/remove-user',
@@ -163,6 +164,22 @@ export const adminMutationGuard = createAuthMiddleware(async (ctx) => {
   const actorIsOwner = isOwner(actor);
   const targetIsOwner = isOwner(target);
   if (targetIsOwner && !actorIsOwner) throw forbidden('Only owners may modify an owner account');
+
+  if (
+    (path === '/admin/impersonate-user' || path === '/admin/set-user-password') &&
+    !parseRoles(roleOf(actor)).some((role) => role === 'owner' || role === 'administrator')
+  ) {
+    // Load lazily: rbac resolves sessions through auth, which installs this middleware.
+    const { grants } = await import('@/lib/rbac');
+    const [actorGrants, targetGrants] = await Promise.all([grants(actor.id), grants(target.id)]);
+    if (
+      [...targetGrants.permissions].some((permission) => !actorGrants.permissions.has(permission))
+    )
+      throw new APIError('FORBIDDEN', {
+        code: 'TARGET_PERMISSIONS_EXCEED_ACTOR',
+        message: 'The target has permissions you do not hold',
+      });
+  }
 
   const requestedRole = creating
     ? (input.role ?? input.data?.role)

@@ -22,6 +22,19 @@ describe('Provider navigation', () => {
     expect(visibleNavGroups(['providers:read']).flatMap((group) => group.items)).toContain(item);
   });
 
+  it.each([
+    [[], false],
+    [['users:read'], false],
+    [['user:list'], false],
+    [['users:read', 'user:list'], true],
+  ] as const)('requires both Users permissions: %j', (permissions, visible) => {
+    expect(
+      visibleNavGroups(permissions).some((group) =>
+        group.items.some((item) => item.href === '/admin/users'),
+      ),
+    ).toBe(visible);
+  });
+
   it('drops General when no navigation items are permitted', () => {
     expect(visibleNavGroups([])).toEqual([]);
   });

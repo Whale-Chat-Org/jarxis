@@ -49,7 +49,20 @@ export function handler<TContext = unknown>(
       return await fn(req, context as TContext);
     } catch (e) {
       if (e instanceof HttpError)
-        return json({ error: { code: e.code, message: e.message } }, e.status);
+        return json(
+          {
+            error: {
+              code: e.code,
+              message: e.message,
+              ...(e.code === 'ROLE_IN_USE' &&
+              Number.isSafeInteger(e.details?.userCount) &&
+              e.details!.userCount > 0
+                ? { userCount: e.details!.userCount }
+                : {}),
+            },
+          },
+          e.status,
+        );
       if (e instanceof z.ZodError)
         return json(
           {

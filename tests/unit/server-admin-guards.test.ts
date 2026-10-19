@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
   session: vi.fn(),
+  grants: vi.fn(),
   findUnique: vi.fn(),
   findMany: vi.fn(),
   updateMany: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('better-auth/api', async (importOriginal) => ({
   createAuthMiddleware: (fn: unknown) => fn,
   getAuthoritativeSessionFromCtx: m.session,
 }));
+vi.mock('@/lib/rbac', () => ({ grants: m.grants }));
 vi.mock('@/db', () => ({
   db: {
     user: { findUnique: m.findUnique, findMany: m.findMany },
@@ -178,6 +180,43 @@ describe('adminMutationGuard', () => {
     // Setting a password does not remove access, so the last-owner count is never consulted.
     expect(m.findMany).not.toHaveBeenCalled();
   });
+
+  it.each(['/admin/impersonate-user', '/admin/set-user-password'])(
+    'blocks broader target grants on %s and permits subsets',
+    async (path) => {
+      actor({ id: 'narrow', role: 'custom_narrow' });
+      users({ id: 'broad', role: 'custom_broad', ...active });
+      const permissions = new Map([
+        ['narrow', new Set(['user:impersonate', 'user:set-password'])],
+        ['broad', new Set(['audit:read'])],
+      ]);
+      m.grants.mockImplementation(async (id: string) => ({ permissions: permissions.get(id) }));
+      const body = { userId: 'broad', newPassword: 'p'.repeat(16) };
+      const error = await rejection(guard({ path, body }));
+      expect(error.statusCode).toBe(403);
+      expect(error.body?.code).toBe('TARGET_PERMISSIONS_EXCEED_ACTOR');
+      permissions.set('broad', new Set(['user:impersonate']));
+      await guard({ path, body });
+      permissions.set('broad', permissions.get('narrow')!);
+      await guard({ path, body });
+      permissions.set('narrow', new Set());
+      await expect(guard({ path, body })).rejects.toMatchObject({ statusCode: 403 });
+      permissions.set('broad', new Set());
+      await guard({ path, body });
+    },
+  );
+
+  it.each(['owner', 'administrator', 'custom_narrow,administrator'])(
+    'preserves %s caller behavior on sensitive endpoints',
+    async (role) => {
+      actor({ id: 'actor', role });
+      users({ id: 'target', role: 'custom_broad', ...active });
+      for (const path of ['/admin/impersonate-user', '/admin/set-user-password']) {
+        await guard({ path, body: { userId: 'target' } });
+      }
+      expect(m.grants).not.toHaveBeenCalled();
+    },
+  );
 
   it('treats an actor with an unknown role as a non-owner (fail closed)', async () => {
     actor({ id: 'x', role: 'superuser' });

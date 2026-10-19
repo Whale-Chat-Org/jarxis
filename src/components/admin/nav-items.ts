@@ -8,12 +8,13 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import type { Permission } from '@/lib/permissions';
+import type { Permission, adminPermissionCatalog } from '@/lib/permissions';
 
 export type NavItem = {
   title: string;
   href: string;
   permission: Permission;
+  additionalPermission?: keyof typeof adminPermissionCatalog;
   icon: LucideIcon;
 };
 
@@ -38,6 +39,7 @@ export const NAV_GROUPS: NavGroup[] = [
         title: 'Users',
         href: '/admin/users',
         permission: 'users:read',
+        additionalPermission: 'user:list',
         icon: UsersIcon,
       },
       {
@@ -72,7 +74,11 @@ export const NAV_GROUPS: NavGroup[] = [
 export function visibleNavGroups(permissions: readonly string[]) {
   return NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => permissions.includes(item.permission)),
+    items: group.items.filter(
+      (item) =>
+        permissions.includes(item.permission) &&
+        (!item.additionalPermission || permissions.includes(item.additionalPermission)),
+    ),
   })).filter((group) => group.items.length > 0);
 }
 

@@ -294,6 +294,21 @@ describe('users page', () => {
     expect(screen.getByText('Workspace u1 true')).toBeTruthy();
   });
 
+  it.each([
+    [[], false],
+    [['users:read'], false],
+    [['user:list'], false],
+    [['users:read', 'user:list'], true],
+  ] as const)('requires both Users permissions: %j', async (permissions, allowed) => {
+    mocks.requirePage.mockImplementation(async (permission: string) => {
+      if (!(permissions as readonly string[]).includes(permission))
+        throw new Error('REDIRECT:/access-denied');
+      return access([...permissions]);
+    });
+    if (allowed) await expect(UsersPage()).resolves.toBeTruthy();
+    else await expect(UsersPage()).rejects.toThrow('REDIRECT:/access-denied');
+  });
+
   it('denies role management to non-owners', async () => {
     mocks.requirePage.mockResolvedValue(access(ownerPermissions, ['administrator']));
     render(await UsersPage());

@@ -11,3 +11,5 @@ export const roleViewSchema = z.object({
 });
 export type RoleView = z.infer<typeof roleViewSchema>;
 export const rolesResponseSchema = z.object({ roles: z.array(roleViewSchema) });
+
+export const grantsResponseSchema = z.object({ permissions: z.array(z.string()) });

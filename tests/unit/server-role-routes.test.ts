@@ -75,6 +75,15 @@ describe('/api/admin/roles', () => {
 });
 
 describe('/api/admin/roles/[key]', () => {
+  it('returns a safe role-in-use count', async () => {
+    m.deleteRole.mockRejectedValueOnce(
+      new HttpError(409, 'ROLE_IN_USE', 'Role has members', { userCount: 3 }),
+    );
+    const response = await roleByKey.DELETE(send('DELETE'), context);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: 'ROLE_IN_USE', userCount: 3 } });
+  });
+
   it('updates and deletes the keyed role', async () => {
     m.updateRole.mockResolvedValue({ key: 'custom_a', name: 'Auditor' });
     const updated = await roleByKey.PATCH(send('PATCH', input), context);

@@ -286,6 +286,22 @@ describe('RolesPanel', () => {
     expect(h.success).toHaveBeenCalledWith('Role deleted');
   });
 
+  it.each([1, 3])('shows the live member count %s when deletion is refused', async (userCount) => {
+    const user = userEvent.setup();
+    fetchMock.mockReturnValueOnce(
+      reply(409, { error: { code: 'ROLE_IN_USE', userCount, message: 'unsafe server text' } }),
+    );
+    renderManager();
+    await user.click(within(await menu(user, 'Auditor')).getByRole('menuitem', { name: 'Delete' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete role' }));
+    await waitFor(() =>
+      expect(within(dialog).getByRole('alert').textContent).toContain(`${userCount} user`),
+    );
+    expect(dialog.textContent).not.toContain('unsafe server text');
+    expect(h.success).not.toHaveBeenCalled();
+  });
+
   it('keeps a refused delete open with safe inline errors', async () => {
     const user = userEvent.setup();
     fetchMock
