@@ -248,6 +248,36 @@ describe('OpenAPI document', () => {
     );
   });
 
+  it('documents role write validation, path parameters and response statuses', async () => {
+    m.generateOpenAPISchema.mockResolvedValue({ paths: {} });
+    const doc = await openapi();
+    expect(doc.paths['/api/admin/roles']).toMatchObject({
+      post: {
+        responses: { 201: { description: 'Success' } },
+        security: [{ cookieAuth: [] }],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                properties: {
+                  permissions: { maxItems: 50 },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(doc.paths['/api/admin/roles/{key}']).toMatchObject({
+      parameters: [{ name: 'key', in: 'path', required: true, schema: { type: 'string' } }],
+      patch: {
+        summary: 'Update a custom, Viewer or Administrator role (owner session required)',
+        responses: { 404: { description: 'Role not found' } },
+      },
+      delete: { responses: { 404: { description: 'Role not found' } } },
+    });
+  });
+
   it('uses the development cookie name outside production and tolerates missing components', async () => {
     m.env.NODE_ENV = 'development';
     m.generateOpenAPISchema.mockResolvedValue({ paths: {} });

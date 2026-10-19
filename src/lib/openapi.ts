@@ -7,6 +7,7 @@ import {
   gatewayKeySchema,
   updateModelStatesSchema,
 } from './providers/validation';
+import { roleInput } from './roles';
 import { loginInput, refreshInput } from './validation';
 const schema = (v: z.ZodType) => z.toJSONSchema(v, { io: 'input' });
 export async function openapi() {
@@ -16,7 +17,7 @@ export async function openapi() {
     if (isBlockedAuthPath(path)) continue;
     paths[`/api/auth${path}`] = value;
   }
-  const op = (summary: string, input?: z.ZodType, auth = true) => ({
+  const op = (summary: string, input?: z.ZodType, auth = true, successStatus = 200) => ({
     summary,
     tags: ['Administration'],
     ...(auth ? { security: [{ bearerAuth: [] }, { cookieAuth: [] }] } : { security: [] }),
@@ -29,7 +30,7 @@ export async function openapi() {
         }
       : {}),
     responses: {
-      200: { description: 'Success' },
+      [successStatus]: { description: 'Success' },
       400: { description: 'Invalid request' },
       401: { description: 'Authentication required' },
       403: { description: 'Permission denied' },
@@ -60,25 +61,26 @@ export async function openapi() {
       security: [{ bearerAuth: [] }],
     },
   };
-  const roleBody = z.object({
-    name: z.string().min(2).max(64),
-    description: z.string().max(500),
-    permissions: z.array(z.string()),
-  });
+  paths['/api/admin/grants'] = {
+    get: { ...op('Read current session permissions'), security: [{ cookieAuth: [] }] },
+  };
   paths['/api/admin/roles'] = {
     get: { ...op('List system and custom roles'), security: [{ cookieAuth: [] }] },
     post: {
-      ...op('Create a custom role (owner session required)', roleBody),
+      ...op('Create a custom role (owner session required)', roleInput, true, 201),
       security: [{ cookieAuth: [] }],
     },
   };
   paths['/api/admin/roles/{key}'] = {
+    parameters: [{ name: 'key', in: 'path', required: true, schema: { type: 'string' } }],
     patch: {
-      ...op('Update a custom role (owner session required)', roleBody),
+      ...op('Update a custom, Viewer or Administrator role (owner session required)', roleInput),
+      responses: { ...op('').responses, 404: { description: 'Role not found' } },
       security: [{ cookieAuth: [] }],
     },
     delete: {
       ...op('Delete an unassigned custom role (owner session required)'),
+      responses: { ...op('').responses, 404: { description: 'Role not found' } },
       security: [{ cookieAuth: [] }],
     },
   };

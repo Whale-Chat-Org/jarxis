@@ -15,6 +15,7 @@ type ErrorRecord = Record<string, unknown>;
 
 /** Allowlisted error codes → safe copy. Codes are compared upper-cased. */
 const CODE_MESSAGES: Record<string, string> = {
+  TARGET_PERMISSIONS_EXCEED_ACTOR: 'You cannot act on a user with permissions you do not hold.',
   OWNER_PROTECTED: 'Only an owner can change another owner account.',
   LAST_OWNER: 'Keep at least one active, verified owner before making this change.',
   INACTIVE_OWNER: 'An owner account must be active and email verified.',
@@ -101,6 +102,13 @@ function readErrorStatus(error: unknown): number | undefined {
  */
 export function safeActionErrorMessage(error: unknown, fallback: string): string {
   const code = actionErrorCode(error);
+  if (code === 'ROLE_IN_USE') {
+    for (const node of errorChain(error)) {
+      const count = node.userCount;
+      if (typeof count === 'number' && Number.isSafeInteger(count) && count > 0)
+        return `${count} user${count === 1 ? '' : 's'} still ${count === 1 ? 'has' : 'have'} this role. Assign ${count === 1 ? 'them' : 'these users'} another role before deleting it.`;
+    }
+  }
   if (code && Object.hasOwn(CODE_MESSAGES, code)) return CODE_MESSAGES[code];
 
   const status = readErrorStatus(error);

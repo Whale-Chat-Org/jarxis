@@ -113,7 +113,7 @@ project needs are hooks. See [TECH.md](TECH.md#authorization-and-rbac) for the f
   | -------- | ----------------------- | ------------------------------------------------------------- |
   | `GET`    | `/api/admin/roles`      | System and custom roles; open to `roles:read` or `users:read` |
   | `POST`   | `/api/admin/roles`      | Create `{ name, description, permissions[] }`                 |
-  | `PATCH`  | `/api/admin/roles/:key` | Replace a custom role's name, description and permissions     |
+  | `PATCH`  | `/api/admin/roles/:key` | Update a custom, Viewer or Administrator role                 |
   | `DELETE` | `/api/admin/roles/:key` | Delete an unused custom role                                  |
 
 - Roles are assigned from the Role dropdown on `/admin/users`, which lists system and custom roles

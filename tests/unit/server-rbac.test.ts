@@ -124,6 +124,22 @@ describe('grants and authorize', () => {
     expect(edited.permissions.has('roles:assign')).toBe(false);
   });
 
+  it('unions custom-role grants and observes stored permission edits on the next call', async () => {
+    m.userFind.mockResolvedValue({ role: 'custom_a,custom_b,unknown' });
+    m.roleFind.mockResolvedValue([
+      { key: 'custom_a', system: false, permissions: [{ permissionKey: 'audit:read' }] },
+      { key: 'custom_b', system: false, permissions: [{ permissionKey: 'user:set-password' }] },
+    ]);
+    expect((await rbac.grants('u1')).permissions).toEqual(
+      new Set(['audit:read', 'user:set-password']),
+    );
+    m.roleFind.mockResolvedValue([
+      { key: 'custom_a', system: false, permissions: [] },
+      { key: 'custom_b', system: false, permissions: [] },
+    ]);
+    expect((await rbac.grants('u1')).permissions.size).toBe(0);
+  });
+
   it('uses the provided transaction client', async () => {
     const tx = {
       user: { findUnique: vi.fn().mockResolvedValue({ role: 'owner' }) },

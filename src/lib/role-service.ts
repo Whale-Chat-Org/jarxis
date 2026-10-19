@@ -120,6 +120,7 @@ export async function deleteRole(actorId: string, key: string) {
         409,
         'ROLE_IN_USE',
         `${count} user${count === 1 ? '' : 's'} must change role first`,
+        { userCount: count },
       );
     await tx.role.delete({ where: { key } });
     await tx.auditLog.create({

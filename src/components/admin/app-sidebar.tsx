@@ -20,6 +20,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 
+import { useNavigationPermissions } from './use-navigation-permissions';
 import { isNavItemActive, visibleNavGroups } from './nav-items';
 
 /**
@@ -34,7 +35,7 @@ export function AppSidebar({
 }: ComponentProps<typeof Sidebar> & { permissions: string[] }) {
   const pathname = usePathname();
   const { isMobile, state } = useSidebar();
-  const groups = visibleNavGroups(permissions);
+  const groups = visibleNavGroups(useNavigationPermissions(permissions));
   // The registry UserButton ships its own trigger, so the collapsed rail switches to its icon
   // size instead of restyling the component.
   const accountSize = !isMobile && state === 'collapsed' ? 'icon' : 'default';
