@@ -7,6 +7,7 @@ import {
   gatewayKeySchema,
   updateModelStatesSchema,
 } from './providers/validation';
+import { connectionResponseSchema } from './providers/contracts';
 import { roleInput } from './roles';
 import { loginInput, refreshInput } from './validation';
 const schema = (v: z.ZodType) => z.toJSONSchema(v, { io: 'input' });
@@ -175,8 +176,18 @@ export async function openapi() {
         required: true,
         content: { 'application/json': { schema: schema(updateModelStatesSchema) } },
       },
-      description:
-        'Requires providers:manage. Send the modelStateVersion from the connection listing as version. Sort models by ID, then pack enabled flags as least-significant-bit-first bytes and encode as unpadded base64url in states. Optional connection fields save in the same transaction. A changed model catalog or concurrent model edit returns 409 MODEL_CATALOG_CHANGED; reload models before retrying. Each changed model is audited. Credentials are never returned.',
+      responses: {
+        ...providerOperation('').responses,
+        200: {
+          description: 'Model availability and connection settings saved',
+          content: {
+            'application/json': {
+              schema: z.toJSONSchema(connectionResponseSchema, { io: 'output' }),
+            },
+          },
+        },
+      },
+      description: `${providerOperation('').description} Requires providers:manage. Send the modelStateVersion from the connection listing as version. Sort models by ID, then pack enabled flags as least-significant-bit-first bytes and encode as unpadded base64url in states. Optional connection fields save in the same transaction. A changed model catalog or concurrent model edit returns 409 MODEL_CATALOG_CHANGED; reload models before retrying. Each changed model is audited. Credentials are never returned.`,
     },
   };
   paths['/api/admin/providers/keys'] = {

@@ -168,16 +168,16 @@ Monitor `/api/health` (database + Redis), container health, authentication failu
 
 ## CI/CD
 
-`.github/workflows/ci-cd.yml` runs on pushes to `main` and manual dispatch and on pushes to `main`:
+`.github/workflows/cicd.yml` runs CI on pushes to `main` and manual dispatch. The cloud provider is blank and the deployment job is disabled until a provider is configured:
 
 1. **test**: `format:check`, `lint`, `typecheck`, unit tests with coverage, then migrations, seed and integration tests against throwaway Postgres and Redis service containers (`jarxis_test`).
 2. **build**: builds the `runner` and `tools` images for `linux/amd64`. They are kept as workflow artifacts, not pushed.
 3. **security** (in parallel): SonarQube Cloud with the quality gate, Semgrep (fails on `ERROR` findings) and Trivy (repository and app image, fails on fixable `HIGH`/`CRITICAL`). SARIF reports are saved as artifacts. Secret-scan exceptions live in `trivy-secret.yaml`.
-4. **deploy** (pushes to `main` only): signs in to Azure with OIDC, pushes both images to ACR tagged with the commit SHA, runs migrations and seed through a temporary Postgres firewall rule, deploys to the `staging` slot, waits for `/api/health`, then swaps staging into production. If production is unhealthy after the swap, it swaps back.
+4. **deploy**: a disabled template with blank `CLOUD_PROVIDER`. Configure provider authentication, image publishing, migrations, staging, health checks, promotion and rollback before enabling it for pushes to `main`. No cloud uploads or deployments run from this template.
 
 Migrations run **before** the swap, so the release still in production briefly runs against the new schema. Keep migrations backward-compatible (expand first, remove old columns in a later release).
 
-The Azure environment and the pipeline's identity come from [jarxis-IaC](https://github.com/Whale-Chat-Org/jarxis-IaC): `scripts/setup-cicd.sh` there sets these with `az` and `gh`:
+The previous Azure implementation is preserved unchanged in `.github/archive/cicd.azure.yml` and is not an active workflow. Its environment and identity come from [jarxis-IaC](https://github.com/Whale-Chat-Org/jarxis-IaC): `scripts/setup-cicd.sh` there sets these with `az` and `gh`:
 
 | Kind      | Names                                                                                                                                                                     |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

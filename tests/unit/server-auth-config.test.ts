@@ -248,6 +248,41 @@ describe('OpenAPI document', () => {
     );
   });
 
+  it('documents owner-only model PATCH requests and redacted connection responses', async () => {
+    m.generateOpenAPISchema.mockResolvedValue({ paths: {} });
+    const doc = await openapi();
+    const route = doc.paths['/api/admin/providers/{id}/models'] as {
+      patch: { description: string; security: unknown; requestBody: unknown; responses: unknown };
+    };
+    expect(route.patch).toBeDefined();
+    expect(route.patch.description).toContain('Active, verified owner session required');
+    expect(route.patch.description).toContain('Bearer and impersonated sessions are rejected');
+    expect(route.patch.description).toContain('MODEL_CATALOG_CHANGED');
+    expect(route.patch.security).toEqual([{ cookieAuth: [] }]);
+    expect(route.patch.requestBody).toMatchObject({ required: true });
+    expect(route.patch.responses).toMatchObject({
+      200: {
+        content: {
+          'application/json': {
+            schema: {
+              required: ['connection'],
+              properties: {
+                connection: {
+                  properties: {
+                    modelStateVersion: { type: 'string' },
+                    models: { type: 'array' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(route.patch.responses)).not.toContain('encryptedCredential');
+    expect(JSON.stringify(route.patch.responses)).not.toContain('apiKey');
+  });
+
   it('documents role write validation, path parameters and response statuses', async () => {
     m.generateOpenAPISchema.mockResolvedValue({ paths: {} });
     const doc = await openapi();
