@@ -6,6 +6,7 @@ import {
   getConnection,
   listConnections,
   listGatewayKeys,
+  listProviderPools,
 } from '@/lib/providers/service';
 import { createConnectionSchema } from '@/lib/providers/validation';
 
@@ -13,16 +14,17 @@ export const runtime = 'nodejs';
 export const GET = handler(async (req) => {
   await requireProviderOwner(req, 'providers:read');
   const [connections, keys] = await Promise.all([listConnections(), listGatewayKeys()]);
-  return json({ connections, keys });
+  const pools = listProviderPools(connections);
+  return json({ connections, keys, pools });
 });
 export const POST = handler(async (req) => {
   const actorId = await requireProviderOwner(req, 'providers:manage');
-  const created = await createConnection(actorId, await body(req, createConnectionSchema), true);
+  const created = await createConnection(actorId, await body(req, createConnectionSchema));
   // Only keyed connections fetch a catalog here.
   if (created.status !== 'ready') return json({ connection: created }, 201);
   // The connection is committed; a discovery failure is recorded on it, not returned as an error.
   try {
-    await refreshConnection(created.id, true);
+    await refreshConnection(created.id);
     return json({ connection: await getConnection(created.id) }, 201);
   } catch {
     return json({ connection: created }, 201);

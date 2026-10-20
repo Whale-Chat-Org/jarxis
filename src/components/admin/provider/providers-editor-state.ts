@@ -166,7 +166,7 @@ export function creationNotice(connection: Connection) {
     case 'failed':
       return 'Connection saved, but model discovery failed. Use Refresh models to retry.';
     default:
-      return 'Connection saved. Model discovery is scheduled automatically.';
+      return 'Connection saved. Add credentials if needed, then use Refresh models.';
   }
 }
 

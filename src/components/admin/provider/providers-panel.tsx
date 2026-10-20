@@ -10,6 +10,7 @@ import { ProviderDeleteConfirmation } from './action-panel/confirm/provider-dele
 import { ProviderConnectionEditor } from './action-panel/shared/provider-connection-editor';
 import { ProviderConnectionCards } from './provider-connection-cards';
 import { emptyEditor } from './providers-editor-state';
+import { ProvidersPools } from './providers-pools';
 import { ProvidersLoading } from './providers-loading';
 import { useProviderManagement } from './use-provider-management';
 export function ProvidersPanel({ canManage }: { canManage: boolean }) {
@@ -95,6 +96,7 @@ export function ProvidersPanel({ canManage }: { canManage: boolean }) {
             </Card>
           )}
           <ProviderConnectionCards flow={flow} />
+          <ProvidersPools data={data} canManage={canManage} reload={reload} />
         </>
       )}
       <ProviderConnectionEditor flow={flow} />

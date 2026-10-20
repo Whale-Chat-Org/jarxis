@@ -8,7 +8,7 @@ function normalizedEndpoint(value: string) {
   return url.toString();
 }
 
-/** Accounts at the same endpoint pool together; unrelated custom gateways never collide by model name. */
+/** Legacy endpoint-scoped IDs retain their exact routing identity alongside shared pool IDs. */
 export function publicModelId(
   connection: { provider: string; baseUrl: string },
   upstreamId: string,

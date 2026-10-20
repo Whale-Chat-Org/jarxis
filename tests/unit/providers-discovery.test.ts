@@ -3,8 +3,6 @@ import { NetworkError } from '@/lib/providers/network';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  findUnique: vi.fn(),
-  updateMany: vi.fn(),
   txFind: vi.fn(),
   upsert: vi.fn(),
   deleteMany: vi.fn(),
@@ -15,7 +13,6 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/db', () => ({
   db: {
-    providerConnection: { findUnique: mocks.findUnique, updateMany: mocks.updateMany },
     $transaction: (run: (tx: unknown) => Promise<unknown>) =>
       run({
         $executeRaw: mocks.lock,
@@ -33,7 +30,6 @@ vi.mock('@/lib/providers/crypto', () => ({
   decryptCredential: (value: string) => JSON.parse(value),
 }));
 
-const due = new Date(Date.now() - 1000);
 const row = (extra: Record<string, unknown> = {}) => ({
   id: 'c1',
   provider: 'openai',
@@ -41,113 +37,87 @@ const row = (extra: Record<string, unknown> = {}) => ({
   enabled: true,
   status: 'ready',
   encryptedCredential: JSON.stringify({ apiKey: 'sk' }),
-  nextDiscoveryAt: due,
+  discoveryRevision: 0,
   ...extra,
 });
-let claimedAt: Date | undefined;
+type ConnectionRow = ReturnType<typeof row>;
+let current: ConnectionRow;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  claimedAt = undefined;
-  mocks.findUnique.mockImplementation(async () =>
-    row(claimedAt ? { nextDiscoveryAt: claimedAt } : {}),
-  );
-  mocks.txFind.mockImplementation(async () => row({ nextDiscoveryAt: claimedAt }));
-  mocks.updateMany.mockImplementation(async ({ data }: { data: { nextDiscoveryAt?: Date } }) => {
-    if (!claimedAt && data.nextDiscoveryAt) claimedAt = data.nextDiscoveryAt;
-    return { count: 1 };
+  current = row();
+  mocks.txFind.mockImplementation(async () => ({ ...current }));
+  mocks.update.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => {
+    const revision = data.discoveryRevision as { increment?: number } | undefined;
+    if (revision?.increment) current.discoveryRevision += revision.increment;
+    else Object.assign(current, data);
+    return { ...current };
   });
+  mocks.lock.mockResolvedValue(undefined);
+  mocks.upsert.mockResolvedValue(undefined);
+  mocks.deleteMany.mockResolvedValue({ count: 0 });
   mocks.credential.mockResolvedValue({ apiKey: 'sk' });
 });
 
 describe('refreshConnection', () => {
-  it('reports a missing catalog explicitly without deleting the last successful models', async () => {
+  it('reports an unsupported catalog without deleting the last successful models', async () => {
     mocks.fetch.mockResolvedValue(new Response(null, { status: 404 }));
     await refreshConnection('c1');
-    expect(mocks.updateMany.mock.calls.at(-1)![0].data).toMatchObject({
+    expect(mocks.update).toHaveBeenCalledTimes(2);
+    expect(mocks.update.mock.calls[1][0].data).toMatchObject({
       discoveryStatus: 'unsupported',
       discoveryError: null,
     });
     expect(mocks.deleteMany).not.toHaveBeenCalled();
     expect(mocks.upsert).not.toHaveBeenCalled();
   });
-  it('claims due work with compare-and-set and replaces discovered models', async () => {
+
+  it('claims a revision and replaces models without changing aliases or enabled state', async () => {
     mocks.fetch.mockResolvedValue(
       Response.json({ data: [{ id: 'gpt-a' }, { id: 'gpt-b', display_name: 'B' }] }),
     );
     await refreshConnection('c1');
-    const claim = mocks.updateMany.mock.calls[0][0];
-    expect(claim.where).toMatchObject({
-      id: 'c1',
-      enabled: true,
-      status: 'ready',
-      nextDiscoveryAt: { lte: expect.any(Date) },
+    expect(mocks.update.mock.calls[0][0].data).toEqual({
+      discoveryRevision: { increment: 1 },
     });
-    expect(claim.data.nextDiscoveryAt.getTime()).toBeGreaterThan(Date.now() + 3500000);
+    expect(current.discoveryRevision).toBe(1);
     expect(String(mocks.fetch.mock.calls[0][0])).toBe('https://api.example.com/v1/models');
     expect(mocks.fetch.mock.calls[0][1].headers).toEqual({ Authorization: 'Bearer sk' });
-    expect(mocks.lock).toHaveBeenCalled();
+    expect(mocks.lock).toHaveBeenCalledTimes(2);
     expect(mocks.upsert).toHaveBeenCalledTimes(2);
     expect(mocks.upsert.mock.calls[1][0]).toMatchObject({
       create: { upstreamId: 'gpt-b', displayName: 'B', discovered: true },
       update: { displayName: 'B' },
     });
     expect(mocks.upsert.mock.calls[0][0].update).not.toHaveProperty('enabled');
+    expect(mocks.upsert.mock.calls[0][0].update).not.toHaveProperty('alias');
     expect(mocks.deleteMany).toHaveBeenCalledWith({
       where: { connectionId: 'c1', discovered: true, upstreamId: { notIn: ['gpt-a', 'gpt-b'] } },
     });
-    expect(mocks.update.mock.calls[0][0].data).toMatchObject({
+    expect(mocks.update.mock.calls[1][0].data).toMatchObject({
       discoveryStatus: 'ok',
       discoveryError: null,
+      lastDiscoveredAt: expect.any(Date),
     });
   });
 
-  it('skips work another worker already claimed', async () => {
-    mocks.updateMany.mockResolvedValueOnce({ count: 0 });
+  it('ignores disabled, non-ready or missing connections', async () => {
+    current.enabled = false;
     await refreshConnection('c1');
-    expect(mocks.credential).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
     expect(mocks.fetch).not.toHaveBeenCalled();
-  });
 
-  it('forces a claim on the exact due date it read, even when not yet due', async () => {
-    const deferred = new Date(Date.now() + 15000);
-    mocks.findUnique.mockImplementation(async () =>
-      row({ nextDiscoveryAt: claimedAt ?? deferred }),
-    );
-    mocks.fetch.mockResolvedValue(Response.json({ data: [{ id: 'gpt-a' }] }));
-    await refreshConnection('c1', true);
-    const claim = mocks.updateMany.mock.calls[0][0];
-    expect(claim.where).toEqual({
-      id: 'c1',
-      enabled: true,
-      status: 'ready',
-      nextDiscoveryAt: deferred,
-    });
-    expect(claim.data.nextDiscoveryAt.getTime()).toBeGreaterThan(Date.now() + 3500000);
-    expect(mocks.fetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not refresh a forced connection another run already claimed', async () => {
-    mocks.findUnique.mockResolvedValueOnce(row({ nextDiscoveryAt: new Date(Date.now() + 15000) }));
-    mocks.updateMany.mockResolvedValueOnce({ count: 0 });
-    await refreshConnection('c1', true);
-    expect(mocks.credential).not.toHaveBeenCalled();
-    expect(mocks.fetch).not.toHaveBeenCalled();
-  });
-
-  it('ignores disabled or not ready connections', async () => {
-    mocks.findUnique.mockResolvedValueOnce(row({ status: 'reconnect_required' }));
+    current = row({ status: 'reconnect_required' });
     await refreshConnection('c1');
-    expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+
+    mocks.txFind.mockResolvedValueOnce(null);
+    await refreshConnection('missing');
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 
   it('follows Anthropic pagination', async () => {
-    mocks.findUnique.mockImplementation(async () =>
-      row({ provider: 'anthropic', nextDiscoveryAt: claimedAt ?? due }),
-    );
-    mocks.txFind.mockImplementation(async () =>
-      row({ provider: 'anthropic', nextDiscoveryAt: claimedAt }),
-    );
+    current.provider = 'anthropic';
     mocks.fetch
       .mockResolvedValueOnce(Response.json({ data: [{ id: 'm1' }], has_more: true, last_id: 'm1' }))
       .mockResolvedValueOnce(Response.json({ data: [{ id: 'm2' }], has_more: false }));
@@ -162,51 +132,76 @@ describe('refreshConnection', () => {
     await refreshConnection('c1');
     expect(mocks.upsert).not.toHaveBeenCalled();
     expect(mocks.deleteMany).not.toHaveBeenCalled();
-    const failure = mocks.updateMany.mock.calls.at(-1)![0];
-    expect(failure.where).toMatchObject({
-      id: 'c1',
-      status: 'ready',
-      enabled: true,
-      nextDiscoveryAt: claimedAt,
+    expect(mocks.update.mock.calls[1][0].data).toMatchObject({
+      discoveryStatus: 'failed',
+      discoveryError: 'provider_error:500',
     });
-    expect(failure.data).toMatchObject({ discoveryStatus: 'failed' });
-    expect(failure.data.discoveryError).not.toContain('secret');
+    expect(JSON.stringify(mocks.update.mock.calls[1][0])).not.toContain('secret');
   });
 
-  it('rejects malformed catalogs without touching models', async () => {
-    mocks.fetch.mockResolvedValue(Response.json({ data: [{ id: 42 }] }));
+  it('does not commit a stale successful result after a newer discovery starts', async () => {
+    mocks.fetch.mockImplementation(async () => {
+      current.discoveryRevision += 1;
+      return Response.json({ data: [{ id: 'stale-model' }] });
+    });
     await refreshConnection('c1');
     expect(mocks.upsert).not.toHaveBeenCalled();
-    expect(mocks.updateMany.mock.calls.at(-1)![0].data.discoveryStatus).toBe('failed');
+    expect(mocks.deleteMany).not.toHaveBeenCalled();
+    expect(mocks.update).toHaveBeenCalledTimes(1);
   });
 
-  it('abandons the run when the credential changed underneath it', async () => {
-    mocks.credential.mockImplementation(async (connection) =>
-      JSON.parse(connection.encryptedCredential),
-    );
-    mocks.findUnique.mockImplementation(async () =>
-      row(
-        claimedAt
-          ? {
-              encryptedCredential: JSON.stringify({ apiKey: 'replaced' }),
-              nextDiscoveryAt: claimedAt,
-            }
-          : {},
-      ),
-    );
+  it('does not record a stale failure after a newer discovery starts', async () => {
+    mocks.fetch.mockImplementation(async () => {
+      current.discoveryRevision += 1;
+      return new Response('upstream secret', { status: 503 });
+    });
     await refreshConnection('c1');
-    expect(mocks.fetch).not.toHaveBeenCalled();
-    expect(mocks.updateMany).toHaveBeenCalledTimes(1);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    expect(mocks.update.mock.calls[0][0].data).toEqual({
+      discoveryRevision: { increment: 1 },
+    });
   });
 
-  it('does not write a catalog when the connection changed before commit', async () => {
-    mocks.fetch.mockResolvedValue(Response.json({ data: [{ id: 'gpt-a' }] }));
-    mocks.txFind.mockImplementation(async () =>
-      row({ baseUrl: 'https://other.example.com/v1', nextDiscoveryAt: claimedAt }),
-    );
+  it('discards a result when the saved credential changes during the request', async () => {
+    mocks.fetch.mockImplementation(async () => {
+      current.encryptedCredential = JSON.stringify({ apiKey: 'replacement' });
+      current.discoveryRevision += 1;
+      return Response.json({ data: [{ id: 'old-key-model' }] });
+    });
+    await refreshConnection('c1');
+    expect(mocks.fetch.mock.calls[0][1].headers).toEqual({ Authorization: 'Bearer sk' });
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('discards results when the endpoint or provider changes before commit', async () => {
+    mocks.fetch.mockImplementation(async () => {
+      current.baseUrl = 'https://other.example.com/v1';
+      current.provider = 'custom';
+      current.discoveryRevision += 1;
+      return Response.json({ data: [{ id: 'stale-model' }] });
+    });
     await refreshConnection('c1');
     expect(mocks.upsert).not.toHaveBeenCalled();
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('records the failure reason for the connection card', async () => {
+    mocks.fetch.mockResolvedValue(new Response('secret', { status: 429 }));
+    await refreshConnection('c1');
+    expect(mocks.update.mock.calls[1][0].data).toMatchObject({
+      discoveryStatus: 'failed',
+      discoveryError: 'rate_limited:429',
+    });
+  });
+
+  it('records an empty successful catalog as ok during refresh', async () => {
+    mocks.fetch.mockResolvedValue(Response.json({ data: [] }));
+    await refreshConnection('c1');
+    expect(mocks.deleteMany).toHaveBeenCalledWith({
+      where: { connectionId: 'c1', discovered: true, upstreamId: { notIn: [] } },
+    });
+    expect(mocks.update.mock.calls[1][0].data.discoveryStatus).toBe('ok');
   });
 });
 
@@ -357,7 +352,7 @@ describe('discoverModels', () => {
   it('stores the failure reason for the connection card', async () => {
     mocks.fetch.mockResolvedValue(new Response('secret', { status: 429 }));
     await refreshConnection('c1');
-    expect(mocks.updateMany.mock.calls.at(-1)![0].data).toMatchObject({
+    expect(mocks.update.mock.calls.at(-1)![0].data).toMatchObject({
       discoveryStatus: 'failed',
       discoveryError: 'rate_limited:429',
     });
@@ -394,6 +389,6 @@ describe('discoverModels', () => {
     expect(mocks.deleteMany).toHaveBeenCalledWith({
       where: { connectionId: 'c1', discovered: true, upstreamId: { notIn: [] } },
     });
-    expect(mocks.update.mock.calls[0][0].data.discoveryStatus).toBe('ok');
+    expect(mocks.update.mock.calls.at(-1)![0].data.discoveryStatus).toBe('ok');
   });
 });

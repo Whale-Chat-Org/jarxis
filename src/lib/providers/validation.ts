@@ -83,6 +83,14 @@ export const discoveryPreviewSchema = z
       });
   });
 export const manualModelSchema = z.object({ upstreamId: modelIdSchema }).strict();
+export const modelAliasSchema = z
+  .object({
+    alias: modelIdSchema
+      .refine((value) => !value.includes('/'), 'Aliases cannot contain /')
+      .nullable(),
+    version: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict();
 export const gatewayKeySchema = z.object({ name }).strict();
 export type CreateConnectionInput = z.infer<typeof createConnectionSchema>;
 export type UpdateConnectionInput = z.infer<typeof updateConnectionSchema>;

@@ -2,7 +2,7 @@ import { db } from '@/db';
 import 'server-only';
 import { z } from 'zod';
 import { lockConnection } from './connection-lock';
-import { DISCOVERY_INTERVAL_MS, DISCOVERY_TIMEOUT_MS } from './constants';
+import { DISCOVERY_TIMEOUT_MS } from './constants';
 import { getUsableCredential } from './credential';
 import { CredentialError } from './credential-errors';
 import {
@@ -165,111 +165,130 @@ export async function discoverModels(
   }
 }
 
-export async function refreshConnection(id: string, force = false): Promise<void> {
-  let connection = await db.providerConnection.findUnique({ where: { id } });
-  if (!connection || !connection.enabled || connection.status !== 'ready') return;
-  const now = new Date();
-  const nextDiscoveryAt = new Date(Date.now() + DISCOVERY_INTERVAL_MS);
-  // A forced run claims the exact due date it read, so it still loses to any concurrent claim.
-  const claimed = await db.providerConnection.updateMany({
-    where: {
-      id,
-      enabled: true,
-      status: 'ready',
-      nextDiscoveryAt: force ? connection.nextDiscoveryAt : { lte: now },
-    },
-    data: { nextDiscoveryAt },
-  });
-  if (!claimed.count) return;
-  let snapshot = {
-    id,
-    baseUrl: connection.baseUrl,
-    encryptedCredential: connection.encryptedCredential,
-    status: 'ready',
-    enabled: true,
-    nextDiscoveryAt,
-  };
-  // Failures keep the last catalog and only touch the row this run claimed.
-  const recordFailure = (status: 'unsupported' | 'failed', error: string | null) =>
-    db.providerConnection.updateMany({
-      where: snapshot,
-      data: { discoveryStatus: status, discoveryError: error, nextDiscoveryAt },
+type DiscoverySnapshot = {
+  id: string;
+  discoveryRevision: number;
+  baseUrl: string;
+  provider: string;
+  encryptedCredential: string | null;
+  enabled: boolean;
+  status: string;
+};
+
+function matchesSnapshot(
+  connection: DiscoverySnapshot | null,
+  snapshot: DiscoverySnapshot,
+): connection is DiscoverySnapshot {
+  return (
+    !!connection &&
+    connection.id === snapshot.id &&
+    connection.discoveryRevision === snapshot.discoveryRevision &&
+    connection.baseUrl === snapshot.baseUrl &&
+    connection.provider === snapshot.provider &&
+    connection.encryptedCredential === snapshot.encryptedCredential &&
+    connection.enabled === snapshot.enabled &&
+    connection.status === snapshot.status
+  );
+}
+
+async function recordResult(
+  snapshot: DiscoverySnapshot,
+  status: 'ok' | 'unsupported' | 'failed',
+  error: string | null,
+  models?: DiscoveredModel[],
+) {
+  await db.$transaction(async (transaction) => {
+    await lockConnection(transaction, snapshot.id);
+    const current = await transaction.providerConnection.findUnique({
+      where: { id: snapshot.id },
     });
+    if (!matchesSnapshot(current, snapshot)) return;
+
+    if (status === 'ok') {
+      const catalog = models ?? [];
+      for (const model of catalog)
+        await transaction.providerModel.upsert({
+          where: {
+            connectionId_upstreamId: { connectionId: snapshot.id, upstreamId: model.id },
+          },
+          create: {
+            connectionId: snapshot.id,
+            upstreamId: model.id,
+            displayName: model.name,
+            discovered: true,
+          },
+          // Preserve the owner's alias and enabled selection on models that survive discovery.
+          update: { displayName: model.name },
+        });
+      await transaction.providerModel.deleteMany({
+        where: {
+          connectionId: snapshot.id,
+          discovered: true,
+          upstreamId: { notIn: catalog.map((model) => model.id) },
+        },
+      });
+      await transaction.providerConnection.update({
+        where: { id: snapshot.id },
+        data: {
+          discoveryStatus: 'ok',
+          discoveryError: null,
+          lastDiscoveredAt: new Date(),
+        },
+      });
+      return;
+    }
+    // Failures preserve the last successful catalog.
+    await transaction.providerConnection.update({
+      where: { id: snapshot.id },
+      data: { discoveryStatus: status, discoveryError: error },
+    });
+  });
+}
+
+export async function refreshConnection(id: string, signal?: AbortSignal): Promise<void> {
+  const connection = await db.$transaction(async (transaction) => {
+    await lockConnection(transaction, id);
+    const current = await transaction.providerConnection.findUnique({ where: { id } });
+    if (!current || !current.enabled || current.status !== 'ready') return null;
+    // Each request gets a new generation so a newer discovery supersedes any older in-flight run.
+    return transaction.providerConnection.update({
+      where: { id },
+      data: { discoveryRevision: { increment: 1 } },
+    });
+  });
+  if (!connection) return;
+  const snapshot: DiscoverySnapshot = {
+    id: connection.id,
+    discoveryRevision: connection.discoveryRevision,
+    baseUrl: connection.baseUrl,
+    provider: connection.provider,
+    encryptedCredential: connection.encryptedCredential,
+    enabled: connection.enabled,
+    status: connection.status,
+  };
   try {
     const credential = await getUsableCredential(connection);
-    const previous = connection;
-    connection = await db.providerConnection.findUnique({ where: { id } });
-    if (
-      !connection ||
-      connection.baseUrl !== previous.baseUrl ||
-      connection.provider !== previous.provider ||
-      !connection.encryptedCredential ||
-      !connection.enabled ||
-      connection.status !== 'ready' ||
-      connection.nextDiscoveryAt.getTime() !== nextDiscoveryAt.getTime()
-    )
-      return;
-    const currentCredential = await getUsableCredential(connection);
-    if (currentCredential.apiKey !== credential.apiKey) return;
-    snapshot = {
-      ...snapshot,
-      baseUrl: connection.baseUrl,
-      encryptedCredential: connection.encryptedCredential,
-    };
-    const result = await discoverModels(connection.provider, connection.baseUrl, credential);
+    const result = await discoverModels(
+      connection.provider,
+      connection.baseUrl,
+      credential,
+      signal,
+    );
     if (result.status !== 'ok') {
-      await recordFailure(
+      await recordResult(
+        snapshot,
         result.status,
         result.reason ? encodeDiscoveryFailure(result.reason, result.httpStatus) : null,
       );
       return;
     }
-    const models = result.models;
-    await db.$transaction(async (transaction) => {
-      await lockConnection(transaction, id);
-      const current = await transaction.providerConnection.findUnique({ where: { id } });
-      if (
-        !current ||
-        current.baseUrl !== snapshot.baseUrl ||
-        current.encryptedCredential !== snapshot.encryptedCredential ||
-        current.status !== 'ready' ||
-        !current.enabled ||
-        current.nextDiscoveryAt.getTime() !== nextDiscoveryAt.getTime()
-      )
-        return;
-      for (const model of models)
-        await transaction.providerModel.upsert({
-          where: { connectionId_upstreamId: { connectionId: id, upstreamId: model.id } },
-          create: {
-            connectionId: id,
-            upstreamId: model.id,
-            displayName: model.name,
-            discovered: true,
-          },
-          update: { displayName: model.name },
-        });
-      await transaction.providerModel.deleteMany({
-        where: {
-          connectionId: id,
-          discovered: true,
-          upstreamId: { notIn: models.map((model) => model.id) },
-        },
-      });
-      await transaction.providerConnection.update({
-        where: { id },
-        data: {
-          discoveryStatus: 'ok',
-          discoveryError: null,
-          lastDiscoveredAt: new Date(),
-          nextDiscoveryAt,
-        },
-      });
-    });
+    await recordResult(snapshot, 'ok', null, result.models);
   } catch (error) {
     console.error('Provider discovery refresh failed', {
       kind: error instanceof Error ? error.name : 'UnknownError',
     });
-    await recordFailure(
+    await recordResult(
+      snapshot,
       'failed',
       encodeDiscoveryFailure(error instanceof CredentialError ? 'credential' : 'unavailable'),
     );

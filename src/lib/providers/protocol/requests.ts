@@ -430,14 +430,6 @@ function validateCanonical(request: CanonicalRequest) {
   }
 }
 
-function splitModel(model: string): { provider: string; upstreamId: string } {
-  const slash = model.indexOf('/');
-  if (slash <= 0 || slash === model.length - 1) {
-    invalid('`model` must be provider qualified, e.g. `openai/gpt-5`');
-  }
-  return { provider: model.slice(0, slash), upstreamId: model.slice(slash + 1) };
-}
-
 /** Parse a Chat Completions payload into the canonical request. */
 export function parseChatRequest(payload: unknown): CanonicalRequest {
   if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
@@ -445,10 +437,10 @@ export function parseChatRequest(payload: unknown): CanonicalRequest {
   }
   rejectKnownUnsupported(payload as Record<string, unknown>, 'chat');
   const parsed = chatCompletionsRequest.parse(payload);
+  if (parsed.model.startsWith('/') || parsed.model.endsWith('/')) invalid('Invalid model ID');
   if (parsed.max_tokens !== undefined && parsed.max_completion_tokens !== undefined) {
     invalid('Provide either `max_tokens` or `max_completion_tokens`, not both');
   }
-  const { upstreamId } = splitModel(parsed.model);
   const system: string[] = [];
   const messages: CanonicalMessage[] = [];
   for (const message of parsed.messages) {
@@ -462,7 +454,7 @@ export function parseChatRequest(payload: unknown): CanonicalRequest {
   const request: CanonicalRequest = {
     dialect: 'chat',
     publicModelId: parsed.model,
-    model: upstreamId,
+    model: parsed.model,
     system,
     messages,
     tools: parsed.tools ?? [],
@@ -489,7 +481,7 @@ export function parseResponsesRequest(payload: unknown): CanonicalRequest {
   }
   rejectKnownUnsupported(payload as Record<string, unknown>, 'responses');
   const parsed = responsesRequest.parse(payload);
-  const { upstreamId } = splitModel(parsed.model);
+  if (parsed.model.startsWith('/') || parsed.model.endsWith('/')) invalid('Invalid model ID');
   const system: string[] = [];
   if (parsed.instructions) system.push(parsed.instructions);
   const messages: CanonicalMessage[] = [];
@@ -569,7 +561,7 @@ export function parseResponsesRequest(payload: unknown): CanonicalRequest {
   const request: CanonicalRequest = {
     dialect: 'responses',
     publicModelId: parsed.model,
-    model: upstreamId,
+    model: parsed.model,
     system,
     messages,
     tools: parsed.tools ?? [],

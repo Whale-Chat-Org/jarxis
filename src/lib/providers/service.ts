@@ -11,9 +11,10 @@ import { activeUserWhere } from '@/lib/rbac';
 import { lockConnection } from './connection-lock';
 import { DISCOVERY_TIMEOUT_MS } from './constants';
 import { encryptCredential, mintGatewayKey } from './crypto';
-import { discoverModels } from './discovery';
+import { discoverModels, refreshConnection } from './discovery';
 import { storedDiscoveryFailureMessage } from './errors';
 import { publicModelId } from './model-id';
+import { poolModelId, poolSummaries } from './pools';
 import { validateDestination } from './network';
 import { defaultBaseUrl, type ProviderKind } from './types';
 import {
@@ -21,6 +22,7 @@ import {
   discoveryPreviewSchema,
   gatewayKeySchema,
   modelIdSchema,
+  modelAliasSchema,
   updateConnectionSchema,
   updateModelStatesSchema,
   type CreateConnectionInput,
@@ -38,7 +40,11 @@ function orderedModels(models: ProviderModel[]) {
 }
 function modelStateVersion(models: ProviderModel[]) {
   return createHash('sha256')
-    .update(JSON.stringify(orderedModels(models).map(({ id, enabled }) => [id, enabled])))
+    .update(
+      JSON.stringify(
+        orderedModels(models).map(({ id, enabled, alias }) => [id, enabled, alias ?? null]),
+      ),
+    )
     .digest('hex');
 }
 function decodeModelStates(states: string, count: number) {
@@ -67,7 +73,7 @@ async function audit(
   actorId: string,
   action: ProviderAuditOperation,
   targetId: string,
-  changes: Record<string, string | number | boolean>,
+  changes: Record<string, string | number | boolean | null>,
 ) {
   await transaction.auditLog.create({
     data: { id: randomUUID(), actorId, action: `providers:${action}`, targetId, changes },
@@ -90,7 +96,6 @@ export function connectionDto(connection: ProviderConnection & { models: Provide
       ? storedDiscoveryFailureMessage(connection.discoveryError)
       : null,
     lastDiscoveredAt: connection.lastDiscoveredAt?.toISOString() ?? null,
-    nextDiscoveryAt: connection.nextDiscoveryAt.toISOString(),
     cooldownUntil: connection.cooldownUntil?.toISOString() ?? null,
     createdAt: connection.createdAt.toISOString(),
     updatedAt: connection.updatedAt.toISOString(),
@@ -100,6 +105,8 @@ export function connectionDto(connection: ProviderConnection & { models: Provide
       connectionId: model.connectionId,
       upstreamId: model.upstreamId,
       publicId: publicModelId(connection, model.upstreamId),
+      alias: model.alias ?? null,
+      poolId: poolModelId(model),
       displayName: model.displayName,
       enabled: model.enabled,
       discovered: model.discovered,
@@ -165,11 +172,7 @@ export async function previewDiscovery(input: DiscoveryPreviewInput, signal?: Ab
   );
   return { status, models, error, reason, httpStatus, retryAfterSeconds };
 }
-export async function createConnection(
-  actorId: string,
-  input: CreateConnectionInput,
-  deferDiscovery = false,
-) {
+export async function createConnection(actorId: string, input: CreateConnectionInput) {
   const value = createConnectionSchema.parse(input);
   const baseUrl = value.baseUrl ?? defaultBaseUrl(value.provider);
   await assertPublicEndpoint(baseUrl);
@@ -187,10 +190,6 @@ export async function createConnection(
         createdBy: actorId,
         encryptedCredential,
         status: encryptedCredential ? 'ready' : 'pending',
-        // A deferred keyed connection stays out of the worker's reach while the create request
-        // runs the first discovery itself; the worker picks it up later if that request dies.
-        nextDiscoveryAt:
-          deferDiscovery && value.apiKey ? new Date(Date.now() + DISCOVERY_TIMEOUT_MS) : new Date(),
         models: {
           create: [...new Set(value.manualModels ?? [])].map((upstreamId) => ({
             upstreamId,
@@ -229,15 +228,16 @@ async function connectionChanges(
           cooldownUntil: null,
         }
       : {}),
-    ...(apiKey || value.baseUrl
-      ? { nextDiscoveryAt: new Date(), discoveryStatus: 'pending', discoveryError: null }
+    ...(apiKey || value.baseUrl || value.enabled !== undefined
+      ? { discoveryRevision: { increment: 1 } }
       : {}),
+    ...(apiKey || value.baseUrl ? { discoveryStatus: 'pending', discoveryError: null } : {}),
   };
 }
 export async function updateConnection(actorId: string, id: string, input: UpdateConnectionInput) {
   const value = updateConnectionSchema.parse(input);
   if (value.baseUrl) await assertPublicEndpoint(value.baseUrl);
-  return db.$transaction(async (transaction) => {
+  const saved = await db.$transaction(async (transaction) => {
     await owner(transaction, actorId);
     await lockConnection(transaction, id);
     const previous = await transaction.providerConnection.findUnique({ where: { id } });
@@ -249,6 +249,7 @@ export async function updateConnection(actorId: string, id: string, input: Updat
     });
     return connectionDto(connection);
   });
+  return value.apiKey || value.baseUrl ? discoverSavedConnection(id, saved) : saved;
 }
 export async function updateModelStates(
   actorId: string,
@@ -257,7 +258,7 @@ export async function updateModelStates(
 ) {
   const value = updateModelStatesSchema.parse(input);
   if (value.connection?.baseUrl) await assertPublicEndpoint(value.connection.baseUrl);
-  return db.$transaction(async (transaction) => {
+  const saved = await db.$transaction(async (transaction) => {
     await owner(transaction, actorId);
     await lockConnection(transaction, id);
     const previous = await transaction.providerConnection.findUnique({
@@ -304,6 +305,9 @@ export async function updateModelStates(
     if (!connection) missing();
     return connectionDto(connection);
   });
+  return value.connection?.apiKey || value.connection?.baseUrl
+    ? discoverSavedConnection(id, saved)
+    : saved;
 }
 export async function deleteConnection(actorId: string, id: string) {
   await db.$transaction(async (transaction) => {
@@ -313,20 +317,77 @@ export async function deleteConnection(actorId: string, id: string) {
     await audit(transaction, actorId, 'connection:delete', id, {});
   });
 }
-export async function scheduleRefresh(actorId: string, id: string) {
-  return db.$transaction(async (transaction) => {
+async function discoverSavedConnection(id: string, saved: ReturnType<typeof connectionDto>) {
+  try {
+    await refreshConnection(id);
+    return await getConnection(id);
+  } catch (error) {
+    console.error('Provider discovery could not complete', {
+      kind: error instanceof Error ? error.name : 'UnknownError',
+    });
+    return saved;
+  }
+}
+export async function refreshProviderConnection(actorId: string, id: string) {
+  const saved = await db.$transaction(async (transaction) => {
     await owner(transaction, actorId);
     await lockConnection(transaction, id);
-    if (!(await transaction.providerConnection.findUnique({ where: { id }, select: { id: true } })))
-      missing();
-    const connection = await transaction.providerConnection.update({
+    const connection = await transaction.providerConnection.findUnique({
       where: { id },
-      data: { nextDiscoveryAt: new Date(), discoveryStatus: 'pending', discoveryError: null },
       include: connectionInclude,
     });
+    if (!connection) missing();
     await audit(transaction, actorId, 'connection:refresh', id, {});
     return connectionDto(connection);
   });
+  return discoverSavedConnection(id, saved);
+}
+export async function updateModelAlias(
+  actorId: string,
+  id: string,
+  modelId: string,
+  input: unknown,
+) {
+  const value = modelAliasSchema.parse(input);
+  return db.$transaction(async (transaction) => {
+    await owner(transaction, actorId);
+    await lockConnection(transaction, id);
+    const connection = await transaction.providerConnection.findUnique({
+      where: { id },
+      include: connectionInclude,
+    });
+    if (!connection) missing();
+    if (modelStateVersion(connection.models) !== value.version)
+      throw new HttpError(409, 'MODEL_CATALOG_CHANGED', 'Model catalog changed');
+    const model = connection.models.find((entry) => entry.id === modelId);
+    if (!model) missing();
+    if ((model.alias ?? null) !== value.alias) {
+      await transaction.providerModel.update({
+        where: { id: modelId },
+        data: { alias: value.alias },
+      });
+      await audit(transaction, actorId, 'model:alias', modelId, {
+        connectionId: id,
+        modelId,
+        previousAlias: model.alias ?? null,
+        alias: value.alias,
+      });
+    }
+    const updated = await transaction.providerConnection.findUnique({
+      where: { id },
+      include: connectionInclude,
+    });
+    if (!updated) missing();
+    return connectionDto(updated);
+  });
+}
+export function listProviderPools(connections: Awaited<ReturnType<typeof listConnections>>) {
+  return poolSummaries(
+    connections.map((connection) => ({
+      ...connection,
+      cooldownUntil: connection.cooldownUntil ? new Date(connection.cooldownUntil) : null,
+    })),
+  );
 }
 export async function addManualModel(actorId: string, id: string, upstreamId: string) {
   const model = modelIdSchema.parse(upstreamId);

@@ -39,7 +39,7 @@ export function ProviderConnectionCards({ flow }: { flow: ProviderManagementStat
               {connection.lastDiscoveredAt
                 ? `Last discovery: ${new Date(connection.lastDiscoveredAt).toLocaleString()}`
                 : 'No catalog discovered yet.'}{' '}
-              Catalogs refresh automatically every hour. Manual models remain available when
+              Refresh the catalog manually when needed. Manual models remain available when
               discovery is unsupported.
             </p>
             <div className="flex flex-wrap items-center gap-sm">
@@ -70,7 +70,7 @@ export function ProviderConnectionCards({ flow }: { flow: ProviderManagementStat
                     onClick={() =>
                       void perform(
                         () => mutate(`/${connection.id}/refresh`, 'POST'),
-                        'Discovery scheduled.',
+                        'Discovery finished. Check the connection status.',
                       )
                     }
                   >

@@ -10,7 +10,7 @@ import {
   queryGatewayKeys,
   getGatewayKey,
   renameGatewayKey,
-  scheduleRefresh,
+  refreshProviderConnection,
   updateConnection,
 } from '@/lib/providers/service';
 import { createConnectionSchema, updateConnectionSchema } from '@/lib/providers/validation';
@@ -68,7 +68,7 @@ const connection = {
   discoveryStatus: 'pending',
   discoveryError: 'raw upstream secret',
   lastDiscoveredAt: null,
-  nextDiscoveryAt: now,
+  discoveryRevision: 0,
   cooldownUntil: null,
   createdBy: 'owner',
   createdAt: now,
@@ -169,18 +169,11 @@ describe('Provider management records', () => {
     ).rejects.toMatchObject({ status: 400, code: 'INVALID_ENDPOINT' });
     expect(mocks.providerConnection.create).not.toHaveBeenCalled();
   });
-  it('defers worker discovery only for keyed connections the request will refresh', async () => {
-    const before = Date.now();
-    await createConnection('owner', { name: 'Keyed', provider: 'openai', apiKey: 'k' }, true);
-    await createConnection('owner', { name: 'Keyless', provider: 'openai' }, true);
-    await createConnection('owner', { name: 'Default', provider: 'openai', apiKey: 'k' });
-    const [deferred, keyless, immediate] = mocks.providerConnection.create.mock.calls.map(
-      ([value]) => value.data.nextDiscoveryAt.getTime(),
+  it('creates without a scheduling timestamp', async () => {
+    await createConnection('owner', { name: 'Keyed', provider: 'openai', apiKey: 'k' });
+    expect(mocks.providerConnection.create.mock.calls[0][0].data).not.toHaveProperty(
+      'nextDiscoveryAt',
     );
-    expect(deferred).toBeGreaterThanOrEqual(before + 15000);
-    expect(deferred).toBeLessThanOrEqual(Date.now() + 15000);
-    expect(keyless).toBeLessThanOrEqual(Date.now());
-    expect(immediate).toBeLessThanOrEqual(Date.now());
   });
   it('rechecks active owner membership inside mutation transactions', async () => {
     mocks.user.findFirst.mockResolvedValue({ role: 'administrator' });
@@ -189,17 +182,21 @@ describe('Provider management records', () => {
     ).rejects.toMatchObject({ status: 403 });
     expect(mocks.providerConnection.create).not.toHaveBeenCalled();
   });
-  it('replaces credentials and schedules discovery without returning secrets', async () => {
+  it('replaces credentials and discovers without returning secrets', async () => {
     await updateConnection('owner', 'connection', { apiKey: 'replacement-key' });
     const value = mocks.providerConnection.update.mock.calls[0][0].data;
     expect(value.discoveryStatus).toBe('pending');
-    expect(value.nextDiscoveryAt).toBeInstanceOf(Date);
+    expect(value.discoveryRevision).toEqual({ increment: 1 });
     expect(decryptCredential(value.encryptedCredential, 'connection')).toEqual({
       apiKey: 'replacement-key',
     });
     expect(JSON.stringify(mocks.auditLog.create.mock.calls)).not.toContain('replacement-key');
-    await scheduleRefresh('owner', 'connection');
-    expect(mocks.providerConnection.update.mock.calls[1][0].data.discoveryStatus).toBe('pending');
+    await refreshProviderConnection('owner', 'connection');
+    expect(mocks.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: 'providers:connection:refresh' }),
+      }),
+    );
   });
   it('issues a gateway key once while hiding its hash from the DTO', async () => {
     mocks.providerGatewayKey.create.mockImplementation(async ({ data }) => ({
@@ -243,7 +240,11 @@ describe('Provider management HTTP boundary', () => {
     const response = await GET(new Request('https://app.test/api/admin/providers'));
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(await response.json()).toEqual({ connections: [connectionDto(connection)], keys: [] });
+    expect(await response.json()).toEqual({
+      connections: [connectionDto(connection)],
+      keys: [],
+      pools: [],
+    });
   });
   it('requires Origin for cookie-bearing mutations', async () => {
     const response = await POST(
