@@ -247,7 +247,7 @@ test('owner provider screen reflows in both themes at all required viewports', a
       await page.goto('/admin/providers');
       await expect(page.getByRole('heading', { name: /Providers/i }).first()).toBeVisible();
       await expect(
-        page.getByText('Long connection name '.repeat(4).trim(), { exact: true }),
+        page.getByText('Long connection name '.repeat(4).trim(), { exact: true }).first(),
       ).toBeVisible();
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))

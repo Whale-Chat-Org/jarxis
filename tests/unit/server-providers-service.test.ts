@@ -8,12 +8,13 @@ const m = vi.hoisted(() => ({
     update: vi.fn(),
     deleteMany: vi.fn(),
   },
-  providerModel: { upsert: vi.fn(), updateMany: vi.fn() },
+  providerModel: { upsert: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
   providerGatewayKey: { findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
   auditLog: { create: vi.fn(), createMany: vi.fn() },
   execute: vi.fn(),
   validateDestination: vi.fn(),
   discoverModels: vi.fn(),
+  refreshConnection: vi.fn(),
 }));
 vi.mock('@/db', () => {
   const db = {
@@ -29,7 +30,10 @@ vi.mock('@/db', () => {
 });
 vi.mock('@/lib/rbac', () => ({ activeUserWhere: () => ({ emailVerified: true }) }));
 vi.mock('@/lib/providers/network', () => ({ validateDestination: m.validateDestination }));
-vi.mock('@/lib/providers/discovery', () => ({ discoverModels: m.discoverModels }));
+vi.mock('@/lib/providers/discovery', () => ({
+  discoverModels: m.discoverModels,
+  refreshConnection: m.refreshConnection,
+}));
 
 const service = await import('@/lib/providers/service');
 
@@ -46,7 +50,7 @@ const row = (extra: Record<string, unknown> = {}) => ({
   discoveryStatus: 'failed',
   discoveryError: null,
   lastDiscoveredAt: at,
-  nextDiscoveryAt: at,
+  discoveryRevision: 0,
   cooldownUntil: at,
   createdBy: 'owner',
   createdAt: at,
@@ -56,6 +60,7 @@ const row = (extra: Record<string, unknown> = {}) => ({
       id: 'm1',
       connectionId: 'c1',
       upstreamId: 'gpt-x',
+      alias: null,
       displayName: 'GPT X',
       enabled: true,
       discovered: true,
@@ -313,7 +318,9 @@ describe('Provider connection mutations', () => {
 
   it('answers 404 when refreshing an unknown connection', async () => {
     m.providerConnection.findUnique.mockResolvedValue(null);
-    await expect(service.scheduleRefresh('owner', 'x')).rejects.toMatchObject({ status: 404 });
+    await expect(service.refreshProviderConnection('owner', 'x')).rejects.toMatchObject({
+      status: 404,
+    });
     expect(m.providerConnection.update).not.toHaveBeenCalled();
   });
 
@@ -360,5 +367,70 @@ describe('Provider connection mutations', () => {
 
     m.providerGatewayKey.findUnique.mockResolvedValue(null);
     await expect(service.revokeGatewayKey('owner', 'nope')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('model aliases', () => {
+  it('changes an alias with a current catalog version, audits and returns the DTO', async () => {
+    const saved = row();
+    m.providerConnection.findUnique
+      .mockResolvedValueOnce(saved)
+      .mockResolvedValueOnce(
+        row({ models: saved.models.map((model) => ({ ...model, alias: 'shared' })) }),
+      );
+    const result = await service.updateModelAlias('owner', 'c1', 'm1', {
+      alias: ' shared ',
+      version: service.connectionDto(saved).modelStateVersion,
+    });
+    expect(m.providerModel.update).toHaveBeenCalledWith({
+      where: { id: 'm1' },
+      data: { alias: 'shared' },
+    });
+    expect(result.models[0]).toMatchObject({ alias: 'shared', poolId: 'shared' });
+    expect(m.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'providers:model:alias',
+          changes: { connectionId: 'c1', modelId: 'm1', previousAlias: null, alias: 'shared' },
+        }),
+      }),
+    );
+  });
+  it('does not audit unchanged aliases, and rejects a stale catalog or wrong model', async () => {
+    const saved = row();
+    m.providerConnection.findUnique.mockResolvedValue(saved);
+    const version = service.connectionDto(saved).modelStateVersion;
+    await service.updateModelAlias('owner', 'c1', 'm1', { alias: null, version });
+    expect(m.providerModel.update).not.toHaveBeenCalled();
+    expect(m.auditLog.create).not.toHaveBeenCalled();
+    await expect(
+      service.updateModelAlias('owner', 'c1', 'missing', { alias: 'x', version }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.updateModelAlias('owner', 'c1', 'm1', { alias: 'x', version: '0'.repeat(64) }),
+    ).rejects.toMatchObject({ status: 409 });
+    m.providerConnection.findUnique.mockResolvedValue(null);
+    await expect(
+      service.updateModelAlias('owner', 'missing', 'm1', { alias: 'x', version }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+  it('discovers after endpoint changes, but never for ordinary metadata', async () => {
+    m.providerConnection.findUnique.mockResolvedValue(row());
+    m.providerConnection.update.mockResolvedValue(row());
+    await service.updateConnection('owner', 'c1', { name: 'Changed' });
+    expect(m.refreshConnection).not.toHaveBeenCalled();
+    await service.updateConnection('owner', 'c1', { baseUrl: 'https://llm.example.com/v1' });
+    expect(m.refreshConnection).toHaveBeenCalledWith('c1');
+  });
+  it('reports pools from redacted connection DTOs including cooldown state', () => {
+    const pools = service.listProviderPools([
+      service.connectionDto(row({ cooldownUntil: new Date(Date.now() + 60000), status: 'ready' })),
+    ]);
+    expect(pools[0]).toMatchObject({
+      id: 'gpt-x',
+      advertised: true,
+      members: [{ availability: 'cooldown' }],
+    });
+    expect(JSON.stringify(pools)).not.toContain('encryptedCredential');
   });
 });

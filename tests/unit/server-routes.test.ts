@@ -10,11 +10,13 @@ const m = vi.hoisted(() => ({
   getConnection: vi.fn(),
   listConnections: vi.fn(),
   listGatewayKeys: vi.fn(),
+  listProviderPools: vi.fn(() => []),
   updateConnection: vi.fn(),
   deleteConnection: vi.fn(),
   addManualModel: vi.fn(),
   updateModelStates: vi.fn(),
-  scheduleRefresh: vi.fn(),
+  updateModelAlias: vi.fn(),
+  refreshProviderConnection: vi.fn(),
   issueGatewayKey: vi.fn(),
   revokeGatewayKey: vi.fn(),
   previewDiscovery: vi.fn(),
@@ -41,11 +43,13 @@ vi.mock('@/lib/providers/service', () => ({
   getConnection: m.getConnection,
   listConnections: m.listConnections,
   listGatewayKeys: m.listGatewayKeys,
+  listProviderPools: m.listProviderPools,
   updateConnection: m.updateConnection,
   deleteConnection: m.deleteConnection,
   addManualModel: m.addManualModel,
   updateModelStates: m.updateModelStates,
-  scheduleRefresh: m.scheduleRefresh,
+  updateModelAlias: m.updateModelAlias,
+  refreshProviderConnection: m.refreshProviderConnection,
   issueGatewayKey: m.issueGatewayKey,
   revokeGatewayKey: m.revokeGatewayKey,
   previewDiscovery: m.previewDiscovery,
@@ -73,6 +77,7 @@ vi.mock('@/lib/tokens', () => ({
 const providers = await import('@/app/api/admin/providers/route');
 const providerById = await import('@/app/api/admin/providers/[id]/route');
 const providerModels = await import('@/app/api/admin/providers/[id]/models/route');
+const providerAlias = await import('@/app/api/admin/providers/[id]/models/[modelId]/alias/route');
 const providerRefresh = await import('@/app/api/admin/providers/[id]/refresh/route');
 const keys = await import('@/app/api/admin/providers/keys/route');
 const keyById = await import('@/app/api/admin/providers/keys/[keyId]/route');
@@ -132,7 +137,11 @@ describe('Provider administration routes', () => {
     const response = await providers.GET(send('/api/admin/providers', 'GET'));
     expect(response.status).toBe(200);
     expect(m.requireProviderOwner).toHaveBeenCalledWith(expect.any(Request), 'providers:read');
-    expect(await response.json()).toEqual({ connections: [{ id: 'c1' }], keys: [{ id: 'k1' }] });
+    expect(await response.json()).toEqual({
+      connections: [{ id: 'c1' }],
+      keys: [{ id: 'k1' }],
+      pools: [],
+    });
   });
 
   it('rejects callers who are not owners before any service call', async () => {
@@ -174,7 +183,7 @@ describe('Provider administration routes', () => {
     const input = { name: 'Main', provider: 'openai' };
     const response = await providers.POST(send('/api/admin/providers', 'POST', input));
     expect(response.status).toBe(201);
-    expect(m.createConnection).toHaveBeenCalledWith('owner-1', input, true);
+    expect(m.createConnection).toHaveBeenCalledWith('owner-1', input);
     expect(m.refreshConnection).not.toHaveBeenCalled();
     expect(await response.json()).toEqual({
       connection: { id: 'c1', status: 'needs_credentials' },
@@ -193,7 +202,7 @@ describe('Provider administration routes', () => {
       }),
     );
     expect(response.status).toBe(201);
-    expect(m.refreshConnection).toHaveBeenCalledWith('c1', true);
+    expect(m.refreshConnection).toHaveBeenCalledWith('c1');
     expect(await response.json()).toEqual({ connection: { id: 'c1', status: 'ready', models: 3 } });
   });
 
@@ -260,13 +269,13 @@ describe('Provider administration routes', () => {
     );
     expect(invalid.status).toBe(400);
 
-    m.scheduleRefresh.mockResolvedValue({ id: 'c1', status: 'ready' });
+    m.refreshProviderConnection.mockResolvedValue({ id: 'c1', status: 'ready' });
     const refreshed = await providerRefresh.POST(
       send('/api/admin/providers/c1/refresh'),
       params({ id: 'c1' }),
     );
     expect(refreshed.status).toBe(200);
-    expect(m.scheduleRefresh).toHaveBeenCalledWith('owner-1', 'c1');
+    expect(m.refreshProviderConnection).toHaveBeenCalledWith('owner-1', 'c1');
   });
 
   it('validates and authorizes model state updates', async () => {
@@ -536,5 +545,37 @@ describe('Better Auth catch-all route', () => {
     );
     expect((await authRoute.POST(send('/api/auth/sign-in/email', 'POST'))).status).toBe(503);
     expect(m.authHandler).not.toHaveBeenCalled();
+  });
+});
+
+describe('model alias endpoint', () => {
+  const path = '/api/admin/providers/c1/models/m1/alias';
+  const input = { alias: 'gpt-4.1', version: 'a'.repeat(64) };
+  it('requires owner manage access and passes validated IDs and alias to the service', async () => {
+    m.updateModelAlias.mockResolvedValue({ id: 'c1' });
+    const response = await providerAlias.PATCH(
+      send(path, 'PATCH', input),
+      params({ id: 'c1', modelId: 'm1' }),
+    );
+    expect(response.status).toBe(200);
+    expect(m.requireProviderOwner).toHaveBeenCalledWith(expect.any(Request), 'providers:manage');
+    expect(m.updateModelAlias).toHaveBeenCalledWith('owner-1', 'c1', 'm1', input);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+  });
+  it('rejects nonowners and malformed alias payloads before mutation', async () => {
+    m.requireProviderOwner.mockRejectedValueOnce(new HttpError(403, 'FORBIDDEN', 'Owner required'));
+    expect(
+      (await providerAlias.PATCH(send(path, 'PATCH', input), params({ id: 'c1', modelId: 'm1' })))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await providerAlias.PATCH(
+          send(path, 'PATCH', { ...input, alias: 'vendor/model' }),
+          params({ id: 'c1', modelId: 'm1' }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(m.updateModelAlias).not.toHaveBeenCalled();
   });
 });

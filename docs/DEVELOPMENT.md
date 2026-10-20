@@ -97,7 +97,6 @@ This separate override avoids using a host-loopback connection string inside the
 | `pnpm dev:next`                | Start only the Next dev server                              |
 | `pnpm db:seed:users --reset`   | Reset seeded users' roles and passwords and sign them out   |
 | `pnpm db:migrate`              | Apply pending database migrations                           |
-| `pnpm providers:worker`        | Run the Provider worker (scheduled model discovery)         |
 | `pnpm owner <email>`           | Recovery: make a verified account owner when none is active |
 | `pnpm lint` / `pnpm typecheck` | Lint and type-check                                         |
 | `pnpm test`                    | Run unit tests                                              |

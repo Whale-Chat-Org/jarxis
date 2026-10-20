@@ -31,6 +31,6 @@ different.
 
 - [docs/PRD.md](docs/PRD.md): product behaviour
 - [docs/TECH.md](docs/TECH.md): architecture, auth, RBAC and data model
-- [docs/providers.md](docs/providers.md): Provider pool, worker and gateway API
+- [docs/providers.md](docs/providers.md): Provider pools, discovery and gateway API
 - [docs/REFERENCE.md](docs/REFERENCE.md): API clients, deployment, CI/CD, testing, UI conventions and attribution
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): local development setup

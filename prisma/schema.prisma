@@ -7,36 +7,36 @@ datasource db {
 }
 
 model ProviderConnection {
-  id                  String    @id @default(uuid())
+  id                  String          @id @default(uuid())
   name                String
   provider            String
-  baseUrl             String    @map("base_url")
-  enabled             Boolean   @default(true)
-  priority            Int       @default(0)
-  encryptedCredential String?   @map("encrypted_credential")
-  status              String    @default("pending")
-  discoveryStatus     String    @default("pending") @map("discovery_status")
-  discoveryError      String?   @map("discovery_error")
-  lastDiscoveredAt    DateTime? @map("last_discovered_at") @db.Timestamptz(6)
-  nextDiscoveryAt     DateTime  @default(now()) @map("next_discovery_at") @db.Timestamptz(6)
-  cooldownUntil       DateTime? @map("cooldown_until") @db.Timestamptz(6)
-  createdBy           String    @map("created_by")
-  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  baseUrl             String          @map("base_url")
+  enabled             Boolean         @default(true)
+  priority            Int             @default(0)
+  encryptedCredential String?         @map("encrypted_credential")
+  status              String          @default("pending")
+  discoveryStatus     String          @default("pending") @map("discovery_status")
+  discoveryError      String?         @map("discovery_error")
+  lastDiscoveredAt    DateTime?       @map("last_discovered_at") @db.Timestamptz(6)
+  discoveryRevision   Int             @default(0) @map("discovery_revision")
+  cooldownUntil       DateTime?       @map("cooldown_until") @db.Timestamptz(6)
+  createdBy           String          @map("created_by")
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
   models              ProviderModel[]
 
-  @@index([nextDiscoveryAt])
   @@map("ml_connections")
 }
 
 model ProviderModel {
-  id           String       @id @default(uuid())
-  connectionId String       @map("connection_id")
-  upstreamId   String       @map("upstream_id")
-  displayName  String       @map("display_name")
-  enabled      Boolean      @default(true)
-  discovered   Boolean      @default(true)
-  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  id           String             @id @default(uuid())
+  connectionId String             @map("connection_id")
+  upstreamId   String             @map("upstream_id")
+  alias        String?
+  displayName  String             @map("display_name")
+  enabled      Boolean            @default(true)
+  discovered   Boolean            @default(true)
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   connection   ProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   @@unique([connectionId, upstreamId])

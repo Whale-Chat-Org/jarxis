@@ -4,6 +4,8 @@ import { providerKinds } from './types';
 export const modelSchema = z.object({
   id: z.string(),
   publicId: z.string(),
+  alias: z.string().nullable().default(null),
+  poolId: z.string().default(''),
   upstreamId: z.string(),
   displayName: z.string(),
   enabled: z.boolean(),
@@ -33,6 +35,25 @@ export const gatewayKeySchema = z.object({
 });
 export const providerDataSchema = z.object({
   connections: z.array(connectionSchema),
+  pools: z
+    .array(
+      z.object({
+        id: z.string(),
+        advertised: z.boolean(),
+        members: z.array(
+          z.object({
+            connectionId: z.string(),
+            modelId: z.string(),
+            connectionName: z.string(),
+            provider: z.string(),
+            upstreamId: z.string(),
+            priority: z.number(),
+            availability: z.string(),
+          }),
+        ),
+      }),
+    )
+    .default([]),
 });
 export const connectionResponseSchema = z.object({ connection: connectionSchema });
 export const issuedKeySchema = z.object({ key: z.string() });

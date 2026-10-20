@@ -1,13 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const m = vi.hoisted(() => ({ due: vi.fn(), refresh: vi.fn(), pause: vi.fn() }));
-vi.mock('@/db', () => ({ db: { providerConnection: { findMany: m.due } } }));
-vi.mock('@/lib/providers/discovery', () => ({ refreshConnection: m.refresh }));
-vi.mock('node:timers/promises', () => ({ setTimeout: m.pause }));
+import { describe, expect, it, vi } from 'vitest';
 
 const { SseDecoder, SseError, encodeSse, readSse, SSE_HEADERS } =
   await import('@/lib/providers/sse');
-const { runWorker, workerTick } = await import('@/lib/providers/worker');
 const { defaultBaseUrl } = await import('@/lib/providers/types');
 
 function stream(chunks: string[], close = true) {
@@ -103,53 +97,5 @@ describe('types', () => {
   it('maps providers to base URLs and builds public ids', () => {
     expect(defaultBaseUrl('anthropic')).toBe('https://api.anthropic.com/v1');
     expect(defaultBaseUrl('custom')).toBe('');
-  });
-});
-
-describe('runWorker', () => {
-  const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-  beforeEach(() => {
-    vi.resetAllMocks();
-    error.mockImplementation(() => {});
-  });
-  afterEach(() => error.mockReset());
-
-  it('returns immediately when already aborted', async () => {
-    const controller = new AbortController();
-    controller.abort();
-    await workerTick(controller.signal);
-    await runWorker(controller.signal);
-    expect(m.due).not.toHaveBeenCalled();
-  });
-
-  it('logs a failed poll without details and keeps polling until aborted', async () => {
-    const controller = new AbortController();
-    m.due.mockRejectedValueOnce(new Error('db password=fake')).mockResolvedValue([]);
-    m.pause
-      .mockImplementationOnce(async () => undefined)
-      .mockImplementationOnce(async () => {
-        controller.abort();
-        throw new Error('AbortError');
-      });
-    await runWorker(controller.signal);
-    expect(error).toHaveBeenCalledWith('Providers worker poll failed; retrying.');
-    expect(m.due).toHaveBeenCalledTimes(2);
-    expect(m.pause).toHaveBeenCalledWith(1000, undefined, { signal: controller.signal });
-  });
-
-  it('rethrows a pause failure that is not caused by shutdown', async () => {
-    m.due.mockResolvedValue([]);
-    m.pause.mockRejectedValue(new Error('timer broke'));
-    await expect(runWorker(new AbortController().signal)).rejects.toThrow('timer broke');
-  });
-
-  it('skips the pause once shutdown is requested during a tick', async () => {
-    const controller = new AbortController();
-    m.due.mockImplementation(async () => {
-      controller.abort();
-      return [];
-    });
-    await runWorker(controller.signal);
-    expect(m.pause).not.toHaveBeenCalled();
   });
 });

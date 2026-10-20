@@ -51,12 +51,12 @@ const parseAll = (dialect: 'chat' | 'anthropic', frames: unknown[]) => {
 };
 
 describe('client request parsing', () => {
-  it('strips the provider and lifts system messages', () => {
+  it('preserves the requested ID and lifts system messages', () => {
     const request = chat({ max_tokens: 50, stream: true });
     expect(request).toMatchObject({
       dialect: 'chat',
       publicModelId: 'anthropic/claude-sonnet',
-      model: 'claude-sonnet',
+      model: 'anthropic/claude-sonnet',
       system: ['Be brief'],
       maxOutputTokens: 50,
       stream: true,
@@ -78,10 +78,10 @@ describe('client request parsing', () => {
     expect(() => chat({ arbitrary: true })).toThrow();
   });
 
-  it('requires provider-qualified models and known tool call ids', () => {
-    expect(() =>
+  it('accepts plain models and requires known tool call ids', () => {
+    expect(
       parseGatewayRequest('chat', { model: 'gpt-5', messages: [{ role: 'user', content: 'x' }] }),
-    ).toThrow(ProtocolError);
+    ).toMatchObject({ publicModelId: 'gpt-5', model: 'gpt-5' });
     expect(() =>
       parseGatewayRequest('chat', {
         model: 'openai/gpt-5',
@@ -134,7 +134,10 @@ describe('upstream request rendering', () => {
 
   it('renders native Anthropic messages with tools and merged tool results', () => {
     const body = renderUpstreamRequest(
-      chat({ tool_choice: 'required', parallel_tool_calls: false, temperature: 0.5 }),
+      {
+        ...chat({ tool_choice: 'required', parallel_tool_calls: false, temperature: 0.5 }),
+        model: 'claude-sonnet',
+      },
       'anthropic',
     );
     expect(body).toMatchObject({

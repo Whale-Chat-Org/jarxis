@@ -1,6 +1,7 @@
 import { ProviderConfigurationError } from '@/lib/providers/credential-errors';
 import { hashGatewayKey } from '@/lib/providers/crypto';
 import { cooldownUntil, handleGateway, readGatewayBody } from '@/lib/providers/gateway';
+import { pruneRotations } from '@/lib/providers/pools';
 import { publicModelId } from '@/lib/providers/model-id';
 import { NetworkError } from '@/lib/providers/network';
 import { defaultBaseUrl, type ProviderKind } from '@/lib/providers/types';
@@ -76,6 +77,7 @@ const chatResult = (text: string) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  pruneRotations(new Set());
   mocks.key.mockImplementation(async ({ where }: { where: { hash: string } }) =>
     where.hash === hashGatewayKey(KEY) ? { id: 'k1', createdBy: 'owner', revokedAt: null } : null,
   );
@@ -130,7 +132,7 @@ describe('authentication', () => {
 });
 
 describe('model listing', () => {
-  it('lists provider-qualified models including cooled connections', async () => {
+  it('lists deduplicated plain models including cooled connections', async () => {
     mocks.connections.mockResolvedValue([
       connection('a', 'anthropic', { cooldownUntil: new Date(Date.now() + 60000) }),
       connection('b', 'openrouter'),
@@ -142,13 +144,10 @@ describe('model listing', () => {
       ['models'],
     );
     const body = await response.json();
-    expect(body.data.map((model: { id: string }) => model.id)).toEqual([
-      'anthropic/shared',
-      'openrouter/shared',
-    ]);
+    expect(body.data.map((model: { id: string }) => model.id)).toEqual(['shared']);
     expect(mocks.connections).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { enabled: true, status: 'ready' },
+        include: { models: true },
         orderBy: [{ priority: 'asc' }, { id: 'asc' }],
       }),
     );
@@ -299,8 +298,8 @@ describe('routing and failover', () => {
     );
     const ids = (await listed.json()).data.map((model: { id: string }) => model.id);
     const secondId = publicModelId(second, 'shared');
-    expect(ids).toEqual([publicModelId(first, 'shared'), secondId]);
-    expect(new Set(ids).size).toBe(2);
+    expect(ids).toEqual(['shared']);
+    expect(new Set(ids).size).toBe(1);
     expect(ids).not.toContain('custom/shared');
     expect(
       (await handleGateway(post(chatBody('custom/shared')), ['chat', 'completions'])).status,
@@ -808,5 +807,155 @@ describe('cooldownUntil edge cases', () => {
     expect(
       cooldownUntil(new Headers({ 'x-ratelimit-reset-tokens': '90000ms' }), now).getTime(),
     ).toBe(now + 90000);
+  });
+});
+
+describe('shared pools', () => {
+  it('rotates aliased providers and forwards the selected upstream ID on both endpoints', async () => {
+    mocks.connections.mockResolvedValue([
+      connection('a', 'openai', { models: [{ id: 'm-a', upstreamId: 'gpt-4.1', enabled: true }] }),
+      connection('b', 'openrouter', {
+        models: [{ id: 'm-b', upstreamId: 'openai/gpt-4.1', alias: 'gpt-4.1', enabled: true }],
+      }),
+    ]);
+    mocks.fetch.mockImplementation(async () => chatResult('hello'));
+    for (const endpoint of ['chat/completions', 'responses', 'chat/completions', 'responses']) {
+      const payload =
+        endpoint === 'responses' ? { model: 'gpt-4.1', input: 'Hi' } : chatBody('gpt-4.1');
+      const response = await handleGateway(post(payload, endpoint), endpoint.split('/'));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ model: 'gpt-4.1' });
+    }
+    expect(mocks.fetch.mock.calls.map(([url]) => new URL(url).hostname)).toEqual([
+      'api.openai.com',
+      'openrouter.ai',
+      'api.openai.com',
+      'openrouter.ai',
+    ]);
+    expect(mocks.fetch.mock.calls.map(([, init]) => JSON.parse(init.body).model)).toEqual([
+      'gpt-4.1',
+      'openai/gpt-4.1',
+      'gpt-4.1',
+      'openai/gpt-4.1',
+    ]);
+  });
+
+  it('preserves legacy routing when an upstream pool has the same name', async () => {
+    mocks.connections.mockResolvedValue([
+      connection('a', 'openai', { models: [{ id: 'm-a', upstreamId: 'gpt-4.1', enabled: true }] }),
+      connection('b', 'openrouter', {
+        models: [{ id: 'm-b', upstreamId: 'openai/gpt-4.1', enabled: true }],
+      }),
+    ]);
+    mocks.fetch.mockImplementation(async () => chatResult('legacy'));
+    const response = await handleGateway(post(chatBody('openai/gpt-4.1')), ['chat', 'completions']);
+    expect(response.status).toBe(200);
+    expect(mocks.fetch.mock.calls[0][0]).toContain('api.openai.com');
+    const listing = await handleGateway(
+      new Request('https://gateway.test/api/llm/v1/models', {
+        headers: { authorization: `Bearer ${KEY}` },
+      }),
+      ['models'],
+    );
+    expect((await listing.json()).data).toEqual([
+      { id: 'gpt-4.1', object: 'model', created: 0, owned_by: 'jarxis' },
+    ]);
+  });
+
+  it('exhausts the preferred tier before falling back', async () => {
+    mocks.connections.mockResolvedValue([
+      connection('c', 'openai', { priority: 10 }),
+      connection('b', 'openai'),
+      connection('a', 'openai'),
+    ]);
+    mocks.credential.mockImplementation(async (conn) => ({ apiKey: conn.id }));
+    mocks.fetch
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
+      .mockResolvedValueOnce(chatResult('fallback'));
+    const response = await handleGateway(post(chatBody('shared')), ['chat', 'completions']);
+    expect(response.status).toBe(200);
+    expect(mocks.credential.mock.calls.map(([conn]) => conn.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('never uses a lower tier while a preferred key succeeds', async () => {
+    mocks.connections.mockResolvedValue([
+      connection('a', 'openai'),
+      connection('b', 'openai'),
+      connection('c', 'openai', { priority: 10 }),
+    ]);
+    mocks.fetch.mockImplementation(async () => chatResult('ok'));
+    for (let i = 0; i < 4; i++)
+      expect((await handleGateway(post(chatBody('shared')), ['chat', 'completions'])).status).toBe(
+        200,
+      );
+    expect(mocks.credential.mock.calls.map(([conn]) => conn.id)).toEqual(['a', 'b', 'a', 'b']);
+  });
+
+  it('skips incompatible providers before trying credentials or upstream calls', async () => {
+    mocks.connections.mockResolvedValue([connection('a', 'anthropic'), connection('b', 'openai')]);
+    mocks.fetch.mockResolvedValue(chatResult('compatible'));
+    const response = await handleGateway(post(chatBody('shared', { temperature: 1.5 })), [
+      'chat',
+      'completions',
+    ]);
+    expect(response.status).toBe(200);
+    expect(mocks.credential.mock.calls.map(([conn]) => conn.id)).toEqual(['b']);
+    mocks.connections.mockResolvedValue([connection('a', 'anthropic')]);
+    mocks.fetch.mockClear();
+    expect(
+      (await handleGateway(post(chatBody('shared', { temperature: 1.5 })), ['chat', 'completions']))
+        .status,
+    ).toBe(400);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('reports known exhausted pools differently from unknown or disabled models', async () => {
+    mocks.connections.mockResolvedValue([
+      connection('a', 'openai', { cooldownUntil: new Date(Date.now() + 60000) }),
+    ]);
+    const unavailable = await handleGateway(post(chatBody('shared')), ['chat', 'completions']);
+    expect(unavailable.status).toBe(502);
+    expect(await unavailable.json()).toMatchObject({ error: { code: 'UPSTREAM_UNAVAILABLE' } });
+    expect((await handleGateway(post(chatBody('unknown')), ['chat', 'completions'])).status).toBe(
+      404,
+    );
+    mocks.connections.mockResolvedValue([
+      connection('a', 'openai', { models: [{ id: 'm', upstreamId: 'shared', enabled: false }] }),
+    ]);
+    expect((await handleGateway(post(chatBody('shared')), ['chat', 'completions'])).status).toBe(
+      404,
+    );
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('pooled streaming identity', () => {
+  it('keeps the alias in client stream frames while sending the provider-specific ID upstream', async () => {
+    mocks.connections.mockResolvedValue([
+      connection('router', 'openrouter', {
+        models: [{ id: 'm', upstreamId: 'openai/gpt-4.1', alias: 'gpt-4.1', enabled: true }],
+      }),
+    ]);
+    mocks.fetch.mockResolvedValue(
+      sse([
+        {
+          id: 'stream-id',
+          model: 'openai/gpt-4.1',
+          choices: [{ index: 0, delta: { role: 'assistant', content: 'Hi' }, finish_reason: null }],
+        },
+        { id: 'stream-id', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+        '[DONE]',
+      ]),
+    );
+    const response = await handleGateway(post(chatBody('gpt-4.1', { stream: true })), [
+      'chat',
+      'completions',
+    ]);
+    expect(response.status).toBe(200);
+    const frames = await response.text();
+    expect(frames).toContain('"model":"gpt-4.1"');
+    expect(frames).not.toContain('openai/gpt-4.1');
+    expect(JSON.parse(mocks.fetch.mock.calls[0][1].body).model).toBe('openai/gpt-4.1');
   });
 });

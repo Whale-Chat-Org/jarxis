@@ -81,7 +81,7 @@ describe('disabled model regressions', () => {
     const listing = await handleGateway(request('models'), ['models']);
     expect(listing.status).toBe(200);
     expect((await listing.json()).data.map((model: { id: string }) => model.id)).toEqual([
-      'openai/enabled',
+      'enabled',
     ]);
     for (const [endpoint, input] of [
       ['chat/completions', { messages: [{ role: 'user', content: 'Hello' }] }],
@@ -108,7 +108,7 @@ describe('disabled model regressions', () => {
         ],
       }),
     );
-    await refreshConnection(CONNECTION_ID, true);
+    await refreshConnection(CONNECTION_ID);
     const connection = await getConnection(CONNECTION_ID);
     expect(connection.discoveryStatus).toBe('ok');
     expect(connection.models).toEqual(

@@ -191,12 +191,12 @@ describe('POST /api/admin/providers', () => {
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({ connection: saved({ discoveryStatus: 'ok' }) });
     expect(order).toEqual(['create', 'refresh', 'get']);
-    expect(mocks.createConnection).toHaveBeenCalledWith(
-      'owner',
-      { name: 'OpenAI', provider: 'openai', apiKey: 'sk-secret' },
-      true,
-    );
-    expect(mocks.refreshConnection).toHaveBeenCalledWith('c1', true);
+    expect(mocks.createConnection).toHaveBeenCalledWith('owner', {
+      name: 'OpenAI',
+      provider: 'openai',
+      apiKey: 'sk-secret',
+    });
+    expect(mocks.refreshConnection).toHaveBeenCalledWith('c1');
   });
 
   it('still returns 201 when discovery throws', async () => {

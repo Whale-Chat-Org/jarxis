@@ -5,6 +5,7 @@ import { env } from './env';
 import {
   discoveryPreviewSchema,
   gatewayKeySchema,
+  modelAliasSchema,
   updateModelStatesSchema,
 } from './providers/validation';
 import { connectionResponseSchema } from './providers/contracts';
@@ -90,7 +91,7 @@ export async function openapi() {
     tags: ['Model gateway'],
     security: [{ gatewayKey: [] }],
     description:
-      'Use an owner-issued application key, not a Jarxis session or JWT. Model IDs are provider-qualified. Stateless requests only; unsupported features return 400. Inference bodies are limited to 1 MiB and requests to 120 seconds. Streaming uses server-sent events.',
+      'Use an owner-issued application key, not a Jarxis session or JWT. Model IDs are plain upstream IDs or owner-defined aliases. Legacy provider-qualified IDs retain their original scope. Requests rotate across compatible healthy connections within each priority tier; rotation is per application process. Stateless requests only; unsupported features return 400. Inference bodies are limited to 1 MiB and requests to 120 seconds. Streaming uses server-sent events.',
     responses: {
       ...op(summary).responses,
       200: { description: 'OpenAI-compatible JSON or text/event-stream when stream is true' },
@@ -135,7 +136,12 @@ export async function openapi() {
       'Active, verified owner session required. Bearer and impersonated sessions are rejected. Mutations require same-origin protection and are limited to 16 KiB. Responses contain redacted connection metadata only.',
   });
   paths['/api/admin/providers'] = {
-    get: providerOperation('List provider connections and application key metadata'),
+    get: {
+      ...providerOperation(
+        'List provider connections, pool summaries and application key metadata',
+      ),
+      description: `${providerOperation('').description} Includes pools with per-member availability and an advertised flag. Conflicting legacy names require an alias. Model DTOs include alias and poolId; publicId retains its legacy meaning.`,
+    },
     post: {
       ...providerOperation('Add a provider connection'),
       responses: {
@@ -160,12 +166,18 @@ export async function openapi() {
   };
   paths['/api/admin/providers/{id}'] = {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-    patch: providerOperation('Update a connection, credentials, or priority'),
+    patch: {
+      ...providerOperation('Update a connection, credentials, or priority'),
+      description: `${providerOperation('').description} Credential or endpoint changes await bounded discovery after saving; metadata edits do not discover. Discovery failures retain the catalog and are reported in discoveryStatus.`,
+    },
     delete: providerOperation('Delete a provider connection'),
   };
   paths['/api/admin/providers/{id}/refresh'] = {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-    post: providerOperation('Schedule model discovery'),
+    post: {
+      ...providerOperation('Refresh models synchronously'),
+      description: `${providerOperation('').description} Awaits bounded discovery (15 seconds), retaining the last catalog on failure. There is no background worker or scheduled retry.`,
+    },
   };
   paths['/api/admin/providers/{id}/models'] = {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
@@ -188,6 +200,34 @@ export async function openapi() {
         },
       },
       description: `${providerOperation('').description} Requires providers:manage. Send the modelStateVersion from the connection listing as version. Sort models by ID, then pack enabled flags as least-significant-bit-first bytes and encode as unpadded base64url in states. Optional connection fields save in the same transaction. A changed model catalog or concurrent model edit returns 409 MODEL_CATALOG_CHANGED; reload models before retrying. Each changed model is audited. Credentials are never returned.`,
+    },
+  };
+  paths['/api/admin/providers/{id}/models/{modelId}/alias'] = {
+    parameters: ['id', 'modelId'].map((name) => ({
+      name,
+      in: 'path',
+      required: true,
+      schema: { type: 'string' },
+    })),
+    patch: {
+      ...providerOperation('Set or remove a model pool alias'),
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: schema(modelAliasSchema) } },
+      },
+      responses: {
+        ...providerOperation('').responses,
+        200: {
+          description: 'Updated connection',
+          content: {
+            'application/json': {
+              schema: z.toJSONSchema(connectionResponseSchema, { io: 'output' }),
+            },
+          },
+        },
+        409: { description: 'MODEL_CATALOG_CHANGED: reload before retrying' },
+      },
+      description: `${providerOperation('').description} Requires providers:manage. An alias is a trimmed model ID without slashes, at most 200 characters; null removes it. Send modelStateVersion as version. Each actual change is audited as providers:model:alias. Returns { connection }.`,
     },
   };
   paths['/api/admin/providers/keys'] = {

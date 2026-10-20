@@ -263,27 +263,20 @@ describe('ProvidersPanel listing', () => {
     await waitFor(() => expect(calls.filter((call) => call.method === 'GET')).toHaveLength(2));
   });
 
-  it('polls pending discovery and reports a failed refresh', async () => {
+  it('does not poll a pending catalog without an explicit refresh', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let gets = 0;
     setup(({ method }) => {
       if (method !== 'GET') return new Response(null, { status: 204 });
       gets += 1;
-      if (gets === 1)
-        return json({ connections: [{ ...connections[1], discoveryStatus: 'pending' }], keys: [] });
-      return failure(503);
+      return json({ connections: [{ ...connections[1], discoveryStatus: 'pending' }], keys: [] });
     });
     renderPanel();
     await screen.findByText('Discovery: pending');
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(15000);
+      await vi.advanceTimersByTimeAsync(60000);
     });
-    expect(
-      await screen.findByText(
-        'Discovery status could not be refreshed. Showing the last loaded data.',
-      ),
-    ).toBeTruthy();
-    expect(gets).toBe(2);
+    expect(gets).toBe(1);
   });
 });
 
@@ -302,7 +295,9 @@ describe('ProvidersPanel page actions', () => {
     const user = renderPanel();
     await screen.findByText('Primary');
     await user.click(screen.getAllByRole('button', { name: 'Refresh models' })[0]);
-    expect(await screen.findByText('Discovery scheduled.')).toBeTruthy();
+    expect(
+      await screen.findByText('Discovery finished. Check the connection status.'),
+    ).toBeTruthy();
     expect(nonGet()).toEqual([{ path: '/c1/refresh', method: 'POST', body: undefined }]);
   });
 
@@ -516,7 +511,7 @@ describe('ProvidersPanel connection editor', () => {
     ],
     [
       { discoveryStatus: 'pending', models: [] },
-      'Connection saved. Model discovery is scheduled automatically.',
+      'Connection saved. Add credentials if needed, then use Refresh models.',
     ],
   ])('reports the creation result %#', async (connection, notice) => {
     setup(({ path, method }) => {

@@ -19,6 +19,7 @@ export type ProviderAuditOperation =
   | 'connection:refresh'
   | 'model:add'
   | 'model:update'
+  | 'model:alias'
   | 'key:rename'
   | 'key:issue'
   | 'key:revoke';

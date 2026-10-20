@@ -19,7 +19,6 @@
 !scripts/migrate.ts
 !scripts/seed.ts
 !scripts/owner.ts
-!scripts/providers-worker.ts
 # Defence in depth inside allowed source directories. No example env files either.
 **/.env*
 **/.npmrc

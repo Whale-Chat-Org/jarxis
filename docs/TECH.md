@@ -237,11 +237,10 @@ Never commit a populated `.env` file. Use `.env.example` only to document names 
 The multi-stage Dockerfile provides:
 
 - `tools`: migration, seed, owner bootstrap, and development source;
-- `runner`: minimal production Next.js runtime running as `node`;
-- `worker`: scheduled Providers model discovery running as `node`.
+- `runner`: minimal production Next.js runtime running as `node`.
 
 The base Compose topology starts PostgreSQL and Redis, runs the migration/seed job to completion,
-then starts the application and Providers worker. Production must provide a Brevo API key with a verified sender, HTTPS `BETTER_AUTH_URL`, durable
+then starts the application. Provider discovery runs synchronously on connection creation, credential/endpoint changes and manual refresh; there is no discovery worker or hourly schedule. Production must provide a Brevo API key with a verified sender, HTTPS `BETTER_AUTH_URL`, durable
 volumes, backup procedures, and external monitoring.
 
 Monitor `/api/health`, authentication failures, rate-limit spikes, container health, email delivery,

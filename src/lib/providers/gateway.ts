@@ -11,7 +11,7 @@ import { getUsableCredential } from './credential';
 import { ProviderConfigurationError } from './credential-errors';
 import { hashGatewayKey } from './crypto';
 import { providerHeaders } from './discovery';
-import { publicModelId } from './model-id';
+import { availability, buildPools, pruneRotations, rotateTier, uniqueCandidates } from './pools';
 import { NetworkError, safeFetch } from './network';
 import {
   createClientStreamRenderer,
@@ -267,39 +267,79 @@ export async function handleGateway(request: Request, path: string[]): Promise<R
     const endpoint = path.join('/');
     const connections = await gatewayStorage(() =>
       db.providerConnection.findMany({
-        where: { enabled: true, status: 'ready' },
-        include: { models: { where: { enabled: true } } },
+        include: { models: true },
         orderBy: [{ priority: 'asc' }, { id: 'asc' }],
       }),
     );
+    const index = buildPools(connections);
+    pruneRotations(
+      new Set([
+        ...[...index.pools.keys()].map((id) => `pool:${id}`),
+        ...[...index.legacy.keys()].map((id) => `legacy:${id}`),
+      ]),
+    );
     if (request.method === 'GET' && endpoint === 'models') {
-      const ids = [
-        ...new Set(
-          connections.flatMap((connection) =>
-            connection.models.map((model) => publicModelId(connection, model.upstreamId)),
-          ),
-        ),
-      ];
+      const ids = [...index.pools]
+        .filter(
+          ([id, members]) =>
+            index.advertised(id) &&
+            members.some(
+              ({ connection, model }) =>
+                connection.enabled && connection.status === 'ready' && model.enabled,
+            ),
+        )
+        .map(([id]) => id)
+        .sort();
       return json({
         object: 'list',
-        data: ids.map((id) => ({ id, object: 'model', created: 0, owned_by: id.split('/')[0] })),
+        data: ids.map((id) => ({ id, object: 'model', created: 0, owned_by: 'jarxis' })),
       });
     }
     if (request.method !== 'POST' || !['chat/completions', 'responses'].includes(endpoint))
       throw new GatewayError(404, 'NOT_FOUND', 'Unknown gateway endpoint');
     const payload = await readGatewayBody(request, controller.signal);
     const parsed = parseGatewayRequest(endpoint === 'responses' ? 'responses' : 'chat', payload);
-    const candidates = connections.filter(
-      (connection) =>
-        (!connection.cooldownUntil || connection.cooldownUntil.getTime() <= Date.now()) &&
-        connection.models.some(
-          (model) => publicModelId(connection, model.upstreamId) === parsed.publicModelId,
-        ),
+    const legacy = index.legacy.has(parsed.publicModelId);
+    const scope = `${legacy ? 'legacy' : 'pool'}:${parsed.publicModelId}`;
+    const members = (legacy ? index.legacy : index.pools).get(parsed.publicModelId) ?? [];
+    const enabled = members.filter(({ connection, model }) => connection.enabled && model.enabled);
+    if (!enabled.length) throw new GatewayError(404, 'MODEL_NOT_FOUND', 'Model is unavailable');
+    const candidates = uniqueCandidates(
+      enabled.filter(({ connection, model }) => availability(connection, model) === 'ready'),
+      parsed.publicModelId,
     );
-    if (!candidates.length) throw new GatewayError(404, 'MODEL_NOT_FOUND', 'Model is unavailable');
-    for (const connection of candidates) {
+    if (!candidates.length)
+      throw new GatewayError(502, 'UPSTREAM_UNAVAILABLE', 'No provider is available');
+    const compatible = candidates.flatMap((candidate) => {
+      try {
+        return [
+          {
+            ...candidate,
+            body: renderUpstreamRequest(
+              { ...parsed, model: candidate.model.upstreamId },
+              candidate.connection.provider,
+            ),
+          },
+        ];
+      } catch (error) {
+        if (error instanceof ProtocolError && error.code === 'UNSUPPORTED') return [];
+        throw error;
+      }
+    });
+    if (!compatible.length)
+      throw new ProtocolError('UNSUPPORTED', 'No connection supports this request');
+    const priorities = [...new Set(compatible.map(({ connection }) => connection.priority))].sort(
+      (a, b) => a - b,
+    );
+    function* ordered() {
+      for (const priority of priorities) {
+        const tier = compatible.filter(({ connection }) => connection.priority === priority);
+        // Reserve the next start synchronously, before credentials or network work.
+        for (const candidate of rotateTier(scope, priority, tier)) yield candidate;
+      }
+    }
+    for (const { connection, body } of ordered()) {
       if (controller.signal.aborted) throw new GatewayError(504, 'TIMEOUT', 'Request timed out');
-      const body = renderUpstreamRequest(parsed, connection.provider);
       let response: Response | undefined;
       try {
         let credential: Awaited<ReturnType<typeof getUsableCredential>>;

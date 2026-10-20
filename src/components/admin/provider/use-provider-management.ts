@@ -104,22 +104,6 @@ export function useProviderManagement(canManage: boolean) {
   }, [reload]);
 
   useEffect(() => {
-    if (!data?.connections.some((connection) => connection.discoveryStatus === 'pending')) return;
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      if (!busyRef.current)
-        void reload(controller.signal).catch(() => {
-          if (!controller.signal.aborted)
-            setLoadError('Discovery status could not be refreshed. Showing the last loaded data.');
-        });
-    }, 15000);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [data, reload, busyRef]);
-
-  useEffect(() => {
     if (!requestKey) return;
     const settled = previewRef.current;
     if (!previewImmediate.current && settled?.key === requestKey && settled.status !== 'loading')
