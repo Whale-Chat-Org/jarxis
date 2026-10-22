@@ -18,7 +18,7 @@ export type PoolCandidate<T extends PoolConnection = PoolConnection> = {
   model: PoolModel;
 };
 export const poolModelId = (model: Pick<PoolModel, 'upstreamId' | 'alias'>) =>
-  model.alias ?? model.upstreamId;
+  model.alias ?? model.upstreamId.replace(/^[^/]+\/(?=.)/, '');
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 export function availability(connection: PoolConnection, model: PoolModel, now = Date.now()) {
   if (!connection.enabled) return 'disabled';
@@ -45,7 +45,26 @@ export function buildPools<T extends PoolConnection>(connections: T[]) {
     }
   const identity = ({ connection, model }: PoolCandidate) =>
     `${connection.id}\0${model.upstreamId}`;
+  // Removing a vendor namespace must not silently merge unrelated upstream models.
+  const ambiguous = (id: string) => {
+    const members = (pools.get(id) ?? []).filter(
+      ({ connection, model }) => connection.enabled && model.enabled,
+    );
+    if (!members.some(({ model }) => !model.alias && model.upstreamId.includes('/'))) return false;
+    return (
+      new Set(
+        members
+          .filter(({ model }) => !model.alias)
+          .map(({ connection, model }) =>
+            model.upstreamId.includes('/')
+              ? model.upstreamId
+              : `${connection.provider}/${model.upstreamId}`,
+          ),
+      ).size > 1
+    );
+  };
   const advertised = (id: string) => {
+    if (ambiguous(id)) return false;
     const old = legacy.get(id);
     const members = pools.get(id) ?? [];
     if (!old) return true;
@@ -54,7 +73,7 @@ export function buildPools<T extends PoolConnection>(connections: T[]) {
       old.length === members.length && old.every((candidate) => identities.has(identity(candidate)))
     );
   };
-  return { pools, legacy, advertised };
+  return { pools, legacy, advertised, ambiguous };
 }
 export function poolSummaries(connections: PoolConnection[]) {
   const index = buildPools(connections);

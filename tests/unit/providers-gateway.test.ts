@@ -811,6 +811,120 @@ describe('cooldownUntil edge cases', () => {
 });
 
 describe('shared pools', () => {
+  it.each(['direct', 'router', 'both'])(
+    'routes plain IDs without aliases with %s connected',
+    async (mode) => {
+      const direct = connection('a', 'openai', {
+        models: [{ id: 'a-model', upstreamId: 'gpt-4.1', enabled: true }],
+      });
+      const router = connection('b', 'openrouter', {
+        models: [{ id: 'b-model', upstreamId: 'openai/gpt-4.1', enabled: true }],
+      });
+      mocks.connections.mockResolvedValue(
+        mode === 'direct' ? [direct] : mode === 'router' ? [router] : [direct, router],
+      );
+      mocks.fetch.mockImplementation(async () => chatResult('hello'));
+      for (const endpoint of ['chat/completions', 'responses']) {
+        const payload =
+          endpoint === 'responses' ? { model: 'gpt-4.1', input: 'Hi' } : chatBody('gpt-4.1');
+        const response = await handleGateway(post(payload, endpoint), endpoint.split('/'));
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({ model: 'gpt-4.1' });
+      }
+      expect(mocks.fetch.mock.calls.map(([, init]) => JSON.parse(init.body).model)).toEqual(
+        mode === 'direct'
+          ? ['gpt-4.1', 'gpt-4.1']
+          : mode === 'router'
+            ? ['openai/gpt-4.1', 'openai/gpt-4.1']
+            : ['gpt-4.1', 'openai/gpt-4.1'],
+      );
+      const listing = await handleGateway(
+        new Request('https://gateway.test/api/llm/v1/models', {
+          headers: { authorization: `Bearer ${KEY}` },
+        }),
+        ['models'],
+      );
+      expect((await listing.json()).data.map(({ id }: { id: string }) => id)).toEqual(['gpt-4.1']);
+      mocks.fetch.mockClear();
+      for (const [legacyId, hostname] of mode === 'direct'
+        ? [['openai/gpt-4.1', 'api.openai.com']]
+        : mode === 'router'
+          ? [['openrouter/openai/gpt-4.1', 'openrouter.ai']]
+          : [
+              ['openai/gpt-4.1', 'api.openai.com'],
+              ['openrouter/openai/gpt-4.1', 'openrouter.ai'],
+            ]) {
+        expect(
+          (await handleGateway(post(chatBody(legacyId)), ['chat', 'completions'])).status,
+        ).toBe(200);
+        expect(new URL(mocks.fetch.mock.lastCall![0]).hostname).toBe(hostname);
+      }
+    },
+  );
+  it('keeps a nested pool collision out of the catalog and never falls through an unavailable legacy scope', async () => {
+    const direct = connection('a', 'openai', {
+      enabled: false,
+      models: [{ id: 'a-model', upstreamId: 'gpt-4.1', enabled: true }],
+    });
+    const custom = connection('b', 'custom', {
+      models: [
+        {
+          id: 'b-model',
+          upstreamId: 'vendor/openai/gpt-4.1',
+          alias: null as string | null,
+          enabled: true,
+        },
+      ],
+    });
+    mocks.connections.mockResolvedValue([direct, custom]);
+    const response = await handleGateway(post(chatBody('openai/gpt-4.1')), ['chat', 'completions']);
+    expect(response.status).toBe(404);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    const listing = await handleGateway(
+      new Request('https://gateway.test/api/llm/v1/models', {
+        headers: { authorization: `Bearer ${KEY}` },
+      }),
+      ['models'],
+    );
+    expect((await listing.json()).data).toEqual([]);
+    mocks.connections.mockResolvedValue([
+      direct,
+      { ...custom, models: [{ ...custom.models[0], alias: 'nested-model' }] },
+    ]);
+    mocks.fetch.mockResolvedValue(chatResult('explicit'));
+    expect(
+      (await handleGateway(post(chatBody('nested-model')), ['chat', 'completions'])).status,
+    ).toBe(200);
+    expect(JSON.parse(mocks.fetch.mock.lastCall![1].body).model).toBe('vendor/openai/gpt-4.1');
+  });
+  it('rejects ambiguous plain names without an upstream call but preserves legacy scope', async () => {
+    mocks.connections.mockResolvedValue([
+      connection('a', 'openai', {
+        models: [{ id: 'a-model', upstreamId: 'gpt-4.1', enabled: true }],
+      }),
+      connection('b', 'openrouter', {
+        models: [{ id: 'b-model', upstreamId: 'other/gpt-4.1', enabled: true }],
+      }),
+    ]);
+    const response = await handleGateway(post(chatBody('gpt-4.1')), ['chat', 'completions']);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: 'AMBIGUOUS_MODEL', message: 'Model name is ambiguous; use a distinct alias' },
+    });
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    const listing = await handleGateway(
+      new Request('https://gateway.test/api/llm/v1/models', {
+        headers: { authorization: `Bearer ${KEY}` },
+      }),
+      ['models'],
+    );
+    expect((await listing.json()).data).toEqual([]);
+    mocks.fetch.mockResolvedValue(chatResult('legacy'));
+    expect(
+      (await handleGateway(post(chatBody('openai/gpt-4.1')), ['chat', 'completions'])).status,
+    ).toBe(200);
+    expect(mocks.fetch.mock.calls[0][0]).toContain('api.openai.com');
+  });
   it('rotates aliased providers and forwards the selected upstream ID on both endpoints', async () => {
     mocks.connections.mockResolvedValue([
       connection('a', 'openai', { models: [{ id: 'm-a', upstreamId: 'gpt-4.1', enabled: true }] }),

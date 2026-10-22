@@ -2,6 +2,7 @@ import {
   availability,
   buildPools,
   poolSummaries,
+  poolModelId,
   pruneRotations,
   rotateTier,
   uniqueCandidates,
@@ -40,16 +41,63 @@ describe('pool identities', () => {
     expect(index.legacy.get('openrouter/openai/gpt-4.1')).toHaveLength(1);
     expect(index.advertised('gpt-4.1')).toBe(true);
   });
-  it('marks a pool shadowed by a legacy ID as requiring an alias', () => {
-    const summaries = poolSummaries([
+  it('normalizes OpenRouter IDs automatically and keeps legacy scopes separate', () => {
+    const direct = connection('a');
+    const router = connection('b', {
+      provider: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      models: [{ id: 'b-model', upstreamId: 'openai/gpt-4.1', enabled: true }],
+    });
+    const index = buildPools([direct, router]);
+    expect([...index.pools.keys()]).toEqual(['gpt-4.1']);
+    expect(index.pools.get('gpt-4.1')).toHaveLength(2);
+    expect(index.legacy.get('openai/gpt-4.1')?.[0].connection.id).toBe('a');
+    expect(index.legacy.get('openrouter/openai/gpt-4.1')?.[0].connection.id).toBe('b');
+    expect(poolModelId({ upstreamId: 'openai/gpt-4.1', alias: 'chosen' })).toBe('chosen');
+    expect(poolModelId({ upstreamId: 'openai/gpt-4.1', alias: null })).toBe('gpt-4.1');
+    expect(poolModelId({ upstreamId: 'gpt-4.1' })).toBe('gpt-4.1');
+    expect(poolModelId({ upstreamId: 'vendor/' })).toBe('vendor/');
+  });
+  it.each(['custom', 'future-provider', 'openai', 'anthropic'])(
+    'derives model names from vendor IDs on %s connections',
+    (provider) => {
+      const conn = connection('a', { provider });
+      expect(poolModelId({ upstreamId: 'new-vendor/new-model' })).toBe('new-model');
+      const index = buildPools([
+        { ...conn, models: [{ id: 'model', upstreamId: 'new-vendor/new-model', enabled: true }] },
+      ]);
+      expect([...index.pools.keys()]).toEqual(['new-model']);
+      expect(index.advertised('new-model')).toBe(true);
+      expect(poolModelId({ upstreamId: 'new-vendor/new-model', alias: 'chosen' })).toBe('chosen');
+    },
+  );
+  it('does not advertise a raw custom pool shadowed by a legacy ID', () => {
+    const index = buildPools([
       connection('a'),
       connection('b', {
-        provider: 'openrouter',
-        baseUrl: 'https://openrouter.ai/api/v1',
-        models: [{ id: 'b-model', upstreamId: 'openai/gpt-4.1', enabled: true }],
+        provider: 'custom',
+        baseUrl: 'https://custom.example/v1',
+        models: [{ id: 'b-model', upstreamId: 'vendor/openai/gpt-4.1', enabled: true }],
       }),
     ]);
-    expect(summaries.find(({ id }) => id === 'openai/gpt-4.1')?.advertised).toBe(false);
+    expect(index.advertised('openai/gpt-4.1')).toBe(false);
+  });
+  it('requires explicit aliases when vendor stripping would merge unrelated models', () => {
+    const router = connection('b', {
+      provider: 'openrouter',
+      models: [{ id: 'b-model', upstreamId: 'other/gpt-4.1', enabled: true }],
+    });
+    const index = buildPools([connection('a'), router]);
+    expect(index.ambiguous('gpt-4.1')).toBe(true);
+    expect(index.advertised('gpt-4.1')).toBe(false);
+    router.enabled = false;
+    expect(buildPools([connection('a'), router]).advertised('gpt-4.1')).toBe(true);
+    router.enabled = true;
+    router.models[0].alias = 'other-gpt';
+    const resolved = buildPools([connection('a'), router]);
+    expect(resolved.ambiguous('gpt-4.1')).toBe(false);
+    expect(resolved.advertised('gpt-4.1')).toBe(true);
+    expect(resolved.advertised('other-gpt')).toBe(true);
   });
   it('keeps owner visibility of unavailable members', () => {
     const summaries = poolSummaries([

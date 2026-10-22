@@ -47,7 +47,7 @@ beforeEach(async () => {
   });
   for (const [id, provider, baseUrl, upstreamId] of [
     ['pool-a', 'openai', 'https://api.openai.com/v1', 'gpt-4.1'],
-    ['pool-b', 'openrouter', 'https://openrouter.ai/api/v1', 'openai/gpt-4.1'],
+    ['pool-b', 'openrouter', 'https://openrouter.ai/api/v1', 'openai/gpt-4.1-mini'],
   ])
     await db.providerConnection.create({
       data: {
@@ -79,7 +79,7 @@ describe('persistent aliases and shared routing', () => {
     expect(updated.models[0]).toMatchObject({
       alias: 'gpt-4.1',
       poolId: 'gpt-4.1',
-      publicId: 'openrouter/openai/gpt-4.1',
+      publicId: 'openrouter/openai/gpt-4.1-mini',
     });
     expect(
       listProviderPools(await listConnections()).find(({ id }) => id === 'gpt-4.1')?.members,
@@ -87,7 +87,7 @@ describe('persistent aliases and shared routing', () => {
     for (let i = 0; i < 2; i++)
       expect((await handleGateway(post('gpt-4.1'), ['chat', 'completions'])).status).toBe(200);
     expect(new Set(mocks.fetch.mock.calls.map(([, init]) => JSON.parse(init.body).model))).toEqual(
-      new Set(['gpt-4.1', 'openai/gpt-4.1']),
+      new Set(['gpt-4.1', 'openai/gpt-4.1-mini']),
     );
     expect(await db.auditLog.count({ where: { action: 'providers:model:alias' } })).toBe(1);
     await updateModelAlias(ownerId, 'pool-b', 'pool-b-model', {
@@ -101,7 +101,54 @@ describe('persistent aliases and shared routing', () => {
     });
     const pools = listProviderPools(await listConnections());
     expect(pools.find(({ id }) => id === 'gpt-4.1')?.members).toHaveLength(1);
-    expect(pools.find(({ id }) => id === 'openai/gpt-4.1')?.advertised).toBe(false);
+    expect(pools.find(({ id }) => id === 'gpt-4.1-mini')).toMatchObject({
+      advertised: true,
+      members: [{ upstreamId: 'openai/gpt-4.1-mini' }],
+    });
+    const listing = await handleGateway(
+      new Request('https://gateway.test/api/llm/v1/models', {
+        headers: { authorization: `Bearer ${key}` },
+      }),
+      ['models'],
+    );
+    expect((await listing.json()).data.map(({ id }: { id: string }) => id)).toEqual([
+      'gpt-4.1',
+      'gpt-4.1-mini',
+    ]);
+    mocks.fetch.mockClear();
+    expect((await handleGateway(post('gpt-4.1-mini'), ['chat', 'completions'])).status).toBe(200);
+    expect(JSON.parse(mocks.fetch.mock.calls[0][1].body).model).toBe('openai/gpt-4.1-mini');
+  });
+  it('restores the automatic shared name when an alias is removed from equivalent models', async () => {
+    await db.providerModel.update({
+      where: { id: 'pool-b-model' },
+      data: { upstreamId: 'openai/gpt-4.1' },
+    });
+    const before = await getConnection('pool-b');
+    expect(before.models[0].poolId).toBe('gpt-4.1');
+    const renamed = await updateModelAlias(ownerId, 'pool-b', 'pool-b-model', {
+      alias: 'my-model',
+      version: before.modelStateVersion,
+    });
+    const removed = await updateModelAlias(ownerId, 'pool-b', 'pool-b-model', {
+      alias: null,
+      version: renamed.modelStateVersion,
+    });
+    expect(removed.models[0].poolId).toBe('gpt-4.1');
+    expect(listProviderPools(await listConnections())).toMatchObject([
+      {
+        id: 'gpt-4.1',
+        advertised: true,
+        members: [{ connectionId: 'pool-a' }, { connectionId: 'pool-b' }],
+      },
+    ]);
+    const listing = await handleGateway(
+      new Request('https://gateway.test/api/llm/v1/models', {
+        headers: { authorization: `Bearer ${key}` },
+      }),
+      ['models'],
+    );
+    expect((await listing.json()).data.map(({ id }: { id: string }) => id)).toEqual(['gpt-4.1']);
   });
   it('rejects nonowners, wrong connections, invalid aliases and stale versions', async () => {
     const before = await getConnection('pool-b');
