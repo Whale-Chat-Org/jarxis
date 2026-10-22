@@ -300,6 +300,12 @@ export async function handleGateway(request: Request, path: string[]): Promise<R
     const payload = await readGatewayBody(request, controller.signal);
     const parsed = parseGatewayRequest(endpoint === 'responses' ? 'responses' : 'chat', payload);
     const legacy = index.legacy.has(parsed.publicModelId);
+    if (!legacy && index.ambiguous(parsed.publicModelId))
+      throw new GatewayError(
+        409,
+        'AMBIGUOUS_MODEL',
+        'Model name is ambiguous; use a distinct alias',
+      );
     const scope = `${legacy ? 'legacy' : 'pool'}:${parsed.publicModelId}`;
     const members = (legacy ? index.legacy : index.pools).get(parsed.publicModelId) ?? [];
     const enabled = members.filter(({ connection, model }) => connection.enabled && model.enabled);

@@ -91,10 +91,11 @@ export async function openapi() {
     tags: ['Model gateway'],
     security: [{ gatewayKey: [] }],
     description:
-      'Use an owner-issued application key, not a Jarxis session or JWT. Model IDs are plain upstream IDs or owner-defined aliases. Legacy provider-qualified IDs retain their original scope. Requests rotate across compatible healthy connections within each priority tier; rotation is per application process. Stateless requests only; unsupported features return 400. Inference bodies are limited to 1 MiB and requests to 120 seconds. Streaming uses server-sent events.',
+      'Use an owner-issued application key, not a Jarxis session or JWT. Model IDs are automatic names or owner-defined aliases. Vendor prefixes are removed automatically on every connection type (vendor/model becomes model); upstream requests keep the exact original ID. Alias removal restores the automatic name. Ambiguous automatic names are omitted from /models and return 409 AMBIGUOUS_MODEL until distinct aliases are assigned. Legacy provider-qualified IDs retain their original scope. Requests rotate across compatible healthy connections within each priority tier; rotation is per application process. Stateless requests only; unsupported features return 400. Inference bodies are limited to 1 MiB and requests to 120 seconds. Streaming uses server-sent events.',
     responses: {
       ...op(summary).responses,
       200: { description: 'OpenAI-compatible JSON or text/event-stream when stream is true' },
+      409: { description: 'Ambiguous automatic model name; assign distinct aliases' },
       413: { description: 'Inference body exceeds 1 MiB' },
       502: { description: 'Upstream model unavailable' },
       504: { description: 'Inference deadline exceeded' },
@@ -140,7 +141,7 @@ export async function openapi() {
       ...providerOperation(
         'List provider connections, pool summaries and application key metadata',
       ),
-      description: `${providerOperation('').description} Includes pools with per-member availability and an advertised flag. Conflicting legacy names require an alias. Model DTOs include alias and poolId; publicId retains its legacy meaning.`,
+      description: `${providerOperation('').description} Includes pools with per-member availability and an advertised flag. Names shadowed by legacy IDs and ambiguous automatic names require an alias; legacy routing always retains its original scope. Model DTOs include alias and poolId; publicId retains its legacy meaning.`,
     },
     post: {
       ...providerOperation('Add a provider connection'),
