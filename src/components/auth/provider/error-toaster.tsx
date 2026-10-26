@@ -31,7 +31,7 @@ export function ErrorToaster() {
       if (getAuthErrorCode(error) === 'EMAIL_NOT_VERIFIED') return;
       const message = getAuthErrorMessage(error, localization);
       if (message) {
-        toast.error(safeActionErrorMessage(error, message));
+        toast.error(safeActionErrorMessage(error, localization.errors.generic));
         // Record that this failure was surfaced so inline catch sites don't duplicate the toast.
         markActionErrorHandled(error);
       }
@@ -59,7 +59,11 @@ export function ErrorToaster() {
       }
       const message = getAuthErrorMessage(error, localization, mutation.options.mutationKey);
       if (message) {
-        toast.error(safeActionErrorMessage(error, message));
+        toast.error(
+          getAuthErrorCode(error) === 'EMAIL_NOT_VERIFIED'
+            ? localization.auth.callbackEmailNotVerifiedDescription
+            : safeActionErrorMessage(error, localization.errors.generic),
+        );
         markActionErrorHandled(error);
       }
     };

@@ -393,6 +393,15 @@ describe('ErrorToaster', () => {
     expect(previous).toHaveBeenCalled();
   });
 
+  it('does not show server-provided details for an unknown auth error', async () => {
+    const error = authError(418, 'UPSTREAM_FAILURE');
+    error.error.message = 'Private provider details';
+    renderWithAuth(<FailingQuery queryKey={['auth', 'unknown']} error={error} />, makeClient());
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(localization.errors.generic));
+    expect(toastMock.error).not.toHaveBeenCalledWith('Private provider details');
+  });
+
   it('ignores non-auth, inline and unverified-email query failures', async () => {
     const queryClient = makeQueryClient();
     renderWithAuth(

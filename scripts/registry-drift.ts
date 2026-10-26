@@ -439,6 +439,8 @@ const REVIEWED: Record<string, string> = {
     'Shared session device and age presentation helpers preserve current-session sign-out and other-session revoke behavior.',
   'src/components/admin/users/users-panel.tsx':
     'Registry directory split into focused list, filters, table, create form, inspector sections and state hooks; shared AdminDataTable, RolePicker and the unified AdminActionPanel frame and lifecycle preserve grants and unchanged stored roles.',
+  'src/lib/auth/admin-plugin.ts':
+    'StopImpersonating is imported from the relocated admin users action panel component.',
   'src/components/admin/table/table-state.ts':
     'Promoted to src/components/admin/table/table-state.ts for all admin pages; page-size changes reset pagination.',
   'src/components/admin/table/table.ts':
@@ -481,11 +483,11 @@ const REVIEWED: Record<string, string> = {
   'src/components/auth/form/auth-form.tsx':
     'split into one component per file in form/ with pure helpers in src/lib/auth/auth-form-utils.ts, adds AuthFormPasswordField, AuthFormCheckboxField and the NewPasswordFields group, drops the unused withAuthForm and runAuthFormAction; server errors are surfaced through the safe allowlist in src/lib/action-errors (never the raw server message or field errors), and inline errors are suppressed when already handled by the toaster, compromised, or email-not-verified',
   'src/components/auth/provider/error-toaster.tsx':
-    'raw console logging of auth errors removed, and surfaced errors are marked handled via src/lib/action-errors so inline catch sites do not duplicate the toast',
+    'raw console logging of auth errors removed; surfaced errors use safe allowlisted copy after the Better Auth UI 1.7.32 update and are marked handled so inline catch sites do not duplicate the toast',
   'src/components/settings/account/change-avatar.tsx':
     'raw <input type="file"> replaced by the Input primitive, plus managed-blob cleanup after avatar replacement and failed profile updates; cleanup failures warn instead of logging, and update failures use the safe error helper and skip errors already handled by the toaster',
   'src/components/settings/security/active-sessions.tsx':
-    'the session list error renders safe localized copy with role="alert" and a retry button that refetches, instead of the raw error.message',
+    'the session list error renders safe allowlisted copy with role="alert" and a retry button that refetches, instead of the raw error.message returned by Better Auth UI 1.7.32',
   'src/components/settings/account/user-profile.tsx':
     'profile form initialization is guarded by user id so controlled-field changes are not reset during rerenders; form helpers imported from src/lib/auth/auth-form-utils.ts',
   'src/lib/auth/two-factor-methods.ts':
