@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "jarxis_agent": "./src/agent/studio.ts:graph"
+  },
+  "env": "./.env"
+}

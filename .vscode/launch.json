@@ -35,6 +35,15 @@
         "uriFormat": "%s",
         "webRoot": "${workspaceFolder}"
       }
+    },
+    {
+      // Start after Dev (or Dev (Docker setup)) so the gateway is available.
+      "name": "Agent Studio",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm agent:studio",
+      "cwd": "${workspaceFolder}",
+      "skipFiles": ["<node_internals>/**"]
     }
   ]
 }

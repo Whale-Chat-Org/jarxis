@@ -101,6 +101,7 @@ This separate override avoids using a host-loopback connection string inside the
 | `pnpm lint` / `pnpm typecheck` | Lint and type-check                                         |
 | `pnpm test`                    | Run unit tests                                              |
 | `pnpm build`                   | Build for production                                        |
+| `pnpm agent:studio`            | Start the local LangGraph agent and open Studio             |
 
 ## Seeded users
 
@@ -120,6 +121,33 @@ This separate override avoids using a host-loopback connection string inside the
 - API docs: http://localhost:3000/api/docs
 - Chat demo: http://localhost:3000/chat, a frontend-only workspace with mock conversations (see
   [chat-ui.md](chat-ui.md))
+
+## LangGraph agent and Studio
+
+Start Jarxis with `pnpm dev`. In `/admin/providers`, connect a provider and enable a model that
+supports function tools. Create a gateway key in `/admin/api-keys`; its value is shown only once.
+Copy these settings to your local `.env` (never commit the key):
+
+```dotenv
+JARXIS_AGENT_GATEWAY_URL=http://localhost:3000/api/llm/v1
+JARXIS_AGENT_GATEWAY_KEY=jml_your_local_gateway_key
+JARXIS_AGENT_MODEL=your_enabled_model_id
+LANGSMITH_TRACING=false
+```
+
+Get the model ID from `GET /api/llm/v1/models` using the gateway key. Run `pnpm agent:studio` in a
+second terminal, or start the VS Code `Agent Studio` launch after `Dev`. The local Agent Server
+starts on port 2024 and opens LangGraph Studio. In Studio, select `jarxis_agent` and submit a
+`messages` input such as
+`{"messages":[{"role":"user","content":"Hello"}]}`. The graph shows `agent` and `tools` nodes,
+and Studio shows each node's input and output. Ask about a current event to exercise `web_search`.
+Search uses DuckDuckGo without a search key. If it is unavailable, the agent says it could not
+search. An invalid gateway key produces a sanitized authentication error in Studio.
+
+The agent uses the configured model for every run. Studio is a local development tool; the Chat
+demo is not connected to this graph yet. Keep `LANGSMITH_TRACING=false` if run data should stay on
+the local server. The Studio web interface may require signing in to LangSmith even when tracing
+is disabled.
 
 ## Troubleshooting
 

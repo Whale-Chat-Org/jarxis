@@ -17,3 +17,6 @@ coverage
 .mcp.json
 *.log
 *.pid
+
+# LangGraph API
+.langgraph_api
